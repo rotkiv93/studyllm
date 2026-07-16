@@ -1,0 +1,421 @@
+:root {
+  font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 400;
+
+  color: #0f0f0f;
+  background-color: #f6f6f6;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.app-header h1 {
+  font-size: 1.25rem;
+  margin: 0;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+}
+
+.empty-state {
+  color: #888;
+  text-align: center;
+  margin-top: 2rem;
+}
+
+.message {
+  padding: 0.6em 0.9em;
+  border-radius: 10px;
+  max-width: 85%;
+}
+
+.message p {
+  margin: 0.2em 0 0;
+  white-space: pre-wrap;
+}
+
+.message-role {
+  font-size: 0.75rem;
+  font-weight: 600;
+  opacity: 0.6;
+}
+
+.message-user {
+  align-self: flex-end;
+  background-color: #dbe6ff;
+}
+
+.message-assistant {
+  align-self: flex-start;
+  background-color: #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.message-tool {
+  align-self: flex-start;
+  background-color: #f0ede2;
+  border: 1px solid #ddd6c4;
+  font-size: 0.85rem;
+  max-width: 95%;
+}
+
+.message-tool-error {
+  background-color: #fdecea;
+  border-color: #f3c2bc;
+}
+
+.tool-call-input {
+  margin: 0.3em 0 0;
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  opacity: 0.75;
+}
+
+.mcp-status {
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  letter-spacing: 0.03em;
+}
+
+.mcp-status-running {
+  color: #2e7d32;
+}
+
+.mcp-status-starting {
+  color: #8a6d00;
+}
+
+.mcp-status-error {
+  color: #c0392b;
+}
+
+.mcp-status-stopped {
+  opacity: 0.6;
+}
+
+.error {
+  color: #c0392b;
+  font-size: 0.9rem;
+}
+
+.notice {
+  color: #8a6d00;
+  font-size: 0.85rem;
+  background: #fff6dc;
+  padding: 0.4em 0.7em;
+  border-radius: 6px;
+}
+
+.settings-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+.settings-panel {
+  background: #fff;
+  color: #0f0f0f;
+  border-radius: 12px;
+  padding: 1.5rem;
+  width: min(560px, 92vw);
+  max-height: 85vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.settings-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.settings-header h2 {
+  margin: 0;
+}
+
+.settings-hint {
+  font-size: 0.85rem;
+  opacity: 0.75;
+  margin: 0;
+}
+
+.provider-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.provider-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5em 0.7em;
+  border: 1px solid #e2e2e2;
+  border-radius: 8px;
+  flex-wrap: wrap;
+}
+
+.provider-disabled {
+  opacity: 0.5;
+}
+
+.provider-row-main {
+  display: flex;
+  flex-direction: column;
+}
+
+.provider-model {
+  font-size: 0.75rem;
+  opacity: 0.7;
+}
+
+.provider-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+}
+
+.provider-row-actions button {
+  padding: 0.3em 0.6em;
+  font-size: 0.85rem;
+}
+
+.add-provider-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  border-top: 1px solid #e2e2e2;
+  padding-top: 0.75rem;
+}
+
+.add-provider-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+}
+
+.add-provider-form input,
+.add-provider-form select {
+  width: 100%;
+}
+
+.composer {
+  display: flex;
+  gap: 0.5rem;
+  padding-top: 0.5rem;
+}
+
+.composer-input {
+  flex: 1;
+}
+
+input,
+button {
+  border-radius: 8px;
+  border: 1px solid transparent;
+  padding: 0.6em 1.2em;
+  font-size: 1em;
+  font-weight: 500;
+  font-family: inherit;
+  color: #0f0f0f;
+  background-color: #ffffff;
+  transition: border-color 0.25s;
+  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.2);
+}
+
+button {
+  cursor: pointer;
+}
+
+button:hover {
+  border-color: #396cd8;
+}
+button:active {
+  border-color: #396cd8;
+  background-color: #e8e8e8;
+}
+button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+input,
+button {
+  outline: none;
+}
+
+.trust-badge {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 0.1em 0.5em;
+  border-radius: 999px;
+  font-weight: 600;
+  vertical-align: middle;
+}
+
+.trust-official {
+  background: #e3f5e6;
+  color: #1e7d32;
+}
+
+.trust-verified {
+  background: #fff3d6;
+  color: #8a6d00;
+}
+
+.trust-community {
+  background: #fde8e8;
+  color: #b3261e;
+}
+
+.marketplace-search {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.marketplace-search input {
+  flex: 1;
+}
+
+.marketplace-unsupported {
+  color: #b3261e;
+}
+
+.marketplace-path-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.marketplace-path-row input {
+  flex: 1;
+}
+
+.marketplace-ack {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.marketplace-ack input {
+  width: auto;
+  box-shadow: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color: #f6f6f6;
+    background-color: #2f2f2f;
+  }
+
+  input,
+  button {
+    color: #ffffff;
+    background-color: #0f0f0f98;
+  }
+  button:active {
+    background-color: #0f0f0f69;
+  }
+
+  .message-user {
+    background-color: #2c3e6b;
+  }
+
+  .message-assistant {
+    background-color: #1c1c1c;
+  }
+
+  .message-tool {
+    background-color: #2a2a1f;
+    border-color: #4a4630;
+  }
+
+  .message-tool-error {
+    background-color: #3a2020;
+    border-color: #5a2c2c;
+  }
+
+  .settings-panel {
+    background: #1c1c1c;
+    color: #f6f6f6;
+  }
+
+  .provider-list li,
+  .add-provider-form {
+    border-color: #3a3a3a;
+  }
+
+  .notice {
+    background: #3a3212;
+    color: #ffe08a;
+  }
+
+  .trust-official {
+    background: #16321c;
+    color: #7fd292;
+  }
+
+  .trust-verified {
+    background: #3a3212;
+    color: #ffe08a;
+  }
+
+  .trust-community {
+    background: #3a2020;
+    color: #ff8a80;
+  }
+}
