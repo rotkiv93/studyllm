@@ -1,5 +1,10 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PROVIDER_MANIFEST, PROVIDER_TYPES, type ProviderType } from "../lib/providers";
+import {
+  fetchProviderModels,
+  providerModelsNeedApiKey,
+  providerSupportsLiveModels,
+} from "../lib/providerModels";
 import type { ProviderRow } from "../lib/db";
 
 export interface ProviderDraft {
@@ -25,10 +30,48 @@ export function SettingsPanel({ providers, onAdd, onRemove, onToggle, onReorder,
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
+  const [liveModels, setLiveModels] = useState<string[] | null>(null);
+  const [modelsStatus, setModelsStatus] = useState<"idle" | "loading" | "loaded" | "unavailable">(
+    "idle",
+  );
+
   function handleTypeChange(next: ProviderType) {
     setType(next);
     setModel(PROVIDER_MANIFEST[next].defaultModel);
   }
+
+  const modelsRequestId = useRef(0);
+
+  useEffect(() => {
+    if (!providerSupportsLiveModels(type)) {
+      setLiveModels(null);
+      setModelsStatus("idle");
+      return;
+    }
+    if (providerModelsNeedApiKey(type) && !apiKey.trim()) {
+      setLiveModels(null);
+      setModelsStatus("idle");
+      return;
+    }
+
+    setModelsStatus("loading");
+    const requestId = ++modelsRequestId.current;
+    const delay = providerModelsNeedApiKey(type) ? 500 : 0;
+    const timer = setTimeout(async () => {
+      const models = await fetchProviderModels(type, apiKey);
+      if (modelsRequestId.current !== requestId) return; // superseded by a newer request
+      if (models && models.length > 0) {
+        setLiveModels(models);
+        setModelsStatus("loaded");
+      } else {
+        setLiveModels(null);
+        setModelsStatus("unavailable");
+      }
+    }, delay);
+    return () => clearTimeout(timer);
+  }, [type, apiKey]);
+
+  const modelOptions = liveModels ?? PROVIDER_MANIFEST[type].suggestedModels;
 
   function describeError(err: unknown): string {
     return err instanceof Error ? err.message : String(err);
@@ -157,13 +200,28 @@ export function SettingsPanel({ providers, onAdd, onRemove, onToggle, onReorder,
               value={model}
               onChange={(e) => setModel(e.currentTarget.value)}
               list={`models-${type}`}
+              placeholder="Type or pick a model id…"
             />
             <datalist id={`models-${type}`}>
-              {PROVIDER_MANIFEST[type].suggestedModels.map((m) => (
+              {modelOptions.map((m) => (
                 <option key={m} value={m} />
               ))}
             </datalist>
           </label>
+          {providerSupportsLiveModels(type) && (
+            <p className="settings-hint">
+              {modelsStatus === "loading" && "Loading live model list…"}
+              {modelsStatus === "loaded" &&
+                `Loaded ${liveModels?.length ?? 0} live models from ${PROVIDER_MANIFEST[type].label}.`}
+              {modelsStatus === "unavailable" &&
+                (providerModelsNeedApiKey(type)
+                  ? "Couldn't load live models with this key — showing suggestions. You can still type any model id."
+                  : "Couldn't reach the live model list — showing suggestions. You can still type any model id.")}
+              {modelsStatus === "idle" &&
+                providerModelsNeedApiKey(type) &&
+                "Enter an API key to load this provider's live model list."}
+            </p>
+          )}
           <label>
             API key
             <input

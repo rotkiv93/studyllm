@@ -46,6 +46,17 @@ Full original architecture/phase plan: `C:\Users\47852\.claude\plans\i-want-to-c
   `official`. `McpHost::start_remote` (host.rs) adds Streamable HTTP transport alongside the
   existing stdio one. `mcp_servers` gained `transport`/`url`/`env_refs_json`/`trust_tier` columns
   (migration v3); `env_refs_json` maps var name → either a keychain `secret_ref` or a plain value.
+- **Live provider model lists** (`src/lib/providerModels.ts`): the Settings "Add a provider" form no
+  longer relies solely on the hardcoded `suggestedModels` seed list in `src/lib/providers.ts`. For
+  providers with a public model catalog (OpenRouter, SambaNova, GitHub Models) it fetches the live
+  list immediately; for providers that require a key (Groq, Cerebras, Mistral, Gemini) it fetches
+  (debounced 500ms) once the user has typed one, using the same direct-to-provider `fetch()` +
+  Bearer-auth path the chat requests already use (no Rust hop). OpenRouter's list is filtered to
+  `:free`-suffixed ids; a few provider-specific keyword filters drop obviously non-chat entries
+  (Whisper/TTS/embedding/image/video models). On any failure (bad key, offline, unsupported
+  provider) it silently falls back to the static `suggestedModels` datalist — the model field is
+  and remains a plain free-text `<input>`, so a model id can always be typed manually regardless.
+  `SettingsPanel.tsx` shows a small status line (loading/loaded-N/unavailable) below the field.
 - **Phase 5 — polish, code signing, CI/release, auto-updater, onboarding**: 🚧 In progress.
   CI/release pipeline done (see below). App is still unsigned; no updater; no first-run wizard.
   UI shell redesigned (Claude-desktop-style): a persistent left sidebar (`src/components/Sidebar.tsx`)
@@ -100,6 +111,13 @@ Full original architecture/phase plan: `C:\Users\47852\.claude\plans\i-want-to-c
   omitting the field — some MCP servers' schemas (e.g. the official filesystem server's zod
   validation) reject a JSON-RPC call with a missing/null `arguments` for zero-parameter tools,
   which models frequently produce when calling no-arg tools.
+- **Fixed this session**: marketplace search results were dominated by duplicate rows — the
+  registry lists every published *version* of a server as its own entry, and `registry.rs`'s
+  `normalize()` wasn't deduping them, so a server with many releases could fill most of a 30-item
+  page with repeats of itself (same React key too), making search look like "the same MCPs always
+  show" regardless of the query. Fixed by reading the `isLatest` flag out of each entry's `_meta`
+  (`is_latest_version()` in `registry.rs`) and dropping non-latest versions, plus a defensive
+  dedupe-by-name pass for entries where `_meta` is missing/malformed.
 
 ## Visual design system (Phase 5 slice)
 
@@ -181,6 +199,9 @@ Full original architecture/phase plan: `C:\Users\47852\.claude\plans\i-want-to-c
 - `src/lib/db.ts` — all SQLite CRUD (providers, conversations, messages, MCP servers, MCP catalog
   cache, usage), including `deleteConversation` (cascades to its messages) and `renameConversation`.
 - `src/components/SettingsPanel.tsx` — provider (LLM API key) management UI.
+- `src/lib/providerModels.ts` — per-provider live model-list fetching (public catalogs immediately,
+  key-gated ones once an API key is entered), with parsing/filtering per provider and graceful
+  fallback to `null` on any failure.
 - `src/components/McpPanel.tsx` — installed MCP server management UI (start/stop/remove, trust
   badges); delegates actual start logic to `App.tsx`'s `onStart`.
 - `src/components/McpMarketplace.tsx` — registry search/browse UI, required-env-var install form,

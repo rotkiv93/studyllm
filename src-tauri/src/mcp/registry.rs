@@ -235,6 +235,16 @@ fn normalize(raw: RawServer) -> CatalogEntry {
     }
 }
 
+/// `false` only when the registry explicitly marks this version as superseded; missing/malformed
+/// `_meta` defaults to keeping the entry rather than dropping servers the API didn't annotate.
+fn is_latest_version(v: &serde_json::Value) -> bool {
+    v.get("_meta")
+        .and_then(|m| m.get("io.modelcontextprotocol.registry/official"))
+        .and_then(|o| o.get("isLatest"))
+        .and_then(|b| b.as_bool())
+        .unwrap_or(true)
+}
+
 #[tauri::command]
 pub async fn mcp_registry_search(
     query: Option<String>,
@@ -266,13 +276,21 @@ pub async fn mcp_registry_search(
 
     // Each list entry is `{"server": {...ServerJSON fields...}, "_meta": {...}}` — unwrap the
     // `server` key, but fall back to the raw value in case a future API version flattens it.
+    //
+    // The registry keeps every published version of a server as its own list entry, so a single
+    // server with many releases can flood a result page with near-duplicate rows (same name,
+    // different version) — the `isLatest` flag in `_meta` is how the API marks the current one.
+    // Drop everything else, and dedupe defensively in case `_meta` is ever missing.
+    let mut seen_names = std::collections::HashSet::new();
     let entries = raw
         .servers
         .into_iter()
+        .filter(is_latest_version)
         .filter_map(|v| {
             let server_value = v.get("server").cloned().unwrap_or(v);
             serde_json::from_value::<RawServer>(server_value).ok()
         })
+        .filter(|s| seen_names.insert(s.name.clone()))
         .map(normalize)
         .collect();
 
