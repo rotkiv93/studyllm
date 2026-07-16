@@ -86,7 +86,7 @@ export function SettingsPanel({ providers, onAdd, onRemove, onToggle, onReorder,
       <div className="settings-panel">
         <div className="settings-header">
           <h2>Providers</h2>
-          <button type="button" onClick={onClose}>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={onClose}>
             Close
           </button>
         </div>
@@ -106,11 +106,17 @@ export function SettingsPanel({ providers, onAdd, onRemove, onToggle, onReorder,
                 <span className="provider-model">{p.model}</span>
               </div>
               <div className="provider-row-actions">
-                <button type="button" onClick={() => handleReorder(p.id, "up")} disabled={i === 0}>
+                <button
+                  type="button"
+                  className="btn btn-icon btn-secondary btn-sm"
+                  onClick={() => handleReorder(p.id, "up")}
+                  disabled={i === 0}
+                >
                   ↑
                 </button>
                 <button
                   type="button"
+                  className="btn btn-icon btn-secondary btn-sm"
                   onClick={() => handleReorder(p.id, "down")}
                   disabled={i === providers.length - 1}
                 >
@@ -124,7 +130,7 @@ export function SettingsPanel({ providers, onAdd, onRemove, onToggle, onReorder,
                   />
                   enabled
                 </label>
-                <button type="button" onClick={() => handleRemove(p.id)}>
+                <button type="button" className="btn btn-danger btn-sm" onClick={() => handleRemove(p.id)}>
                   Remove
                 </button>
               </div>
@@ -170,7 +176,7 @@ export function SettingsPanel({ providers, onAdd, onRemove, onToggle, onReorder,
           <a href={PROVIDER_MANIFEST[type].apiKeyUrl} target="_blank" rel="noreferrer">
             Get a free {PROVIDER_MANIFEST[type].label} API key
           </a>
-          <button type="submit" disabled={busy || !apiKey.trim()}>
+          <button type="submit" className="btn btn-primary" disabled={busy || !apiKey.trim()}>
             Add provider
           </button>
         </form>

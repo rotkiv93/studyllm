@@ -117,7 +117,7 @@ export function McpPanel({
       <div className="settings-panel">
         <div className="settings-header">
           <h2>MCP Servers</h2>
-          <button type="button" onClick={onClose}>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={onClose}>
             Close
           </button>
         </div>
@@ -152,15 +152,20 @@ export function McpPanel({
                 </div>
                 <div className="provider-row-actions">
                   {status === "running" ? (
-                    <button type="button" onClick={() => handleStop(s)}>
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => handleStop(s)}>
                       Stop
                     </button>
                   ) : (
-                    <button type="button" onClick={() => handleStart(s)} disabled={status === "starting"}>
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      onClick={() => handleStart(s)}
+                      disabled={status === "starting"}
+                    >
                       {status === "starting" ? "Starting…" : "Start"}
                     </button>
                   )}
-                  <button type="button" onClick={() => handleRemove(s)}>
+                  <button type="button" className="btn btn-danger btn-sm" onClick={() => handleRemove(s)}>
                     Remove
                   </button>
                 </div>
@@ -175,11 +180,11 @@ export function McpPanel({
           {hasFilesystem ? (
             <p className="settings-hint">Filesystem access is already added.</p>
           ) : (
-            <button type="button" onClick={handleAddFilesystem} disabled={busy}>
+            <button type="button" className="btn btn-secondary" onClick={handleAddFilesystem} disabled={busy}>
               {busy ? "Adding…" : "Add filesystem access to a folder…"}
             </button>
           )}
-          <button type="button" onClick={onOpenMarketplace}>
+          <button type="button" className="btn btn-secondary" onClick={onOpenMarketplace}>
             Browse marketplace…
           </button>
         </div>

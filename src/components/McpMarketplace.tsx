@@ -119,7 +119,7 @@ export function McpMarketplace({ servers, onInstall, onClose }: Props) {
       <div className="settings-panel">
         <div className="settings-header">
           <h2>MCP Marketplace</h2>
-          <button type="button" onClick={onClose}>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={onClose}>
             Close
           </button>
         </div>
@@ -141,7 +141,7 @@ export function McpMarketplace({ servers, onInstall, onClose }: Props) {
             value={query}
             onChange={(e) => setQuery(e.currentTarget.value)}
           />
-          <button type="submit" disabled={loading}>
+          <button type="submit" className="btn btn-primary" disabled={loading}>
             {loading ? "Searching…" : "Search"}
           </button>
         </form>
@@ -176,7 +176,12 @@ export function McpMarketplace({ servers, onInstall, onClose }: Props) {
                   {already ? (
                     <span className="settings-hint">Installed</span>
                   ) : (
-                    <button type="button" disabled={unsupported} onClick={() => openInstall(entry)}>
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      disabled={unsupported}
+                      onClick={() => openInstall(entry)}
+                    >
                       Install
                     </button>
                   )}
@@ -194,7 +199,7 @@ export function McpMarketplace({ servers, onInstall, onClose }: Props) {
             <div className="settings-panel">
               <div className="settings-header">
                 <h2>Install {installTarget.name}</h2>
-                <button type="button" onClick={closeInstall}>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={closeInstall}>
                   Cancel
                 </button>
               </div>
@@ -230,7 +235,7 @@ export function McpMarketplace({ servers, onInstall, onClose }: Props) {
                           }
                         />
                         {looksLikePath(arg.description) && (
-                          <button type="button" onClick={() => pickFolder(i)}>
+                          <button type="button" className="btn btn-secondary btn-sm" onClick={() => pickFolder(i)}>
                             Choose folder…
                           </button>
                         )}
@@ -269,6 +274,7 @@ export function McpMarketplace({ servers, onInstall, onClose }: Props) {
 
               <button
                 type="button"
+                className="btn btn-primary"
                 disabled={
                   installBusy ||
                   missingRequirements(installTarget) ||

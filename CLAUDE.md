@@ -1,9 +1,10 @@
 # CLAUDE.md
 
 - Always search for available skills before doing anything. 
-- Always try to execute the application to check if the code is working as expected.
+- Always execute the npm run tauri dev command to run the full desktop app  so i can see the changes in the app.
 - After successfully completing a task, update the `PROJECT_STATUS.md` file to reflect the current state of the project.
 
+- Always try to apply css variables to css styles instead of hardcoding values.
 
 ## Commands
 

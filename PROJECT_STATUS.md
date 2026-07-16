@@ -48,6 +48,14 @@ Full original architecture/phase plan: `C:\Users\47852\.claude\plans\i-want-to-c
   (migration v3); `env_refs_json` maps var name → either a keychain `secret_ref` or a plain value.
 - **Phase 5 — polish, code signing, CI/release, auto-updater, onboarding**: 🚧 In progress.
   CI/release pipeline done (see below). App is still unsigned; no updater; no first-run wizard.
+  UI shell redesigned (Claude-desktop-style): a persistent left sidebar (`src/components/Sidebar.tsx`)
+  lists conversation history (click to reopen, hover-to-delete, collapsible to an icon rail) and
+  hosts Settings/MCP servers as icon buttons at its bottom, replacing the old header text buttons;
+  the chat itself now lives in a right-hand main panel. Inline SVG icon set lives in
+  `src/components/icons.tsx` (no icon library dependency). Reopening a past conversation loads its
+  persisted user/assistant messages via `listMessages`; deleting one uses the new
+  `deleteConversation` (`src/lib/db.ts`, cascades to its messages).
+  Visual redesign done this session (see below); still no first-run wizard/onboarding.
 
 ## Known simplifications / limitations in the current Phase 3/4 implementation
 
@@ -93,6 +101,47 @@ Full original architecture/phase plan: `C:\Users\47852\.claude\plans\i-want-to-c
   validation) reject a JSON-RPC call with a missing/null `arguments` for zero-parameter tools,
   which models frequently produce when calling no-arg tools.
 
+## Visual design system (Phase 5 slice)
+
+- `src/App.css` is now a token-driven design system: every color, spacing value, radius,
+  shadow, font size/weight, and transition used anywhere in the app is a CSS custom property
+  declared once in `:root` (plus a `@media (prefers-color-scheme: dark)` override block that
+  redefines the same variable names). Re-theming the whole app — light or dark — means editing
+  values in those two blocks only; component rules below them reference `var(--...)` exclusively
+  and should never hard-code a color/spacing/radius value directly.
+- Introduced a small `.btn` variant system (`.btn-primary` / `.btn-secondary` / `.btn-ghost` /
+  `.btn-danger` / `.btn-icon`, plus `.btn-sm`) applied via `className` in `App.tsx`,
+  `SettingsPanel.tsx`, `McpPanel.tsx`, and `McpMarketplace.tsx` — replaces the old approach of
+  every `<button>` looking identical. Unclassed buttons still fall back to a sane default via the
+  base `button` selector.
+- Modals (`.settings-overlay`/`.settings-panel`, reused by Settings/MCP/Marketplace/install-dialog)
+  got a blurred backdrop, fade/scale-in animation, and elevated shadow; message bubbles, badges,
+  and list rows were restyled to use the token palette (accent = indigo `--color-accent`).
+- Verified visually via a throwaway Playwright script driving `npm run dev` (plain Vite, no Tauri
+  shell) in both `light` and `dark` emulated color schemes — screenshotted the main chat view,
+  Settings, MCP panel, and the nested Marketplace modal. No console errors. (Script was not kept —
+  Tauri `invoke` calls no-op/fail outside the native shell, so this only validates CSS/layout, not
+  data-dependent behavior; that still needs `npm run tauri dev`.)
+- App shell restructured around a persistent left sidebar + right chat panel (Claude-desktop-style),
+  replacing the old single-column layout with a header full of text buttons:
+  - `src/components/Sidebar.tsx` — conversation history list (click row to reopen via
+    `listMessages`, hover-reveals a delete icon wired to the new `deleteConversation` in
+    `src/lib/db.ts`), a "New chat" button, and a bottom icon rail (`IconTool`/`IconSettings` from
+    the new `src/components/icons.tsx`) that opens the MCP panel / Settings panel — replacing the
+    old header's `MCP (N running)` / `Settings (N active)` text buttons. A menu-icon toggle
+    collapses the sidebar to an icon-only rail (`--sidebar-width-collapsed` in `App.css`); state is
+    in-memory only (not persisted across restarts).
+  - `src/App.tsx` gained `conversations`/`activeConversationId` state and
+    `handleNewChat`/`handleSelectConversation`/`handleDeleteConversation`, and now refreshes the
+    conversation list after every send so titles/ordering stay current.
+  - `src/App.css`: new `.app-shell`/`.sidebar`/`.main-panel` layout rules; `.messages`/`.composer`/
+    `.error`/`.notice` now self-center at `--layout-max-width` within the main panel instead of the
+    whole window being clamped to that width. Composer's Send button is now a circular icon button
+    (`IconSend`).
+  - Re-verified with the same throwaway-Playwright-on-`npm run dev` approach: sidebar renders and
+    collapses correctly in both light and dark emulated schemes, no new console errors beyond the
+    expected Tauri-`invoke`-missing ones outside the native shell.
+
 ## CI / release pipeline (Phase 5, first slice)
 
 - `.github/workflows/ci.yml` — runs on every push/PR to `main`: frontend typecheck+build
@@ -119,14 +168,18 @@ Full original architecture/phase plan: `C:\Users\47852\.claude\plans\i-want-to-c
 
 - `src/App.tsx` — top-level UI state, chat send/receive loop, wires providers + MCP tools together;
   also owns catalog-install → SQLite-row → keychain-secret → server-start orchestration
-  (`handleInstallFromCatalog`/`handleStartMcpServer`/`resolveServerEnv`).
+  (`handleInstallFromCatalog`/`handleStartMcpServer`/`resolveServerEnv`) and conversation
+  history navigation (`handleNewChat`/`handleSelectConversation`/`handleDeleteConversation`).
+- `src/components/Sidebar.tsx` — left-hand conversation history list + collapsible icon rail that
+  opens Settings/MCP panel (Claude-desktop-style shell); `src/components/icons.tsx` — the inline
+  SVG icon set it (and the composer's send button) use.
 - `src/lib/providerRouter.ts` — client-side multi-provider failover + streaming + tool-call events.
 - `src/lib/mcp.ts` — typed frontend wrappers for the Rust MCP commands/events, including the
   catalog/registry types (`CatalogEntry`, `InstallSpec`) mirroring `mcp/registry.rs`.
 - `src/lib/mcpCatalog.ts` — trust-tier computation (official/verified/community) + cache-aware
   `searchCatalog()` (live registry with SQLite-cache fallback on error).
 - `src/lib/db.ts` — all SQLite CRUD (providers, conversations, messages, MCP servers, MCP catalog
-  cache, usage).
+  cache, usage), including `deleteConversation` (cascades to its messages) and `renameConversation`.
 - `src/components/SettingsPanel.tsx` — provider (LLM API key) management UI.
 - `src/components/McpPanel.tsx` — installed MCP server management UI (start/stop/remove, trust
   badges); delegates actual start logic to `App.tsx`'s `onStart`.

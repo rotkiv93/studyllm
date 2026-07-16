@@ -10,17 +10,23 @@ import {
   deleteProvider,
   recordProviderUsage,
   createConversation,
+  deleteConversation,
   insertMessage,
+  listConversations,
+  listMessages,
   touchConversation,
   listMcpServers,
   insertMcpServer,
   deleteMcpServer,
+  type ConversationRow,
   type ProviderRow,
   type McpServerRow,
 } from "./lib/db";
 import { SettingsPanel, type ProviderDraft } from "./components/SettingsPanel";
 import { McpPanel } from "./components/McpPanel";
 import { McpMarketplace, type ResolvedInstall } from "./components/McpMarketplace";
+import { Sidebar } from "./components/Sidebar";
+import { IconSend } from "./components/icons";
 import {
   callMcpTool,
   filesystemServerArgs,
@@ -64,6 +70,9 @@ export default function App() {
   const [notice, setNotice] = useState<string | null>(null);
   const [mcpServers, setMcpServers] = useState<McpServerRow[]>([]);
   const [mcpToolsByServer, setMcpToolsByServer] = useState<Record<string, McpToolInfo[]>>({});
+  const [conversations, setConversations] = useState<ConversationRow[]>([]);
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const routerRef = useRef<ProviderRouter>(new ProviderRouter([]));
   const conversationIdRef = useRef<string | null>(null);
@@ -71,6 +80,7 @@ export default function App() {
   useEffect(() => {
     refreshProviders();
     refreshMcpServers();
+    refreshConversations();
     const unlisten = onMcpServerStatusChanged(async (event) => {
       if (event.status === "running") {
         try {
@@ -100,6 +110,38 @@ export default function App() {
   async function refreshMcpServers() {
     const rows = await listMcpServers();
     setMcpServers(rows);
+  }
+
+  async function refreshConversations() {
+    const rows = await listConversations();
+    setConversations(rows);
+  }
+
+  function handleNewChat() {
+    if (isStreaming) return;
+    conversationIdRef.current = null;
+    setActiveConversationId(null);
+    setMessages([]);
+    setError(null);
+    setNotice(null);
+  }
+
+  async function handleSelectConversation(id: string) {
+    if (isStreaming || id === activeConversationId) return;
+    const rows = await listMessages(id);
+    setMessages(rows.map((m) => ({ role: m.role, content: m.content })));
+    conversationIdRef.current = id;
+    setActiveConversationId(id);
+    setError(null);
+    setNotice(null);
+  }
+
+  async function handleDeleteConversation(id: string) {
+    await deleteConversation(id);
+    if (id === activeConversationId) {
+      handleNewChat();
+    }
+    await refreshConversations();
   }
 
   async function handleAddFilesystemServer(scopedPath: string) {
@@ -291,6 +333,8 @@ export default function App() {
     if (!conversationIdRef.current) {
       conversationIdRef.current = newId();
       await createConversation(conversationIdRef.current, input.trim().slice(0, 60));
+      setActiveConversationId(conversationIdRef.current);
+      await refreshConversations();
     }
     const conversationId = conversationIdRef.current;
 
@@ -396,6 +440,7 @@ export default function App() {
           const today = new Date().toISOString().slice(0, 10);
           await recordProviderUsage(finalProviderId, today, finalTokens);
         }
+        await refreshConversations();
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
@@ -405,51 +450,69 @@ export default function App() {
     }
   }
 
+  const activeTitle = conversations.find((c) => c.id === activeConversationId)?.title;
+
   return (
-    <main className="app">
-      <header className="app-header">
-        <h1>StudyLLM</h1>
-        <button type="button" onClick={() => setShowMcp(true)}>
-          MCP ({Object.keys(mcpToolsByServer).length} running)
-        </button>
-        <button type="button" onClick={() => setShowSettings(true)}>
-          Settings ({providers.filter((p) => p.enabled).length} active)
-        </button>
-      </header>
+    <div className="app-shell">
+      <Sidebar
+        conversations={conversations}
+        activeConversationId={activeConversationId}
+        collapsed={sidebarCollapsed}
+        disabled={isStreaming}
+        mcpRunningCount={Object.keys(mcpToolsByServer).length}
+        activeProviderCount={providers.filter((p) => p.enabled).length}
+        onToggleCollapsed={() => setSidebarCollapsed((v) => !v)}
+        onNewChat={handleNewChat}
+        onSelectConversation={handleSelectConversation}
+        onDeleteConversation={handleDeleteConversation}
+        onOpenSettings={() => setShowSettings(true)}
+        onOpenMcp={() => setShowMcp(true)}
+      />
 
-      <div className="messages" ref={scrollRef}>
-        {messages.length === 0 && <p className="empty-state">Ask anything to get started.</p>}
-        {messages.map((m, i) =>
-          m.role === "tool" ? (
-            <div key={i} className={`message message-tool${m.isError ? " message-tool-error" : ""}`}>
-              <span className="message-role">🔧 {m.toolName}</span>
-              <pre className="tool-call-input">{JSON.stringify(m.input, null, 2)}</pre>
-              <p>{m.pending ? "Running…" : m.output}</p>
-            </div>
-          ) : (
-            <div key={i} className={`message message-${m.role}`}>
-              <span className="message-role">{m.role === "user" ? "You" : "Assistant"}</span>
-              <p>{m.content || (isStreaming && i === messages.length - 1 ? "…" : "")}</p>
-            </div>
-          ),
-        )}
-      </div>
+      <main className="main-panel">
+        <header className="app-header">
+          <h1>{activeTitle || "New chat"}</h1>
+        </header>
 
-      {notice && <p className="notice">{notice}</p>}
-      {error && <p className="error">{error}</p>}
+        <div className="messages" ref={scrollRef}>
+          {messages.length === 0 && <p className="empty-state">Ask anything to get started.</p>}
+          {messages.map((m, i) =>
+            m.role === "tool" ? (
+              <div key={i} className={`message message-tool${m.isError ? " message-tool-error" : ""}`}>
+                <span className="message-role">🔧 {m.toolName}</span>
+                <pre className="tool-call-input">{JSON.stringify(m.input, null, 2)}</pre>
+                <p>{m.pending ? "Running…" : m.output}</p>
+              </div>
+            ) : (
+              <div key={i} className={`message message-${m.role}`}>
+                <span className="message-role">{m.role === "user" ? "You" : "Assistant"}</span>
+                <p>{m.content || (isStreaming && i === messages.length - 1 ? "…" : "")}</p>
+              </div>
+            ),
+          )}
+        </div>
 
-      <form className="composer" onSubmit={sendMessage}>
-        <input
-          className="composer-input"
-          placeholder="Type a message…"
-          value={input}
-          onChange={(e) => setInput(e.currentTarget.value)}
-          disabled={isStreaming}
-        />
-        <button type="submit" disabled={isStreaming || !input.trim()}>
-          {isStreaming ? "Sending…" : "Send"}
-        </button>
-      </form>
+        {notice && <p className="notice">{notice}</p>}
+        {error && <p className="error">{error}</p>}
+
+        <form className="composer" onSubmit={sendMessage}>
+          <input
+            className="composer-input"
+            placeholder="Type a message…"
+            value={input}
+            onChange={(e) => setInput(e.currentTarget.value)}
+            disabled={isStreaming}
+          />
+          <button
+            type="submit"
+            className="btn btn-primary btn-icon composer-send"
+            disabled={isStreaming || !input.trim()}
+            title="Send"
+          >
+            <IconSend size={16} />
+          </button>
+        </form>
+      </main>
 
       {showSettings && (
         <SettingsPanel
@@ -480,6 +543,6 @@ export default function App() {
           onClose={() => setShowMarketplace(false)}
         />
       )}
-    </main>
+    </div>
   );
 }

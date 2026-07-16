@@ -166,6 +166,17 @@ export async function listConversations(): Promise<ConversationRow[]> {
   );
 }
 
+export async function deleteConversation(id: string): Promise<void> {
+  const db = await getDb();
+  await db.execute("DELETE FROM messages WHERE conversation_id = $1", [id]);
+  await db.execute("DELETE FROM conversations WHERE id = $1", [id]);
+}
+
+export async function renameConversation(id: string, title: string): Promise<void> {
+  const db = await getDb();
+  await db.execute("UPDATE conversations SET title = $1 WHERE id = $2", [title, id]);
+}
+
 export async function insertMessage(row: MessageRow): Promise<void> {
   const db = await getDb();
   await db.execute(
