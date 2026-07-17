@@ -163,6 +163,32 @@ no signing keypair to manage). That means:
   dialog, or run `xattr -cr /path/to/StudyLLM.app` once.
 - There's no in-app update check — students re-download from the Releases page for a new version.
 
+### Commit messages → changelog
+
+Each release's GitHub Release body is auto-generated from commit messages since the previous tag
+(`cliff.toml` + the `changelog` job in `release.yml`, via
+[git-cliff](https://git-cliff.org/)). It groups commits by
+[Conventional Commits](https://www.conventionalcommits.org/) prefix:
+
+| Prefix | Section |
+|---|---|
+| `feat:` | Features |
+| `fix:` | Bug Fixes |
+| `perf:` | Performance |
+| `refactor:` | Refactor |
+| `docs:` | Documentation |
+| `style:` | Styling |
+| `test:` | Testing |
+| `build:` | Build |
+| `ci:` | CI/CD |
+| `chore:` | Miscellaneous |
+| `revert:` | Reverts |
+| anything else | Other |
+
+A message like `feat(mcp): add uvx support` shows up under "Features" as "add uvx support". This
+is read-only tooling — nothing blocks a commit that doesn't follow the format, it just lands in
+"Other" instead of a specific section.
+
 If you ever want to revisit signing/auto-updating, the code-signing wiring (Windows Authenticode
 cert, Apple Developer ID + notarization) and the Tauri updater (keypair-signed `latest.json`) are
 both standard `tauri-action`/`tauri-plugin-updater` features — nothing about this app's structure
