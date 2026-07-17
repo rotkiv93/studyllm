@@ -7,7 +7,27 @@ on:
   workflow_dispatch:
 
 jobs:
+  changelog:
+    runs-on: ubuntu-latest
+    outputs:
+      body: ${{ steps.git-cliff.outputs.content }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Generates a categorized changelog (Features / Bug Fixes / ...) from Conventional Commit
+      # messages (feat:, fix:, docs:, ...) since the previous tag — see cliff.toml. Anything that
+      # doesn't follow the convention just lands in an "Other" bucket instead of breaking this.
+      - name: Generate changelog
+        id: git-cliff
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: cliff.toml
+          args: --latest --strip header
+
   publish-tauri:
+    needs: changelog
     permissions:
       contents: write
     strategy:
@@ -62,10 +82,11 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: 'StudyLLM ${{ github.ref_name }}'
           releaseBody: |
-            See the assets below to download and install this version for your OS.
+            ${{ needs.changelog.outputs.body }}
 
-            This build is unsigned — Windows SmartScreen and macOS Gatekeeper will warn
-            before you can run it. See the README for how to proceed anyway.
+            See the assets below to download and install this version for your OS. This build
+            is unsigned — Windows SmartScreen and macOS Gatekeeper will warn before you can run
+            it. See the README for how to proceed anyway.
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
