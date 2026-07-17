@@ -52,22 +52,36 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      # NOTE: no code-signing secrets configured yet (Windows Authenticode cert /
-      # Apple Developer ID + notarization). Installers built here are UNSIGNED and
-      # will trigger SmartScreen/Gatekeeper warnings. See PROJECT_STATUS.md Phase 5.
-      # Once an auto-updater is wired up, TAURI_SIGNING_PRIVATE_KEY /
+      # Code signing is opt-in via repo secrets — see README "Release signing" section
+      # for what to generate and where to paste it. Any secret left unset here makes
+      # tauri-action/tauri-bundler skip signing for that platform and fall back to an
+      # unsigned build, so this workflow keeps working with none, some, or all of them
+      # configured. Windows: WINDOWS_CERTIFICATE (base64 .pfx) + WINDOWS_CERTIFICATE_PASSWORD.
+      # macOS: APPLE_CERTIFICATE (base64 .p12) + APPLE_CERTIFICATE_PASSWORD for codesigning,
+      # plus APPLE_ID/APPLE_PASSWORD (app-specific password)/APPLE_TEAM_ID for notarization —
+      # all five are required together to notarize; codesigning alone works with just the
+      # certificate pair. Once an auto-updater is wired up, TAURI_SIGNING_PRIVATE_KEY /
       # TAURI_SIGNING_PRIVATE_KEY_PASSWORD secrets will also need to be added here.
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'StudyLLM ${{ github.ref_name }}'
           releaseBody: |
             See the assets below to download and install this version for your OS.
 
-            **Unsigned build** — Windows SmartScreen and macOS Gatekeeper will warn
-            before you can run it. See the README for how to proceed.
+            If this build isn't code-signed yet, Windows SmartScreen and macOS
+            Gatekeeper will warn before you can run it. See the README for how to
+            proceed either way.
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}

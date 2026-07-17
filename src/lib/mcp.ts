@@ -111,3 +111,25 @@ export const FILESYSTEM_SERVER_ID = "filesystem";
 export function filesystemServerArgs(scopedPath: string): string[] {
   return ["-y", "@modelcontextprotocol/server-filesystem", scopedPath];
 }
+
+/**
+ * "deny" hides the tool from the model entirely (equivalent to deselecting it). "ask" exposes it
+ * but the user must approve each call before it runs. "allow" runs it automatically. Tools with no
+ * entry in the map default to "allow" so existing servers keep working after this feature ships.
+ */
+export type ToolPermissionMode = "allow" | "ask" | "deny";
+
+export type ToolPermissionsMap = Record<string, ToolPermissionMode>;
+
+export function parseToolPermissions(json: string): ToolPermissionsMap {
+  try {
+    const parsed = JSON.parse(json);
+    return parsed && typeof parsed === "object" ? (parsed as ToolPermissionsMap) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function getToolPermission(map: ToolPermissionsMap, toolName: string): ToolPermissionMode {
+  return map[toolName] ?? "allow";
+}

@@ -57,6 +57,21 @@ export interface McpServerRow {
   env_refs_json: string;
   /** 'official' | 'verified' | 'community', computed at install time. */
   trust_tier: string;
+  /** JSON: Record<toolName, { enabled: boolean; permission: 'allow' | 'ask' | 'deny' }>. Tools absent from this map default to enabled+allow. */
+  tool_permissions_json: string;
+}
+
+export interface ToolCallRow {
+  id: string;
+  message_id: string;
+  tool_call_id: string;
+  /** `${serverId}_${toolName}` — same sanitized key used to register the dynamicTool. */
+  tool_key: string;
+  input_json: string;
+  output_text: string | null;
+  is_error: number;
+  seq: number;
+  created_at: number;
 }
 
 export interface McpCatalogCacheRow {
@@ -168,6 +183,10 @@ export async function listConversations(): Promise<ConversationRow[]> {
 
 export async function deleteConversation(id: string): Promise<void> {
   const db = await getDb();
+  await db.execute(
+    "DELETE FROM tool_calls WHERE message_id IN (SELECT id FROM messages WHERE conversation_id = $1)",
+    [id],
+  );
   await db.execute("DELETE FROM messages WHERE conversation_id = $1", [id]);
   await db.execute("DELETE FROM conversations WHERE id = $1", [id]);
 }
@@ -202,6 +221,36 @@ export async function listMessages(conversationId: string): Promise<MessageRow[]
   );
 }
 
+export async function insertToolCall(row: ToolCallRow): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    `INSERT INTO tool_calls (id, message_id, tool_call_id, tool_key, input_json, output_text, is_error, seq, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+    [
+      row.id,
+      row.message_id,
+      row.tool_call_id,
+      row.tool_key,
+      row.input_json,
+      row.output_text,
+      row.is_error,
+      row.seq,
+      row.created_at,
+    ],
+  );
+}
+
+export async function listToolCallsForConversation(conversationId: string): Promise<ToolCallRow[]> {
+  const db = await getDb();
+  return db.select<ToolCallRow[]>(
+    `SELECT tc.* FROM tool_calls tc
+     JOIN messages m ON m.id = tc.message_id
+     WHERE m.conversation_id = $1
+     ORDER BY m.created_at ASC, tc.seq ASC`,
+    [conversationId],
+  );
+}
+
 export async function listMcpServers(): Promise<McpServerRow[]> {
   const db = await getDb();
   return db.select<McpServerRow[]>("SELECT * FROM mcp_servers ORDER BY created_at ASC");
@@ -211,8 +260,8 @@ export async function insertMcpServer(row: McpServerRow): Promise<void> {
   const db = await getDb();
   await db.execute(
     `INSERT INTO mcp_servers
-       (id, name, kind, command, args_json, scoped_path, enabled, created_at, transport, url, env_refs_json, trust_tier)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+       (id, name, kind, command, args_json, scoped_path, enabled, created_at, transport, url, env_refs_json, trust_tier, tool_permissions_json)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
     [
       row.id,
       row.name,
@@ -226,8 +275,26 @@ export async function insertMcpServer(row: McpServerRow): Promise<void> {
       row.url,
       row.env_refs_json,
       row.trust_tier,
+      row.tool_permissions_json,
     ],
   );
+}
+
+export async function updateMcpServer(
+  id: string,
+  patch: Partial<
+    Pick<McpServerRow, "name" | "args_json" | "scoped_path" | "url" | "env_refs_json" | "tool_permissions_json">
+  >,
+): Promise<void> {
+  const db = await getDb();
+  const fields = Object.keys(patch) as (keyof typeof patch)[];
+  if (fields.length === 0) return;
+  const setClause = fields.map((f, i) => `${f} = $${i + 1}`).join(", ");
+  const values = fields.map((f) => patch[f]);
+  await db.execute(`UPDATE mcp_servers SET ${setClause} WHERE id = $${fields.length + 1}`, [
+    ...values,
+    id,
+  ]);
 }
 
 export async function deleteMcpServer(id: string): Promise<void> {

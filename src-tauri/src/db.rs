@@ -87,5 +87,26 @@ pub fn migrations() -> Vec<Migration> {
             "#,
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 4,
+            description: "persist tool calls; per-tool permissions on mcp_servers",
+            sql: r#"
+                CREATE TABLE tool_calls (
+                    id TEXT PRIMARY KEY,
+                    message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+                    tool_call_id TEXT NOT NULL,
+                    tool_key TEXT NOT NULL,
+                    input_json TEXT NOT NULL,
+                    output_text TEXT,
+                    is_error INTEGER NOT NULL DEFAULT 0,
+                    seq INTEGER NOT NULL DEFAULT 0,
+                    created_at INTEGER NOT NULL
+                );
+                CREATE INDEX idx_tool_calls_message ON tool_calls(message_id);
+
+                ALTER TABLE mcp_servers ADD COLUMN tool_permissions_json TEXT NOT NULL DEFAULT '{}';
+            "#,
+            kind: MigrationKind::Up,
+        },
     ]
 }

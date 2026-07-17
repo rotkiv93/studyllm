@@ -20,9 +20,9 @@ Full original architecture/phase plan: `C:\Users\47852\.claude\plans\i-want-to-c
 - **Rust backend** (`src-tauri/src/`): everything needing OS privileges — OS keychain access,
   SQLite, and now spawning/talking to local MCP server child processes.
 - **Storage**: SQLite via `tauri-plugin-sql` (`src-tauri/src/db.rs` migrations) for conversations,
-  messages, providers, provider usage, and installed MCP servers. API keys never touch SQLite —
-  only an opaque `secret_ref` pointing into the OS keychain (via the `keyring` crate,
-  `src-tauri/src/credentials.rs`).
+  messages, tool calls, providers, provider usage, and installed MCP servers (including per-tool
+  permissions). API keys never touch SQLite — only an opaque `secret_ref` pointing into the OS
+  keychain (via the `keyring` crate, `src-tauri/src/credentials.rs`).
 - **MCP host** (`src-tauri/src/mcp/`): built on the official `rmcp` Rust SDK, stdio transport only.
   `host.rs` manages running server processes, `runtime.rs` resolves/bootstraps a `npx` binary,
   `commands.rs` exposes it to the frontend as Tauri commands + `mcp://server-status-changed` /
@@ -58,15 +58,19 @@ Full original architecture/phase plan: `C:\Users\47852\.claude\plans\i-want-to-c
   and remains a plain free-text `<input>`, so a model id can always be typed manually regardless.
   `SettingsPanel.tsx` shows a small status line (loading/loaded-N/unavailable) below the field.
 - **Phase 5 — polish, code signing, CI/release, auto-updater, onboarding**: 🚧 In progress.
-  CI/release pipeline done (see below). App is still unsigned; no updater; no first-run wizard.
+  CI/release pipeline done (see below). Code-signing wiring done this session (opt-in via repo
+  secrets, see README "Release signing"), but no secrets have actually been added yet, so
+  published builds are still unsigned until a maintainer generates and adds them. **Still not
+  done**: auto-updater plugin (no `TAURI_SIGNING_PRIVATE_KEY`/`latest.json` publishing step
+  exists), first-run onboarding wizard, local-only crash log. These three are the remaining
+  Phase 5 items from the original plan doc.
   UI shell redesigned (Claude-desktop-style): a persistent left sidebar (`src/components/Sidebar.tsx`)
   lists conversation history (click to reopen, hover-to-delete, collapsible to an icon rail) and
   hosts Settings/MCP servers as icon buttons at its bottom, replacing the old header text buttons;
   the chat itself now lives in a right-hand main panel. Inline SVG icon set lives in
   `src/components/icons.tsx` (no icon library dependency). Reopening a past conversation loads its
-  persisted user/assistant messages via `listMessages`; deleting one uses the new
-  `deleteConversation` (`src/lib/db.ts`, cascades to its messages).
-  Visual redesign done this session (see below); still no first-run wizard/onboarding.
+  persisted user/assistant messages via `listMessages`, plus any persisted tool calls (see below);
+  deleting one uses `deleteConversation` (`src/lib/db.ts`, cascades to its messages and their tool calls).
 
 ## Known simplifications / limitations in the current Phase 3/4 implementation
 
@@ -101,9 +105,81 @@ Full original architecture/phase plan: `C:\Users\47852\.claude\plans\i-want-to-c
 - MCP servers are **not auto-started** on app launch; the user must click "Start" in the MCP panel
   each session. Installed server rows (including catalog installs, with their resolved
   transport/url/env refs) do persist in SQLite across restarts.
-- Tool calls/results are shown live in the chat transcript but are **not persisted** to SQLite —
-  only user/assistant text messages are saved to the `messages` table. Reopening a conversation
-  will not replay past tool calls.
+- **Fixed this session**: tool calls/results are now persisted to a new `tool_calls` table
+  (migration v4, `src-tauri/src/db.rs`) — one row per resolved call, linked to the assistant
+  `messages` row it belongs to (`message_id`) with a `seq` for ordering. `sendMessage` in
+  `App.tsx` accumulates resolved calls during streaming and writes them right after the assistant
+  message row is inserted; `handleSelectConversation` now also fetches
+  `listToolCallsForConversation` and re-renders each assistant turn's tool blocks *before* that
+  turn's text bubble. This is a simplification of the original interleaving — live streaming can
+  interleave text/tool-call/text/tool-call within one turn, but persisted history always shows
+  "all this turn's tool calls, then the text" — acceptable since the point was making past tool
+  calls visible at all, not exact replay fidelity. `deleteConversation` cascades tool_calls too
+  (no real FK cascade — SQLite FKs aren't enforced here, deletes are explicit, same pattern the
+  existing messages/conversations delete already used).
+  **Verified against the live SQLite DB after the user reported doubt that this worked**: queried
+  `studyllm.db` directly (Python's `sqlite3`) and confirmed real `tool_calls` rows correctly linked
+  to their `message_id` for recent turns — persistence is working. The actual UX confusion: a
+  multi-step turn where the model calls tools but never emits final text (hits `isStepCount(8)` or
+  just stops) still gets an assistant `messages` row with `content: ''` so its tool calls have
+  something to attach to — but the chat rendered that as a visible, header-only, empty "Assistant"
+  bubble trailing the tool cards, which reads as "the reply disappeared." Fixed in `App.tsx`'s
+  message-list render: an assistant entry with empty content is now skipped entirely unless it's
+  the actively-streaming last message (where it's the in-progress "…" placeholder).
+- **Added this session — per-tool permissions**: `mcp_servers` gained a `tool_permissions_json`
+  column (same migration v4) — `Record<toolName, 'allow' | 'ask' | 'deny'>`, missing entries
+  default to `allow` so existing installs are unaffected. `deny` hides the tool from the model
+  entirely (`App.tsx`'s `buildMcpTools` filters it out of the `ToolSet` sent to `streamText`) —
+  there's no separate "selected/deselected" flag, `deny` doubles as that. `ask` still exposes the
+  tool but its `execute` first calls `requestToolApproval`, which resolves a promise from a modal
+  rendered at the bottom of `App.tsx` (Allow/Deny buttons); the tool call blocks until the user
+  responds. Managed from `McpPanel.tsx`'s per-server "Tools (N)" expandable list — only available
+  while a server is *running* (tool names/descriptions come from `toolsByServer`, populated by
+  `listMcpTools` on server start; there's no way to see/configure a stopped server's tools yet).
+- **Added this session — editable MCP configs**: `McpPanel.tsx` has an inline "Edit" form per
+  server (`updateMcpServer` in `db.ts`, a plain `UPDATE ... WHERE id`). Supports: renaming
+  (`name`), changing a filesystem server's scoped folder (re-picks via the native folder dialog,
+  rewrites `args_json`, and if the server is currently running, stops + restarts it with the new
+  path), changing a remote server's `url`, and rotating/editing values for any env vars already in
+  `env_refs_json` (secret ones get a "leave blank to keep current value" password field routed
+  through `setCredential` against the *existing* keychain ref rather than minting a new one; if
+  running, the server is restarted with the freshly resolved env). Editing does **not** support
+  adding/removing env var *keys*, only changing the value of ones already there from install time.
+- **Added this session — MCP panel redesign**: replaced the flat server list with a "Pinned"
+  section (always shows Filesystem — with an inline "Add…" card if not yet installed — plus any
+  installed server whose name matches `/gmail|google[- ]?drive|google/i`, per the "put Google
+  ones near the top" ask) above an "All servers" section with a client-side name search filter.
+  Same `mcp-server-card` component renders both sections; `isPinned()` in `McpPanel.tsx` is the
+  only place the pinning heuristic lives. **Bug caught live by the user while this was being
+  built and fixed same session**: the new `<li>`-based classes (`.mcp-server-card`,
+  `.tool-perm-row`, `.provider-edit-row`) were silently losing `align-items`/`justify-content`/
+  `padding`/`flex-wrap` to the pre-existing generic `.provider-list li` rule, which has *higher*
+  CSS specificity (type+class, `(0,1,1)`) than a bare class selector (`(0,1,0)`) regardless of
+  source order — so the cards/tool-rows/edit-forms nested inside `.provider-list` rendered
+  centered/wrapped/padded like plain list rows instead of filling the dialog. Fixed by bumping
+  those selectors to `li.mcp-server-card` / `li.tool-perm-row` / `li.provider-edit-row` (same
+  specificity, later in the cascade → wins the tie) and giving `.tool-perm-list` its own
+  `max-height: 220px; overflow-y: auto` so a server with many tools scrolls internally instead of
+  stretching the dialog. Worth remembering for any *future* nested component added inside
+  `.provider-list`: it will inherit this same trap unless given an `li.` prefix.
+- **Fixed, reported live by the user**: editing an MCP server while the marketplace modal was also
+  open made marketplace content visibly overflow on top of the tools/edit section. Root cause:
+  `App.tsx` rendered `<McpPanel>` and `<McpMarketplace>` as *sibling* top-level `.settings-overlay`
+  divs (`position: fixed; inset: 0`) with equal `z-index: 10` — so the existing
+  `.settings-overlay .settings-overlay { z-index: 11; background: var(--color-overlay-nested) }`
+  rule, clearly written for a nested-modal case, never actually matched (Marketplace was never a
+  DOM descendant of the panel). With equal z-index, stacking fell back to DOM order, and since
+  `--color-overlay`'s backdrop is translucent (`rgba(..., 0.45–0.6)`, not opaque), McpPanel's
+  now-often-taller dialog (edit form / expanded tool list) showed through around Marketplace's
+  smaller centered dialog. Fixed by giving `McpPanel` a `children` prop and rendering
+  `<McpMarketplace>` as its child from `App.tsx` instead of a sibling — it's now a true DOM
+  descendant, so the nested-overlay rule applies for real (correct z-index + darker nested
+  backdrop), matching what the CSS was already designed for.
+- Providers (LLM API keys, not MCP servers) also gained inline editing this session —
+  `SettingsPanel.tsx`'s `EditProviderRow`: change label/model freely (existing `updateProvider`
+  already supported this at the DB layer, just had no UI), and optionally paste a new API key
+  (blank = keep the current one) which overwrites the existing keychain entry via `setCredential`
+  rather than creating a new `secret_ref`.
 - MCP child process `stderr` is inherited (visible in the terminal running `npm run tauri dev`),
   not piped into the UI as a live log. Only coarse status (`starting`/`running`/`stopped`/`error`)
   and Node-download progress are surfaced via events.
@@ -191,37 +267,93 @@ Full original architecture/phase plan: `C:\Users\47852\.claude\plans\i-want-to-c
 - Verified locally this session: `npm run build`, `cargo check --all-targets`, and a full
   `npm run tauri build` all succeed on Windows, producing working `.msi`/NSIS installers whose
   built `.exe` actually launches.
-- **Not done yet**: no code-signing secrets are wired into `release.yml` — builds are unsigned, so
-  SmartScreen/Gatekeeper will warn (flagged in the release body). No auto-updater plugin, so no
-  `TAURI_SIGNING_PRIVATE_KEY`/`latest.json` publishing step exists yet either — that's a separate
-  Phase 5 slice (see plan doc). No first-run onboarding wizard. macOS/Linux release jobs are
-  untested end-to-end (no Mac/Linux machine available this session) — only inspected for
-  correctness against the standard `tauri-action` quickstart pattern.
+- **Code signing wired this session**: `release.yml`'s `tauri-action` step now forwards
+  `WINDOWS_CERTIFICATE`/`WINDOWS_CERTIFICATE_PASSWORD` and
+  `APPLE_CERTIFICATE`/`APPLE_CERTIFICATE_PASSWORD`/`APPLE_SIGNING_IDENTITY`/`APPLE_ID`/
+  `APPLE_PASSWORD`/`APPLE_TEAM_ID` from repo secrets (names verified against Tauri's own
+  Windows/macOS signing docs). None of these secrets have actually been generated/added to the
+  repo yet — that's a manual, maintainer-only step (buying a cert, enrolling in the Apple
+  Developer Program) documented in README "Release signing (maintainers)". Until they're added,
+  `tauri-action`/the bundler just skip signing for that platform and the build stays unsigned, so
+  this doesn't block releases either way. No auto-updater plugin yet, so no
+  `TAURI_SIGNING_PRIVATE_KEY`/`latest.json` publishing step exists — separate Phase 5 slice, still
+  not started. No first-run onboarding wizard, no local-only crash log — also not started.
+  macOS/Linux release jobs remain untested end-to-end (no Mac/Linux machine available) — only
+  inspected for correctness against the standard `tauri-action` quickstart pattern.
+
+## Marketing website (Phase 5 slice, this session)
+
+- `docs/index.html` — self-contained static landing page (no build step/deps): hero section with
+  light/dark screenshot swap via `prefers-color-scheme`, feature grid, two screenshot showcases
+  (Settings, MCP panel), per-OS download buttons linking to `releases/latest`, GitHub link,
+  footer. Reuses the screenshots already in `docs/screenshots/` (added in an earlier session) and
+  a copy of the app icon as `docs/favicon.png`. Not yet live — needs GitHub Pages turned on
+  (Settings → Pages → Deploy from branch → `main` / `/docs`), documented in README "Marketing
+  website (maintainers)". README's hero section links to it pre-emptively
+  (`https://rotkiv93.github.io/studyllm/`).
+
+## Google Workspace (Gmail/Drive) MCP access — researched, not integrated
+
+Investigated whether students could get one-click Gmail/Drive tool access the same way they
+install any other marketplace MCP server. Finding: **no easy path exists today**, for either
+option researched:
+- **Google's own official remote Gmail MCP server** (`https://gmailmcp.googleapis.com/mcp/v1`)
+  requires a full OAuth 2.0 authorization-code-with-browser-redirect flow against a *pre-registered*
+  OAuth client ID + secret + redirect URI in Google Cloud Console — there's no static/long-lived
+  token shortcut. This app's remote-server install flow only supports pasting a single static
+  bearer token (see the existing "Remote auth is limited to a single bearer token" limitation
+  above), so it can't drive this without new engineering.
+- **Community npx-installable servers** (e.g. `@gongrzhe/server-gmail-autoauth-mcp`) still require
+  *the end user* to create their own Google Cloud project, enable the Gmail API, generate OAuth
+  credentials, and run a one-time `npx ... auth` terminal command before the server will start —
+  arguably more technical than the free-tier LLM API key flow this app already asks students to do.
+- A genuinely easy version would mean StudyLLM registering its own public (PKCE, no-client-secret)
+  OAuth client with Google, shipping that client id in the app, and building a native
+  "Connect Google Account" flow: system-browser consent → local-loopback Tauri HTTP listener to
+  catch the redirect → token exchange → refresh-token in the OS keychain → periodic access-token
+  refresh threaded into `McpHost::start_remote`'s single-bearer-token model (which currently
+  captures the token once at connect time, not per-call). That's real, scoped, buildable work —
+  but it needs a maintainer to actually create the Google Cloud OAuth client first (an account
+  action outside what an agent can do), and Google's sensitive-scope verification review for a
+  public app adds more lead time. Deliberately not started blind without that groundwork.
 
 ## Key files (orientation)
 
 - `src/App.tsx` — top-level UI state, chat send/receive loop, wires providers + MCP tools together;
   also owns catalog-install → SQLite-row → keychain-secret → server-start orchestration
-  (`handleInstallFromCatalog`/`handleStartMcpServer`/`resolveServerEnv`) and conversation
-  history navigation (`handleNewChat`/`handleSelectConversation`/`handleDeleteConversation`).
+  (`handleInstallFromCatalog`/`handleStartMcpServer`/`resolveServerEnv`), conversation
+  history navigation (`handleNewChat`/`handleSelectConversation`/`handleDeleteConversation`, now
+  also replaying persisted tool calls), per-tool "ask" approval (`requestToolApproval`/
+  `resolveApproval` + the approval modal), and MCP server config editing
+  (`handleUpdateMcpServer`/`handleUpdateMcpServerEnv`/`handleEditFilesystemPath`).
 - `src/components/Sidebar.tsx` — left-hand conversation history list + collapsible icon rail that
   opens Settings/MCP panel (Claude-desktop-style shell); `src/components/icons.tsx` — the inline
   SVG icon set it (and the composer's send button) use.
 - `src/lib/providerRouter.ts` — client-side multi-provider failover + streaming + tool-call events.
 - `src/lib/mcp.ts` — typed frontend wrappers for the Rust MCP commands/events, including the
-  catalog/registry types (`CatalogEntry`, `InstallSpec`) mirroring `mcp/registry.rs`.
+  catalog/registry types (`CatalogEntry`, `InstallSpec`) mirroring `mcp/registry.rs`, and the
+  per-tool permission types/helpers (`ToolPermissionMode`, `parseToolPermissions`,
+  `getToolPermission`).
 - `src/lib/mcpCatalog.ts` — trust-tier computation (official/verified/community) + cache-aware
   `searchCatalog()` (live registry with SQLite-cache fallback on error).
-- `src/lib/db.ts` — all SQLite CRUD (providers, conversations, messages, MCP servers, MCP catalog
-  cache, usage), including `deleteConversation` (cascades to its messages) and `renameConversation`.
-- `src/components/SettingsPanel.tsx` — provider (LLM API key) management UI.
+- `src/lib/db.ts` — all SQLite CRUD (providers, conversations, messages, tool_calls, MCP servers,
+  MCP catalog cache, usage), including `deleteConversation` (cascades to messages + their tool
+  calls), `renameConversation`, `updateMcpServer`, and `insertToolCall`/
+  `listToolCallsForConversation`.
+- `src/components/SettingsPanel.tsx` — provider (LLM API key) management UI, including inline
+  edit (`EditProviderRow`: label/model/API-key rotation).
 - `src/lib/providerModels.ts` — per-provider live model-list fetching (public catalogs immediately,
   key-gated ones once an API key is entered), with parsing/filtering per provider and graceful
   fallback to `null` on any failure.
-- `src/components/McpPanel.tsx` — installed MCP server management UI (start/stop/remove, trust
-  badges); delegates actual start logic to `App.tsx`'s `onStart`.
+- `src/components/McpPanel.tsx` — installed MCP server management UI: pinned cards (Filesystem +
+  any Google-named server) above a searchable "All servers" list, start/stop/remove, inline config
+  editing (`EditServerForm`: name/folder/url/env vars), and an expandable per-tool permission list
+  (`ToolPermissionRow`) driving `tool_permissions_json`. Delegates actual start logic to
+  `App.tsx`'s `onStart`.
 - `src/components/McpMarketplace.tsx` — registry search/browse UI, required-env-var install form,
   non-official install warning + ack checkbox.
+- `docs/index.html` — static marketing landing page (see "Marketing website" above); not wired
+  into the Vite app build, served as-is via GitHub Pages.
 - `src-tauri/src/mcp/host.rs` — in-memory registry of running MCP child/remote connections + rmcp
   client calls; `start` (stdio, scoped env) and `start_remote` (Streamable HTTP, single bearer
   token) both funnel into `finish_start`.

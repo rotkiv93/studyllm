@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>StudyLLM — free AI chat for students</title>
+<meta name="description" content="A free, cross-platform desktop AI chat app for students. Bring your own free-tier API keys, never get stuck on rate limits, and give the AI real tools via MCP." />
+<link rel="icon" href="favicon.png" />
+<style>
+  :root {
+    --bg: #ffffff;
+    --bg-soft: #f6f7fb;
+    --surface: #ffffff;
+    --border: #e3e5ec;
+    --text: #16181f;
+    --text-muted: #5b5f6d;
+    --accent: #5b5bf0;
+    --accent-soft: #edecff;
+    --accent-contrast: #ffffff;
+    --shadow: 0 1px 2px rgba(20, 20, 40, 0.04), 0 8px 24px rgba(20, 20, 40, 0.06);
+    --radius: 14px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1016;
+      --bg-soft: #15161f;
+      --surface: #1a1b26;
+      --border: #2a2c3a;
+      --text: #eef0f6;
+      --text-muted: #9a9dae;
+      --accent: #8686ff;
+      --accent-soft: #24244a;
+      --accent-contrast: #0f1016;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 30px rgba(0, 0, 0, 0.35);
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.55;
+    overflow-x: hidden;
+  }
+  a { color: var(--accent); }
+  img { max-width: 100%; display: block; }
+
+  .wrap {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 0 1.5rem;
+  }
+
+  nav.top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1.25rem 0;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-weight: 700;
+    font-size: 1.1rem;
+    color: var(--text);
+    text-decoration: none;
+  }
+  .brand img { width: 28px; height: 28px; border-radius: 7px; }
+  nav.top .links { display: flex; gap: 1.5rem; align-items: center; font-size: 0.95rem; }
+  nav.top .links a { color: var(--text-muted); text-decoration: none; }
+  nav.top .links a:hover { color: var(--text); }
+
+  .hero {
+    text-align: center;
+    padding: 3rem 0 2rem;
+  }
+  .hero h1 {
+    font-size: clamp(2rem, 5vw, 3rem);
+    line-height: 1.1;
+    margin: 0 0 1rem;
+    letter-spacing: -0.02em;
+  }
+  .hero p.sub {
+    color: var(--text-muted);
+    font-size: 1.15rem;
+    max-width: 620px;
+    margin: 0 auto 2rem;
+  }
+
+  .downloads {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    justify-content: center;
+    margin-bottom: 0.75rem;
+  }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 0.75rem 1.3rem;
+    border-radius: 10px;
+    font-weight: 600;
+    font-size: 0.95rem;
+    text-decoration: none;
+    border: 1px solid var(--border);
+    transition: transform 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+  }
+  .btn:hover { transform: translateY(-1px); box-shadow: var(--shadow); }
+  .btn-primary { background: var(--accent); color: var(--accent-contrast); border-color: transparent; }
+  .btn-secondary { background: var(--surface); color: var(--text); }
+  .btn svg { width: 18px; height: 18px; flex-shrink: 0; }
+  .downloads-note { color: var(--text-muted); font-size: 0.85rem; margin: 0 0 2.5rem; }
+  .downloads-note a { color: var(--text-muted); text-decoration: underline; }
+
+  .hero-shot {
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .hero-shot img { width: 100%; }
+  .hero-shot .dark-shot { display: none; }
+  @media (prefers-color-scheme: dark) {
+    .hero-shot .light-shot { display: none; }
+    .hero-shot .dark-shot { display: block; }
+  }
+
+  section { padding: 4rem 0; }
+  section.alt { background: var(--bg-soft); }
+  h2 {
+    font-size: clamp(1.5rem, 3.5vw, 2rem);
+    letter-spacing: -0.01em;
+    text-align: center;
+    margin: 0 0 0.5rem;
+  }
+  .section-sub {
+    text-align: center;
+    color: var(--text-muted);
+    max-width: 560px;
+    margin: 0 auto 2.5rem;
+  }
+
+  .features {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1.25rem;
+  }
+  .feature {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+  }
+  .feature .emoji { font-size: 1.6rem; margin-bottom: 0.6rem; display: block; }
+  .feature h3 { margin: 0 0 0.4rem; font-size: 1.05rem; }
+  .feature p { margin: 0; color: var(--text-muted); font-size: 0.92rem; }
+
+  .showcase {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 3rem;
+    align-items: center;
+    margin-bottom: 4rem;
+  }
+  .showcase:last-child { margin-bottom: 0; }
+  .showcase.reverse .showcase-text { order: 2; }
+  .showcase.reverse .showcase-shot { order: 1; }
+  .showcase-shot {
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .showcase-text h3 { font-size: 1.4rem; margin: 0 0 0.75rem; }
+  .showcase-text p { color: var(--text-muted); margin: 0; }
+  @media (max-width: 760px) {
+    .showcase, .showcase.reverse { grid-template-columns: 1fr; gap: 1.25rem; }
+    .showcase.reverse .showcase-text, .showcase.reverse .showcase-shot { order: initial; }
+  }
+
+  .cta {
+    text-align: center;
+  }
+  .cta h2 { margin-bottom: 1.5rem; }
+
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 2.5rem 0;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+  }
+  footer a { color: var(--text-muted); }
+  footer .foot-links { display: flex; gap: 1.25rem; justify-content: center; margin-bottom: 1rem; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <nav class="top">
+    <a class="brand" href="#top">
+      <img src="favicon.png" alt="" />
+      StudyLLM
+    </a>
+    <div class="links">
+      <a href="#features">Features</a>
+      <a href="#look">Screenshots</a>
+      <a href="https://github.com/rotkiv93/studyllm" target="_blank" rel="noreferrer">GitHub</a>
+    </div>
+  </nav>
+</div>
+
+<div class="wrap" id="top">
+  <section class="hero" style="padding-top: 1rem;">
+    <h1>A free AI chat app,<br />built for students.</h1>
+    <p class="sub">
+      Bring your own free-tier API keys from providers like Groq or Cerebras. StudyLLM rotates
+      between them automatically so you never get stuck on a rate limit — no subscription, no
+      server, no catch.
+    </p>
+
+    <div class="downloads" id="downloads">
+      <a class="btn btn-primary" href="https://github.com/rotkiv93/studyllm/releases/latest" data-os="windows">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 5.1 10 4v7H3V5.1ZM3 18.9 10 20v-7H3v5.9ZM11 4.05 21 3v8H11V4.05ZM11 20l10-1v-8H11v9Z"/></svg>
+        Download for Windows
+      </a>
+      <a class="btn btn-secondary" href="https://github.com/rotkiv93/studyllm/releases/latest" data-os="mac">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.36 1.43c.09 1.02-.31 2-.9 2.72-.61.74-1.63 1.32-2.63 1.24-.11-.99.36-2.03.94-2.7.65-.75 1.77-1.3 2.59-1.26ZM19.9 17.3c-.5 1.15-.74 1.66-1.38 2.68-.9 1.42-2.16 3.19-3.73 3.2-1.39.02-1.75-.9-3.63-.89-1.88.01-2.28.9-3.67.88-1.57-.02-2.76-1.61-3.66-3.03-2.51-3.95-2.77-8.58-1.22-11.04.97-1.55 2.71-2.61 4.42-2.63 1.4-.03 2.72.94 3.63.94.9 0 2.53-1.17 4.26-.99a4.36 4.36 0 0 1 3.24 1.76c-2.84 1.56-2.38 5.61.5 6.62-.32.94-.4 1.13-.76 1.5Z"/></svg>
+        Download for macOS
+      </a>
+      <a class="btn btn-secondary" href="https://github.com/rotkiv93/studyllm/releases/latest" data-os="linux">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2c1.5 0 2.7 1.4 2.7 3.5 0 1.3-.5 2-.9 2.7.6.3 1.1.8 1.4 1.5.9.4 1.8 1.5 1.8 2.9 0 .6-.2 1.1-.4 1.5.5.5.8 1.2.8 2 0 2-2 3.9-5.4 3.9S6.6 18.1 6.6 16.1c0-.8.3-1.5.8-2-.2-.4-.4-.9-.4-1.5 0-1.4.9-2.5 1.8-2.9.3-.7.8-1.2 1.4-1.5-.4-.7-.9-1.4-.9-2.7C9.3 3.4 10.5 2 12 2Z"/></svg>
+        Download for Linux
+      </a>
+    </div>
+    <p class="downloads-note">
+      Installers publish automatically to the
+      <a href="https://github.com/rotkiv93/studyllm/releases" target="_blank" rel="noreferrer">GitHub Releases page</a>.
+      Prefer to build from source? See the <a href="https://github.com/rotkiv93/studyllm#building-it-yourself" target="_blank" rel="noreferrer">README</a>.
+    </p>
+
+    <div class="hero-shot">
+      <img class="light-shot" src="screenshots/hero-light.png" alt="StudyLLM main chat view, light mode" />
+      <img class="dark-shot" src="screenshots/hero.png" alt="StudyLLM main chat view, dark mode" />
+    </div>
+  </section>
+</div>
+
+<section id="features">
+  <div class="wrap">
+    <h2>Why students like it</h2>
+    <p class="section-sub">Everything a paid AI subscription gives you, minus the bill.</p>
+    <div class="features">
+      <div class="feature">
+        <span class="emoji">🆓</span>
+        <h3>Actually free</h3>
+        <p>Use free API keys from providers like Groq or Cerebras instead of paying for ChatGPT Plus or Claude Pro.</p>
+      </div>
+      <div class="feature">
+        <span class="emoji">🔄</span>
+        <h3>Never rate-limited</h3>
+        <p>Add more than one provider key and StudyLLM automatically switches the moment one runs dry.</p>
+      </div>
+      <div class="feature">
+        <span class="emoji">🔒</span>
+        <h3>Private by default</h3>
+        <p>Keys live in your OS's secure keychain. Chats go straight from your computer to the AI provider — no StudyLLM server in between.</p>
+      </div>
+      <div class="feature">
+        <span class="emoji">🛠️</span>
+        <h3>Real tools for the AI</h3>
+        <p>Let it read and write files in a folder you choose, so it can actually help with notes, essays, and projects.</p>
+      </div>
+      <div class="feature">
+        <span class="emoji">🛍️</span>
+        <h3>A built-in tool store</h3>
+        <p>Browse and install more capabilities for the AI in a couple of clicks, with clear trust indicators.</p>
+      </div>
+      <div class="feature">
+        <span class="emoji">💻</span>
+        <h3>Cross-platform</h3>
+        <p>Native desktop installers for Windows, macOS, and Linux — no browser tab required.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="alt" id="look">
+  <div class="wrap">
+    <h2>A closer look</h2>
+    <p class="section-sub">Set up in under a minute, then give the AI real work to do.</p>
+
+    <div class="showcase">
+      <div class="showcase-text">
+        <h3>Add your own keys, for free</h3>
+        <p>
+          Open Settings, paste in a free API key from a provider like Groq, and you're chatting —
+          no card, no account with StudyLLM itself. Add a second or third provider and StudyLLM
+          fails over between them automatically.
+        </p>
+      </div>
+      <div class="showcase-shot">
+        <img src="screenshots/settings.png" alt="Adding a provider in the StudyLLM Settings panel" />
+      </div>
+    </div>
+
+    <div class="showcase reverse">
+      <div class="showcase-text">
+        <h3>Give the AI tools to work with</h3>
+        <p>
+          Turn on filesystem access to a folder, or browse the marketplace for more tools. Every
+          tool call is shown transparently in the conversation, and you decide per-tool whether it
+          runs automatically, asks first, or is denied outright.
+        </p>
+      </div>
+      <div class="showcase-shot">
+        <img src="screenshots/mcp.png" alt="The MCP tools panel in StudyLLM" />
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="cta">
+  <div class="wrap">
+    <h2>Ready to try it?</h2>
+    <div class="downloads">
+      <a class="btn btn-primary" href="https://github.com/rotkiv93/studyllm/releases/latest">Download the latest release</a>
+      <a class="btn btn-secondary" href="https://github.com/rotkiv93/studyllm" target="_blank" rel="noreferrer">View source on GitHub</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="foot-links">
+      <a href="https://github.com/rotkiv93/studyllm" target="_blank" rel="noreferrer">GitHub</a>
+      <a href="https://github.com/rotkiv93/studyllm/releases" target="_blank" rel="noreferrer">Releases</a>
+      <a href="https://github.com/rotkiv93/studyllm/issues" target="_blank" rel="noreferrer">Report an issue</a>
+    </div>
+    <p>Built for students who'd rather spend money on textbooks than API subscriptions.</p>
+  </div>
+</footer>
+
+</body>
+</html>

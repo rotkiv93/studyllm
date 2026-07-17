@@ -30,7 +30,7 @@ export const PROVIDER_MANIFEST: Record<ProviderType, ProviderManifestEntry> = {
     docsUrl: "https://inference-docs.cerebras.ai/models/overview",
     apiKeyUrl: "https://cloud.cerebras.ai/",
     defaultModel: "llama-3.3-70b",
-    suggestedModels: ["llama-3.3-70b", "qwen-3-32b"],
+    suggestedModels: ["llama-3.3-70b", "qwen-3-32b", "gpt-oss-120b"],
   },
   groq: {
     type: "groq",

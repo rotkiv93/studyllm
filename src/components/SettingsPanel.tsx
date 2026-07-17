@@ -14,21 +14,103 @@ export interface ProviderDraft {
   apiKey: string;
 }
 
+export interface ProviderEditDraft {
+  label: string;
+  model: string;
+  /** Empty string means "keep the existing key". */
+  apiKey: string;
+}
+
 interface Props {
   providers: ProviderRow[];
   onAdd: (draft: ProviderDraft) => Promise<void>;
   onRemove: (id: string) => Promise<void>;
   onToggle: (id: string, enabled: boolean) => Promise<void>;
   onReorder: (id: string, direction: "up" | "down") => Promise<void>;
+  onEdit: (id: string, draft: ProviderEditDraft) => Promise<void>;
   onClose: () => void;
 }
 
-export function SettingsPanel({ providers, onAdd, onRemove, onToggle, onReorder, onClose }: Props) {
+function EditProviderRow({
+  provider,
+  onSave,
+  onCancel,
+}: {
+  provider: ProviderRow;
+  onSave: (draft: ProviderEditDraft) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [label, setLabel] = useState(provider.label);
+  const [model, setModel] = useState(provider.model);
+  const [apiKey, setApiKey] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+  const modelOptions = PROVIDER_MANIFEST[provider.type].suggestedModels;
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setEditError(null);
+    try {
+      await onSave({ label: label.trim(), model: model.trim(), apiKey: apiKey.trim() });
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : String(err));
+      setBusy(false);
+      return;
+    }
+    setBusy(false);
+  }
+
+  return (
+    <li className="provider-edit-row">
+      <form onSubmit={handleSave}>
+        {editError && <p className="error">{editError}</p>}
+        <label>
+          Label
+          <input value={label} onChange={(e) => setLabel(e.currentTarget.value)} />
+        </label>
+        <label>
+          Model
+          <input
+            value={model}
+            onChange={(e) => setModel(e.currentTarget.value)}
+            list={`edit-models-${provider.id}`}
+          />
+          <datalist id={`edit-models-${provider.id}`}>
+            {modelOptions.map((m) => (
+              <option key={m} value={m} />
+            ))}
+          </datalist>
+        </label>
+        <label>
+          API key
+          <input
+            type="password"
+            value={apiKey}
+            onChange={(e) => setApiKey(e.currentTarget.value)}
+            placeholder="Leave blank to keep current key"
+          />
+        </label>
+        <div className="provider-edit-actions">
+          <button type="submit" className="btn btn-primary btn-sm" disabled={busy || !label.trim() || !model.trim()}>
+            Save
+          </button>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={onCancel} disabled={busy}>
+            Cancel
+          </button>
+        </div>
+      </form>
+    </li>
+  );
+}
+
+export function SettingsPanel({ providers, onAdd, onRemove, onToggle, onReorder, onEdit, onClose }: Props) {
   const [type, setType] = useState<ProviderType>("groq");
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState(PROVIDER_MANIFEST["groq"].defaultModel);
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const [liveModels, setLiveModels] = useState<string[] | null>(null);
   const [modelsStatus, setModelsStatus] = useState<"idle" | "loading" | "loaded" | "unavailable">(
@@ -124,6 +206,11 @@ export function SettingsPanel({ providers, onAdd, onRemove, onToggle, onReorder,
     }
   }
 
+  async function handleEditSave(id: string, draft: ProviderEditDraft) {
+    await onEdit(id, draft);
+    setEditingId(null);
+  }
+
   return (
     <div className="settings-overlay">
       <div className="settings-panel">
@@ -142,43 +229,59 @@ export function SettingsPanel({ providers, onAdd, onRemove, onToggle, onReorder,
         {formError && <p className="error">{formError}</p>}
 
         <ul className="provider-list">
-          {providers.map((p, i) => (
-            <li key={p.id} className={p.enabled ? "" : "provider-disabled"}>
-              <div className="provider-row-main">
-                <strong>{p.label}</strong>
-                <span className="provider-model">{p.model}</span>
-              </div>
-              <div className="provider-row-actions">
-                <button
-                  type="button"
-                  className="btn btn-icon btn-secondary btn-sm"
-                  onClick={() => handleReorder(p.id, "up")}
-                  disabled={i === 0}
-                >
-                  ↑
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-icon btn-secondary btn-sm"
-                  onClick={() => handleReorder(p.id, "down")}
-                  disabled={i === providers.length - 1}
-                >
-                  ↓
-                </button>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={!!p.enabled}
-                    onChange={(e) => handleToggle(p.id, e.currentTarget.checked)}
-                  />
-                  enabled
-                </label>
-                <button type="button" className="btn btn-danger btn-sm" onClick={() => handleRemove(p.id)}>
-                  Remove
-                </button>
-              </div>
-            </li>
-          ))}
+          {providers.map((p, i) =>
+            editingId === p.id ? (
+              <EditProviderRow
+                key={p.id}
+                provider={p}
+                onSave={(draft) => handleEditSave(p.id, draft)}
+                onCancel={() => setEditingId(null)}
+              />
+            ) : (
+              <li key={p.id} className={p.enabled ? "" : "provider-disabled"}>
+                <div className="provider-row-main">
+                  <strong>{p.label}</strong>
+                  <span className="provider-model">{p.model}</span>
+                </div>
+                <div className="provider-row-actions">
+                  <button
+                    type="button"
+                    className="btn btn-icon btn-secondary btn-sm"
+                    onClick={() => handleReorder(p.id, "up")}
+                    disabled={i === 0}
+                  >
+                    ↑
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-icon btn-secondary btn-sm"
+                    onClick={() => handleReorder(p.id, "down")}
+                    disabled={i === providers.length - 1}
+                  >
+                    ↓
+                  </button>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={!!p.enabled}
+                      onChange={(e) => handleToggle(p.id, e.currentTarget.checked)}
+                    />
+                    enabled
+                  </label>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => setEditingId(p.id)}
+                  >
+                    Edit
+                  </button>
+                  <button type="button" className="btn btn-danger btn-sm" onClick={() => handleRemove(p.id)}>
+                    Remove
+                  </button>
+                </div>
+              </li>
+            ),
+          )}
           {providers.length === 0 && <li className="empty-state">No providers added yet.</li>}
         </ul>
 
