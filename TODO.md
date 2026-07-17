@@ -5,15 +5,16 @@ Update both docs together when a task lands.
 
 ## Phase 5 — remaining plan items
 
-- [x] **Auto-updater**. `tauri-plugin-updater` + `tauri-plugin-process` wired in, `src/lib/updater.ts`
-      checks on launch and shows an in-app "Restart to update" banner, `tauri.conf.json` has
-      `bundle.createUpdaterArtifacts: true` and a `plugins.updater` config pointing at
-      `github.com/rotkiv93/studyllm/releases/latest/download/latest.json`, and `release.yml` now
-      forwards `TAURI_SIGNING_PRIVATE_KEY`/`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. A keypair was
-      generated locally (`src-tauri/updater-signing-key.pem` + password, both gitignored, never
-      committed) — the public key is already in `tauri.conf.json`. **Still needs a maintainer** to
-      add the two secrets to the GitHub repo (see README "Auto-updater (maintainers)") before
-      updates actually take effect; until then the check silently finds nothing, same as today.
+- [~] **Auto-updater** — built, then **deliberately removed by request**. It worked in dev, but
+      the first real tagged-release build revealed that forwarding `${{ secrets.X }}` for a secret
+      that was never created sets the env var to an empty string rather than leaving it unset —
+      Tauri's updater-artifact signing (and separately, macOS codesigning) both treat an empty
+      value as "please sign this" and hard-fail instead of skipping, unlike the Windows cert path.
+      Rather than keep it half-wired, ripped out entirely: `tauri-plugin-updater`/`plugin-process`,
+      `src/lib/updater.ts`, the in-app update banner, `tauri.conf.json`'s `plugins.updater`/
+      `createUpdaterArtifacts`, and `release.yml`'s `TAURI_SIGNING_PRIVATE_KEY*` forwarding. This
+      project ships plain unsigned installers with no in-app update check — see README "Releasing
+      (maintainers)".
 - [x] **First-run onboarding wizard**. `src/components/OnboardingWizard.tsx` — pick a provider →
       link to its free-key page → paste + live-verify via `providerModels.ts` → optional
       filesystem MCP install. Auto-shows on first launch when no providers exist (and not
@@ -23,10 +24,12 @@ Update both docs together when a task lands.
       to `<app-local-data>/studyllm.log`, fed by MCP stderr, MCP start failures, Rust panics (via
       `std::panic::set_hook`), and frontend `window.onerror`/`unhandledrejection`. "Show log" /
       "Reveal in folder" / "Clear" buttons in Settings.
-- [ ] **Generate + add the code-signing secrets**. Wiring exists in `release.yml`; the secrets
-      don't. Maintainer-only (buy a Windows cert, enroll in the Apple Developer Program). Until
-      then every published build trips SmartScreen/Gatekeeper — a real adoption tax for the exact
-      non-technical audience this app targets.
+- [~] **Code-signing certs** — **won't-do by request**. This project ships unsigned builds on
+      purpose (no paid cert, no Apple Developer Program enrollment); the signing wiring that used
+      to be in `release.yml` was removed rather than left dormant, since an unset-but-forwarded
+      secret was actively breaking the release build (see the Auto-updater entry above for the
+      same root cause). Windows SmartScreen / macOS Gatekeeper warnings are accepted as
+      permanent — README documents how a student gets past them.
 - [X] **Turn on GitHub Pages** for `docs/` (Settings → Pages → Deploy from branch → `main` /
       `/docs`). README already links to `https://rotkiv93.github.io/studyllm/`, so that link is
       currently dead. Repo-admin action — ask before doing this via `gh api`, since it changes

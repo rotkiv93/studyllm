@@ -57,20 +57,18 @@ Full original architecture/phase plan: `C:\Users\47852\.claude\plans\i-want-to-c
   provider) it silently falls back to the static `suggestedModels` datalist — the model field is
   and remains a plain free-text `<input>`, so a model id can always be typed manually regardless.
   `SettingsPanel.tsx` shows a small status line (loading/loaded-N/unavailable) below the field.
-- **Phase 5 — polish, code signing, CI/release, auto-updater, onboarding**: ✅ Feature-complete
-  (code-wiring side). CI/release pipeline done (see below). Code-signing wiring done (opt-in via
-  repo secrets, see README "Release signing"), but no secrets have actually been added yet, so
-  published builds are still unsigned until a maintainer generates and adds them — that step is
-  inherently manual (buying a cert, enrolling in Apple's Developer Program) and can't be automated.
-  **Auto-updater**: `tauri-plugin-updater` + `tauri-plugin-process` wired in, `src/lib/updater.ts`
-  checks `github.com/rotkiv93/studyllm/releases/latest/download/latest.json` on launch and shows an
-  in-app "Restart to update" banner (`App.tsx`); `tauri.conf.json` has
-  `bundle.createUpdaterArtifacts: true` + a `plugins.updater.pubkey`; `release.yml` forwards
-  `TAURI_SIGNING_PRIVATE_KEY`/`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. A signing keypair was generated
-  locally (`src-tauri/updater-signing-key.pem` + password, gitignored) — **still needs a
-  maintainer** to add those two as repo secrets (README "Auto-updater (maintainers)") before
-  updates actually take effect; until then the check just silently finds nothing. **First-run
-  onboarding wizard**: `src/components/OnboardingWizard.tsx` — pick provider → free-key link →
+- **Phase 5 — polish, CI/release, onboarding**: ✅ Done, by deliberate design choice rather than
+  left incomplete. Code signing (Windows Authenticode, Apple Developer ID + notarization) and the
+  Tauri auto-updater were both fully wired at one point this project's history, but **removed on
+  request** — see "Releasing (maintainers)" in the README for why: no paid certs, no Apple
+  Developer Program enrollment, no signing keypair to maintain, just plain unsigned installers
+  attached to a draft GitHub Release. (One real bug surfaced and got fixed along the way: forwarding
+  `${{ secrets.X }}` for a secret that doesn't exist sets the env var to an *empty string*, not
+  "unset" — `tauri-action`'s macOS codesign and Tauri's updater-artifact signing both treat that as
+  "please sign with this" and fail hard instead of skipping gracefully, unlike the Windows cert
+  path. Removing the wiring entirely — rather than trying to leave it opt-in — sidesteps that
+  footgun.) **First-run onboarding wizard**: `src/components/OnboardingWizard.tsx` — pick provider →
+  free-key link →
   paste + live-verify (reuses `providerModels.ts`) → optional filesystem MCP install; auto-shows
   when no providers exist (tracked via `localStorage`, re-openable from Settings). **Local-only
   crash log**: `src-tauri/src/crashlog.rs`, ring-buffered to `<app-local-data>/studyllm.log`, fed by
@@ -296,22 +294,21 @@ Full original architecture/phase plan: `C:\Users\47852\.claude\plans\i-want-to-c
 - Verified locally this session: `npm run build`, `cargo check --all-targets`, and a full
   `npm run tauri build` all succeed on Windows, producing working `.msi`/NSIS installers whose
   built `.exe` actually launches.
-- **Code signing wired this session**: `release.yml`'s `tauri-action` step now forwards
-  `WINDOWS_CERTIFICATE`/`WINDOWS_CERTIFICATE_PASSWORD` and
-  `APPLE_CERTIFICATE`/`APPLE_CERTIFICATE_PASSWORD`/`APPLE_SIGNING_IDENTITY`/`APPLE_ID`/
-  `APPLE_PASSWORD`/`APPLE_TEAM_ID` from repo secrets (names verified against Tauri's own
-  Windows/macOS signing docs). None of these secrets have actually been generated/added to the
-  repo yet — that's a manual, maintainer-only step (buying a cert, enrolling in the Apple
-  Developer Program) documented in README "Release signing (maintainers)". Until they're added,
-  `tauri-action`/the bundler just skip signing for that platform and the build stays unsigned, so
-  this doesn't block releases either way. **Auto-updater signing now wired too**:
-  `TAURI_SIGNING_PRIVATE_KEY`/`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` are forwarded the same way, and
-  `tauri.conf.json`'s `bundle.createUpdaterArtifacts: true` makes `tauri-action` publish a signed
-  `latest.json` + per-platform update archives once those two secrets exist — see README
-  "Auto-updater (maintainers)". A keypair was generated locally but its secrets haven't been added
-  to the repo yet, same "not blocking, opt-in" story as code signing.
-  macOS/Linux release jobs remain untested end-to-end (no Mac/Linux machine available) — only
-  inspected for correctness against the standard `tauri-action` quickstart pattern.
+- **Code signing and the auto-updater were tried, then deliberately removed.** Both were fully
+  wired at one point (Windows/Apple cert forwarding, `TAURI_SIGNING_PRIVATE_KEY`,
+  `tauri-plugin-updater`, an in-app update banner) but ripped back out on request — this project
+  intentionally ships plain unsigned installers with no auto-update, to avoid needing paid certs,
+  an Apple Developer Program membership, or a signing keypair to maintain. **A real bug was found
+  in the process, worth remembering if this is ever revisited**: `release.yml` forwarded
+  `${{ secrets.X }}` for several secrets unconditionally; when a secret doesn't exist, GitHub
+  Actions sets the env var to an *empty string*, not "absent." The Windows cert path tolerates
+  that fine (empty → skip signing), but macOS's `security import` and the Tauri CLI's
+  updater-artifact signing (forced on by `bundle.createUpdaterArtifacts: true`) both choke on an
+  empty value instead of skipping — every platform failed a real tagged-release build this way
+  before the wiring was removed. See git history for the full implementation if it's ever wanted
+  back; README "Releasing (maintainers)" now just documents the plain unsigned flow.
+  macOS/Linux release jobs remain otherwise untested on real hardware — only inspected for
+  correctness against the standard `tauri-action` quickstart pattern (aside from the failure above).
 
 ## Marketing website (Phase 5 slice, this session)
 
@@ -360,8 +357,7 @@ option researched:
   edit/retry (`handleEditMessage`/`handleRetryMessage`/`truncateFrom`), stream cancellation
   (`handleStopStreaming` via `AbortController`), per-tool "ask" approval (`requestToolApproval`/
   `resolveApproval` + the approval modal), MCP server config editing
-  (`handleUpdateMcpServer`/`handleUpdateMcpServerEnv`/`handleEditFilesystemPath`), and the
-  auto-updater check/install (`handleInstallUpdate`).
+  (`handleUpdateMcpServer`/`handleUpdateMcpServerEnv`/`handleEditFilesystemPath`).
 - `src/components/Sidebar.tsx` — left-hand conversation history list + collapsible icon rail that
   opens Settings/MCP panel (Claude-desktop-style shell); `src/components/icons.tsx` — the inline
   SVG icon set it (and the composer's send button) use.
@@ -390,8 +386,6 @@ option researched:
   non-official install warning + ack checkbox, "Clear cache" when showing stale results.
 - `src/components/OnboardingWizard.tsx` — first-run setup flow (provider → key → verify → optional
   filesystem MCP); re-openable from Settings.
-- `src/lib/updater.ts` — auto-updater check/install wrapper (`@tauri-apps/plugin-updater` +
-  `plugin-process`'s `relaunch`).
 - `src/lib/crashlog.ts` — frontend wrapper for the Rust crash-log commands.
 - `docs/index.html` — static marketing landing page (see "Marketing website" above); not wired
   into the Vite app build, served as-is via GitHub Pages.

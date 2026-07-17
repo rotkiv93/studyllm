@@ -26,7 +26,6 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -34,13 +33,5 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
-  },
-  "plugins": {
-    "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEVEOTk3NTJCMjUyMDYwQwpSV1FNQmxLeVVwZlpEbUliSFB5ZUZ2c1VGNUVieHUrYU5wcGNocjBPSFZxbnVJVjZQQ0ZPb3l4Vwo=",
-      "endpoints": [
-        "https://github.com/rotkiv93/studyllm/releases/latest/download/latest.json"
-      ]
-    }
   }
 }

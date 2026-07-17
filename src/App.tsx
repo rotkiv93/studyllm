@@ -32,7 +32,6 @@ import { SettingsPanel, type ProviderDraft, type ProviderEditDraft } from "./com
 import { McpPanel } from "./components/McpPanel";
 import { McpMarketplace, type ResolvedInstall } from "./components/McpMarketplace";
 import { OnboardingWizard } from "./components/OnboardingWizard";
-import { checkForUpdate, installPendingUpdateAndRelaunch, type UpdateInfo } from "./lib/updater";
 import { Sidebar } from "./components/Sidebar";
 import { ToolCallBlock } from "./components/ToolCallBlock";
 import { Markdown } from "./components/Markdown";
@@ -112,9 +111,6 @@ export default function App() {
   const [showMcp, setShowMcp] = useState(false);
   const [showMarketplace, setShowMarketplace] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
-  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
-  const [updateInstalling, setUpdateInstalling] = useState(false);
-  const [updateError, setUpdateError] = useState<string | null>(null);
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
@@ -149,9 +145,6 @@ export default function App() {
       await refreshProviders();
     })();
     refreshConversations();
-    checkForUpdate().then((info) => {
-      if (info) setUpdateInfo(info);
-    });
     (async () => {
       const rows = await listMcpServers();
       setMcpServers(rows);
@@ -736,17 +729,6 @@ export default function App() {
     abortControllerRef.current?.abort();
   }
 
-  async function handleInstallUpdate() {
-    setUpdateInstalling(true);
-    setUpdateError(null);
-    try {
-      await installPendingUpdateAndRelaunch();
-    } catch (err) {
-      setUpdateError(err instanceof Error ? err.message : "Couldn't install the update.");
-      setUpdateInstalling(false);
-    }
-  }
-
   async function sendMessage(e: React.FormEvent) {
     e.preventDefault();
     await runSend(input);
@@ -877,15 +859,6 @@ export default function App() {
           })}
         </div>
 
-        {updateInfo && (
-          <p className="notice update-banner">
-            Version {updateInfo.version} is available (you're on {updateInfo.currentVersion}).{" "}
-            <button type="button" className="btn btn-primary btn-sm" onClick={handleInstallUpdate} disabled={updateInstalling}>
-              {updateInstalling ? "Installing…" : "Restart to update"}
-            </button>
-          </p>
-        )}
-        {updateError && <p className="error">{updateError}</p>}
         {notice && <p className="notice">{notice}</p>}
         {error && <p className="error">{error}</p>}
 

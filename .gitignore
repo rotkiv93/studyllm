@@ -15,12 +15,6 @@ dist
 dist-ssr
 *.local
 
-# Tauri updater signing key (generated locally; private key + password go into GitHub repo
-# secrets TAURI_SIGNING_PRIVATE_KEY / TAURI_SIGNING_PRIVATE_KEY_PASSWORD, never committed)
-src-tauri/updater-signing-key.pem
-src-tauri/updater-signing-key.pem.pub
-src-tauri/updater-signing-key.password.txt
-
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
