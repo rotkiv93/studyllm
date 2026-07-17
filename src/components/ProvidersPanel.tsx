@@ -1,7 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { PROVIDER_MANIFEST, PROVIDER_TYPES, type ProviderType } from "../lib/providers";
+import {
+  PROVIDER_MANIFEST,
+  SELECTABLE_PROVIDER_TYPES,
+  type ProviderType,
+} from "../lib/providers";
 import {
   fetchProviderModels,
+  pickBestModel,
   providerModelsNeedApiKey,
   providerSupportsLiveModels,
   type ModelInfo,
@@ -47,12 +52,15 @@ function ModelField({
   model,
   onChange,
   idPrefix,
+  autoSelect = false,
 }: {
   type: ProviderType;
   apiKey: string;
   model: string;
   onChange: (model: string) => void;
   idPrefix: string;
+  /** When true, auto-pick a tool-capable model once the live list loads, until the user picks one. */
+  autoSelect?: boolean;
 }) {
   const [liveModels, setLiveModels] = useState<ModelInfo[] | null>(null);
   const [modelsStatus, setModelsStatus] = useState<"idle" | "loading" | "loaded" | "unavailable">(
@@ -61,6 +69,27 @@ function ModelField({
   const [catalog, setCatalog] = useState<ModelCatalog | null>(null);
   const [toolOnly, setToolOnly] = useState(true);
   const modelsRequestId = useRef(0);
+  // Once the user manually picks/types a model we stop auto-overriding their choice.
+  const userTouched = useRef(false);
+
+  // A change coming from the user (typing or clicking an option) locks out auto-selection.
+  function handleUserChange(next: string) {
+    userTouched.current = true;
+    onChange(next);
+  }
+
+  // Switching providers resets the "touched" flag so the new provider auto-selects afresh.
+  useEffect(() => {
+    userTouched.current = false;
+  }, [type]);
+
+  // Auto-pick a sensible tool-capable model once the live list loads (add flow only).
+  useEffect(() => {
+    if (!autoSelect || userTouched.current) return;
+    if (modelsStatus === "loaded" && liveModels) {
+      onChange(pickBestModel(type, liveModels));
+    }
+  }, [autoSelect, liveModels, modelsStatus, type, onChange]);
 
   useEffect(() => {
     let active = true;
@@ -124,7 +153,7 @@ function ModelField({
         Model
         <input
           value={model}
-          onChange={(e) => onChange(e.currentTarget.value)}
+          onChange={(e) => handleUserChange(e.currentTarget.value)}
           list={`models-${idPrefix}`}
           placeholder="Type or pick a model id…"
         />
@@ -153,7 +182,7 @@ function ModelField({
               <button
                 type="button"
                 className={`model-option${m.id === model ? " model-option-selected" : ""}`}
-                onClick={() => onChange(m.id)}
+                onClick={() => handleUserChange(m.id)}
               >
                 <span className="model-option-id">{m.id}</span>
                 {m.supportsTools === true && (
@@ -262,9 +291,9 @@ export function ProvidersPanel({
   onOpenOnboarding,
   onClose,
 }: Props) {
-  const [type, setType] = useState<ProviderType>("groq");
+  const [type, setType] = useState<ProviderType>("gemini");
   const [apiKey, setApiKey] = useState("");
-  const [model, setModel] = useState(PROVIDER_MANIFEST["groq"].defaultModel);
+  const [model, setModel] = useState(PROVIDER_MANIFEST["gemini"].defaultModel);
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -362,8 +391,16 @@ export function ProvidersPanel({
             ) : (
               <li key={p.id} className={p.enabled ? "" : "provider-disabled"}>
                 <div className="provider-row-main">
-                  <strong>{p.label}</strong>
+                  <span className="provider-row-name">
+                    <strong>{p.label}</strong>
+                    {PROVIDER_MANIFEST[p.type]?.recommended && (
+                      <span className="provider-badge-recommended">Recommended</span>
+                    )}
+                  </span>
                   <span className="provider-model">{p.model}</span>
+                  {PROVIDER_MANIFEST[p.type]?.freeTierNote && (
+                    <span className="provider-free-note">{PROVIDER_MANIFEST[p.type].freeTierNote}</span>
+                  )}
                 </div>
                 <div className="provider-row-actions">
                   <button
@@ -412,19 +449,27 @@ export function ProvidersPanel({
           <label>
             Provider
             <select value={type} onChange={(e) => handleTypeChange(e.currentTarget.value as ProviderType)}>
-              {PROVIDER_TYPES.map((t) => (
+              {SELECTABLE_PROVIDER_TYPES.map((t) => (
                 <option key={t} value={t}>
                   {PROVIDER_MANIFEST[t].label}
+                  {PROVIDER_MANIFEST[t].recommended ? " ★" : ""}
                 </option>
               ))}
             </select>
           </label>
+          <p className="provider-free-note">
+            {PROVIDER_MANIFEST[type].recommended && (
+              <span className="provider-badge-recommended">Recommended</span>
+            )}
+            {PROVIDER_MANIFEST[type].freeTierNote}
+          </p>
           <ModelField
             type={type}
             apiKey={apiKey}
             model={model}
             onChange={setModel}
             idPrefix={`add-${type}`}
+            autoSelect
           />
           <label>
             API key

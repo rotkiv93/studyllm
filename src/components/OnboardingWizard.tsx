@@ -1,7 +1,16 @@
 import { useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { PROVIDER_MANIFEST, PROVIDER_TYPES, type ProviderType } from "../lib/providers";
-import { fetchProviderModels, providerModelsNeedApiKey, providerSupportsLiveModels } from "../lib/providerModels";
+import {
+  PROVIDER_MANIFEST,
+  SELECTABLE_PROVIDER_TYPES,
+  type ProviderType,
+} from "../lib/providers";
+import {
+  fetchProviderModels,
+  pickBestModel,
+  providerModelsNeedApiKey,
+  providerSupportsLiveModels,
+} from "../lib/providerModels";
 import type { ProviderDraft } from "./ProvidersPanel";
 
 interface Props {
@@ -18,7 +27,7 @@ function describeError(err: unknown): string {
 
 export function OnboardingWizard({ onAddProvider, onAddFilesystem, onClose }: Props) {
   const [step, setStep] = useState<Step>("provider");
-  const [type, setType] = useState<ProviderType>("groq");
+  const [type, setType] = useState<ProviderType>("gemini");
   const [apiKey, setApiKey] = useState("");
   const [verifyStatus, setVerifyStatus] = useState<"idle" | "checking" | "verified" | "unverified">("idle");
   const [busy, setBusy] = useState(false);
@@ -38,8 +47,8 @@ export function OnboardingWizard({ onAddProvider, onAddFilesystem, onClose }: Pr
       const models = await fetchProviderModels(type, apiKey);
       if (models && models.length > 0) {
         setVerifyStatus("verified");
-        // Seed a tool-capable model when we can tell one apart; otherwise the first id.
-        model = (models.find((m) => m.supportsTools === true) ?? models[0]).id;
+        // Seed the best tool-capable free model we can identify.
+        model = pickBestModel(type, models);
       } else {
         setVerifyStatus("unverified");
         setBusy(false);
@@ -105,14 +114,20 @@ export function OnboardingWizard({ onAddProvider, onAddFilesystem, onClose }: Pr
               provider to get started; you can add more later in Settings.
             </p>
             <div className="onboarding-provider-grid">
-              {PROVIDER_TYPES.map((t) => (
+              {SELECTABLE_PROVIDER_TYPES.map((t) => (
                 <button
                   key={t}
                   type="button"
                   className={`onboarding-provider-choice${t === type ? " onboarding-provider-choice-active" : ""}`}
                   onClick={() => setType(t)}
                 >
-                  {PROVIDER_MANIFEST[t].label}
+                  <span className="onboarding-provider-name">
+                    {PROVIDER_MANIFEST[t].label}
+                    {PROVIDER_MANIFEST[t].recommended && (
+                      <span className="provider-badge-recommended">Recommended</span>
+                    )}
+                  </span>
+                  <span className="provider-free-note">{PROVIDER_MANIFEST[t].freeTierNote}</span>
                 </button>
               ))}
             </div>

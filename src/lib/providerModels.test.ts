@@ -9,9 +9,11 @@ vi.mock("./modelCatalog", () => ({
 
 import {
   fetchProviderModels,
+  pickBestModel,
   providerModelsNeedApiKey,
   providerSupportsLiveModels,
 } from "./providerModels";
+import { PROVIDER_MANIFEST } from "./providers";
 
 function mockFetchOnce(body: unknown, ok = true) {
   vi.stubGlobal(
@@ -33,6 +35,13 @@ describe("providerSupportsLiveModels / providerModelsNeedApiKey", () => {
     expect(providerModelsNeedApiKey("groq")).toBe(true);
     expect(providerSupportsLiveModels("openrouter")).toBe(true);
     expect(providerModelsNeedApiKey("openrouter")).toBe(false);
+    // Newly-added providers both expose a key-gated live catalog.
+    expect(providerSupportsLiveModels("nvidia")).toBe(true);
+    expect(providerModelsNeedApiKey("nvidia")).toBe(true);
+    expect(providerSupportsLiveModels("cohere")).toBe(true);
+    expect(providerModelsNeedApiKey("cohere")).toBe(true);
+    // SambaNova was dropped from the live-catalog sources.
+    expect(providerSupportsLiveModels("sambanova")).toBe(false);
   });
 });
 
@@ -105,5 +114,53 @@ describe("fetchProviderModels", () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
     const result = await fetchProviderModels("groq", "key");
     expect(result).toBeNull();
+  });
+
+  it("drops embedding/rerank ids for cohere", async () => {
+    mockFetchOnce({
+      data: [{ id: "command-a-03-2025" }, { id: "embed-v4.0" }, { id: "rerank-v3.5" }],
+    });
+    const result = await fetchProviderModels("cohere", "key");
+    expect(result).toEqual([{ id: "command-a-03-2025" }]);
+  });
+
+  it("drops embedding/rerank ids for nvidia", async () => {
+    mockFetchOnce({
+      data: [
+        { id: "meta/llama-3.3-70b-instruct" },
+        { id: "nvidia/nv-embedqa-e5-v5" },
+        { id: "nvidia/rerank-qa-mistral-4b" },
+      ],
+    });
+    const result = await fetchProviderModels("nvidia", "key");
+    expect(result).toEqual([{ id: "meta/llama-3.3-70b-instruct" }]);
+  });
+});
+
+describe("pickBestModel", () => {
+  it("prefers a tool-capable model that's also a curated suggestion", () => {
+    const result = pickBestModel("groq", [
+      { id: "llama-3.1-8b-instant", supportsTools: true },
+      { id: "llama-3.3-70b-versatile", supportsTools: true },
+    ]);
+    expect(result).toBe("llama-3.3-70b-versatile"); // curated over merely-tool-capable
+  });
+
+  it("falls back to the first tool-capable model when none are curated", () => {
+    const result = pickBestModel("groq", [
+      { id: "some-uncurated-model", supportsTools: true },
+      { id: "another-model", supportsTools: false },
+    ]);
+    expect(result).toBe("some-uncurated-model");
+  });
+
+  it("falls back to the manifest default when nothing is tool-capable", () => {
+    const result = pickBestModel("groq", [{ id: "x", supportsTools: false }]);
+    expect(result).toBe(PROVIDER_MANIFEST.groq.defaultModel);
+  });
+
+  it("falls back to the manifest default for an empty or null list", () => {
+    expect(pickBestModel("groq", [])).toBe(PROVIDER_MANIFEST.groq.defaultModel);
+    expect(pickBestModel("groq", null)).toBe(PROVIDER_MANIFEST.groq.defaultModel);
   });
 });

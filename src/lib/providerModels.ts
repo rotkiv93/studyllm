@@ -1,4 +1,4 @@
-import type { ProviderType } from "./providers";
+import { PROVIDER_MANIFEST, type ProviderType } from "./providers";
 import { fetchModelCatalog, lookupToolSupport } from "./modelCatalog";
 
 /**
@@ -100,10 +100,19 @@ const MODELS_SOURCE: Partial<Record<ProviderType, ModelsSource>> = {
     parse: openRouterStyle,
     filter: (id) => id.endsWith(":free"),
   },
-  sambanova: {
-    url: "https://api.sambanova.ai/v1/models",
-    requiresApiKey: false,
+  nvidia: {
+    // OpenAI-compatible catalog; capability metadata comes from models.dev enrichment.
+    url: "https://integrate.api.nvidia.com/v1/models",
+    requiresApiKey: true,
     parse: openAiStyle,
+    filter: excludes(["embed", "rerank", "embedqa", "vila", "ocr"]),
+  },
+  cohere: {
+    // Cohere's OpenAI-compatibility surface serves GET /models with a (trial) key.
+    url: "https://api.cohere.ai/compatibility/v1/models",
+    requiresApiKey: true,
+    parse: openAiStyle,
+    filter: excludes(["embed", "rerank"]),
   },
   "github-models": {
     // The inference host's own /models needs a token; the public catalog doesn't.
@@ -170,4 +179,30 @@ export async function fetchProviderModels(
   } catch {
     return null;
   }
+}
+
+/**
+ * Picks the model to auto-select for a provider once its live list is known, preferring
+ * tool-capable free models so a freshly-added provider can run MCP tools out of the box:
+ *   1. the highest-priority curated `suggestedModel` present in the live list and not known to
+ *      lack tools (curation is trusted, so unknown capability still counts here);
+ *   2. otherwise the first live model explicitly flagged tool-capable;
+ *   3. otherwise the manifest's `defaultModel` (also the fallback when `models` is empty/undefined).
+ * Users can always override afterward — this only chooses a sensible starting point.
+ */
+export function pickBestModel(type: ProviderType, models: ModelInfo[] | null): string {
+  const fallback = PROVIDER_MANIFEST[type].defaultModel;
+  if (!models || models.length === 0) return fallback;
+
+  // 1. Curated suggestions in priority order — pick the flagship first when it's live.
+  for (const id of PROVIDER_MANIFEST[type].suggestedModels) {
+    const live = models.find((m) => m.id === id);
+    if (live && live.supportsTools !== false) return id;
+  }
+
+  // 2. Any other model the live list explicitly reports as tool-capable.
+  const firstToolCapable = models.find((m) => m.supportsTools === true);
+  if (firstToolCapable) return firstToolCapable.id;
+
+  return fallback;
 }

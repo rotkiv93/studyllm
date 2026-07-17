@@ -51,8 +51,9 @@ Full original architecture/phase plan: `C:\Users\47852\.claude\plans\i-want-to-c
   (migration v3); `env_refs_json` maps var name → either a keychain `secret_ref` or a plain value.
 - **Live provider model lists** (`src/lib/providerModels.ts`): the Settings "Add a provider" form no
   longer relies solely on the hardcoded `suggestedModels` seed list in `src/lib/providers.ts`. For
-  providers with a public model catalog (OpenRouter, SambaNova, GitHub Models) it fetches the live
-  list immediately; for providers that require a key (Groq, Cerebras, Mistral, Gemini) it fetches
+  providers with a public model catalog (OpenRouter, GitHub Models) it fetches the live
+  list immediately; for providers that require a key (Gemini, Mistral, Groq, NVIDIA NIM, Cohere,
+  Cerebras) it fetches
   (debounced 500ms) once the user has typed one, using the same direct-to-provider `fetch()` +
   Bearer-auth path the chat requests already use (no Rust hop). OpenRouter's list is filtered to
   `:free`-suffixed ids; a few provider-specific keyword filters drop obviously non-chat entries
@@ -74,6 +75,18 @@ Full original architecture/phase plan: `C:\Users\47852\.claude\plans\i-want-to-c
     subtle `no tools`) and offers a **"Tool-compatible only"** filter (default on) that hides only
     models known to reject tools; unknowns are always shown and the field stays free-text.
     `OnboardingWizard.tsx` seeds the first tool-capable model when it can tell.
+  - **Curated free-tier providers + auto model selection** (`src/lib/providers.ts`,
+    `src/lib/providerModels.ts`, `ProvidersPanel.tsx`, `OnboardingWizard.tsx`): the provider set is
+    curated for free-tier tool calling — ordered best-first (Gemini, Mistral flagged `recommended`),
+    each carrying a `freeTierNote` (e.g. "~1,500 req/day · native tool calling") shown in the add
+    form, onboarding grid, and provider rows, plus a "Recommended" badge. **NVIDIA NIM** and
+    **Cohere** were added (both OpenAI-compatible, tool-capable free tiers); **SambaNova** is
+    `deprecated` — hidden from new selection via `SELECTABLE_PROVIDER_TYPES` but still renders/routes
+    for already-saved rows (no DB migration). The shared `pickBestModel(type, models)` picks a
+    tool-capable free model — highest-priority curated `suggestedModel` in the live list, else the
+    first live tool-capable model, else the manifest `defaultModel`. The add form's `ModelField`
+    auto-selects it once the live list loads (until the user manually picks/types one), so users can
+    add a provider by pasting only a key; onboarding uses the same helper.
   - **Router fail-over** (`src/lib/providerRouter.ts`): `streamReply` derives `toolsAttached`, and
     on a tools-not-supported failure (a 400/422 `APICallError` — or an in-stream `error` part —
     whose text matches `/tool|function.?call/i`) it records the `providerId:model` as tool-

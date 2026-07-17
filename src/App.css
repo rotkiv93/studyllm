@@ -1225,6 +1225,38 @@ button {
   color: var(--color-text-muted);
 }
 
+.provider-row-name {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.provider-free-note {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.provider-badge-recommended {
+  flex-shrink: 0;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  padding: 0.1rem var(--space-2);
+  border-radius: var(--radius-full);
+  color: var(--color-accent);
+  background: var(--color-accent-soft);
+  border: 1px solid transparent;
+}
+
+.onboarding-provider-name {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: var(--font-weight-medium);
+}
+
 .provider-row-actions {
   display: flex;
   align-items: center;
@@ -1303,6 +1335,9 @@ li.provider-edit-row {
 }
 
 .onboarding-provider-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
   padding: 0.65em 0.85em;
   background: var(--color-surface-secondary);
   border: 1px solid var(--color-border);

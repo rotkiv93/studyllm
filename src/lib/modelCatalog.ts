@@ -29,6 +29,8 @@ const PROVIDER_TO_CATALOG_KEY: Record<ProviderType, string> = {
   cerebras: "cerebras",
   groq: "groq",
   gemini: "google",
+  nvidia: "nvidia",
+  cohere: "cohere",
   "github-models": "github-models",
   mistral: "mistral",
   openrouter: "openrouter",
