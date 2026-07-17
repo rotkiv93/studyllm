@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::process::Stdio;
 
 use rmcp::RoleClient;
 use rmcp::model::{CallToolRequestParam, Content, RawContent, ResourceContents, Tool};
@@ -6,6 +7,10 @@ use rmcp::service::{RunningService, ServiceExt};
 use rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig;
 use rmcp::transport::{ConfigureCommandExt, StreamableHttpClientTransport, TokioChildProcess};
 use serde::Serialize;
+use tauri::{AppHandle, Emitter, Manager};
+
+use crate::crashlog::CrashLog;
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::Mutex;
 
@@ -60,6 +65,23 @@ impl From<&Tool> for McpToolInfo {
     }
 }
 
+/// Forward a child process's stderr line-by-line to the frontend as `mcp://server-log` events,
+/// instead of leaving it inherited into the terminal (invisible in a packaged build).
+fn spawn_stderr_forwarder(app: AppHandle, id: String, stderr: tokio::process::ChildStderr) {
+    tokio::spawn(async move {
+        let mut lines = BufReader::new(stderr).lines();
+        loop {
+            match lines.next_line().await {
+                Ok(Some(line)) => {
+                    app.state::<CrashLog>().append(&app, format!("mcp[{id}] {line}"));
+                    let _ = app.emit("mcp://server-log", serde_json::json!({ "id": id, "line": line }));
+                }
+                _ => break,
+            }
+        }
+    });
+}
+
 fn content_to_text(content: &Content) -> String {
     match &content.raw {
         RawContent::Text(t) => t.text.clone(),
@@ -77,10 +99,13 @@ impl McpHost {
     /// Start (or reuse) a server identified by `id`, spawning `npx_path` with `args`.
     /// `extra_env` (the server's declared `required_env`) is layered on top of a minimal,
     /// explicit env allowlist — not the full parent environment.
+    /// `binary_path` is whichever launcher this server needs — `npx` for npm-published
+    /// packages, `uvx` for PyPI-published ones. Both are spawned identically from here.
     pub async fn start(
         &self,
+        app: &AppHandle,
         id: String,
-        npx_path: &std::path::Path,
+        binary_path: &std::path::Path,
         args: Vec<String>,
         extra_env: HashMap<String, String>,
     ) -> Result<Vec<McpToolInfo>, String> {
@@ -91,8 +116,8 @@ impl McpHost {
             }
         }
 
-        let npx_path = npx_path.to_path_buf();
-        let command = Command::new(npx_path).configure(|cmd| {
+        let binary_path = binary_path.to_path_buf();
+        let command = Command::new(binary_path).configure(|cmd| {
             cmd.args(&args);
             cmd.env_clear();
             for key in INHERITED_ENV_KEYS {
@@ -105,20 +130,31 @@ impl McpHost {
             }
         });
 
-        let transport = TokioChildProcess::new(command).map_err(|e| e.to_string())?;
+        let (transport, stderr) = TokioChildProcess::builder(command)
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|e| e.to_string())?;
+        if let Some(stderr) = stderr {
+            spawn_stderr_forwarder(app.clone(), id.clone(), stderr);
+        }
         let service = ().serve(transport).await.map_err(|e| e.to_string())?;
         self.finish_start(id, service).await
     }
 
-    /// Start (or reuse) a remote server over Streamable HTTP. `auth_header`, if given, is sent
-    /// as a bearer token with every request — rmcp 0.9's client transport only supports a single
-    /// authorization header, not arbitrary custom headers, so that's the extent of what a remote
-    /// server's declared auth requirement can wire up today.
+    /// Start (or reuse) a remote server over Streamable HTTP. `headers` is the full set of
+    /// resolved secrets/values the registry declared for this server, keyed by literal HTTP
+    /// header name. A header named `Authorization` (case-insensitive) is sent as a bearer token
+    /// via rmcp's `auth_header` config (matches the "Bearer <token>" convention most remote MCP
+    /// servers expect); every other header name is sent verbatim via a custom `reqwest::Client`
+    /// with those defaults baked in — `reqwest::Client` already implements rmcp's
+    /// `StreamableHttpClient` trait and is what `StreamableHttpClientTransportConfig` uses
+    /// internally, so this needs no rmcp changes, just constructing our own client instead of
+    /// the default one. This is what actually lifts the old "only one auth header" limitation.
     pub async fn start_remote(
         &self,
         id: String,
         url: String,
-        auth_header: Option<String>,
+        headers: HashMap<String, String>,
     ) -> Result<Vec<McpToolInfo>, String> {
         {
             let running = self.running.lock().await;
@@ -128,10 +164,29 @@ impl McpHost {
         }
 
         let mut config = StreamableHttpClientTransportConfig::with_uri(url);
-        if let Some(token) = auth_header {
-            config = config.auth_header(token);
+        let mut extra_headers = reqwest::header::HeaderMap::new();
+        for (name, value) in headers {
+            if name.eq_ignore_ascii_case("authorization") {
+                config = config.auth_header(value);
+                continue;
+            }
+            let header_name = reqwest::header::HeaderName::from_bytes(name.as_bytes())
+                .map_err(|e| format!("Invalid header name '{name}': {e}"))?;
+            let header_value = reqwest::header::HeaderValue::from_str(&value)
+                .map_err(|e| format!("Invalid value for header '{name}': {e}"))?;
+            extra_headers.insert(header_name, header_value);
         }
-        let transport = StreamableHttpClientTransport::from_config(config);
+
+        let client = if extra_headers.is_empty() {
+            reqwest::Client::default()
+        } else {
+            reqwest::Client::builder()
+                .default_headers(extra_headers)
+                .build()
+                .map_err(|e| e.to_string())?
+        };
+
+        let transport = StreamableHttpClientTransport::with_client(client, config);
         let service = ().serve(transport).await.map_err(|e| e.to_string())?;
         self.finish_start(id, service).await
     }

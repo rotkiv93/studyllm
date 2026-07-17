@@ -26,6 +26,10 @@ pub enum InstallSpec {
         args: Vec<String>,
         positional_args: Vec<PositionalArgSpec>,
     },
+    Uvx {
+        args: Vec<String>,
+        positional_args: Vec<PositionalArgSpec>,
+    },
     RemoteHttp {
         url: String,
     },
@@ -148,9 +152,41 @@ fn env_from_kv(kv: &RawKeyValue) -> EnvVarSpec {
     }
 }
 
-/// Only npm-published (npx-launched) packages and remote Streamable HTTP servers are
-/// installable today — matches what `McpHost` can actually run. `uvx`/Docker packages
-/// still show up in search results (for visibility) but are marked unsupported.
+fn versioned_identifier(pkg: &RawPackage) -> String {
+    match &pkg.version {
+        Some(v) if !v.is_empty() => format!("{}@{}", pkg.identifier, v),
+        _ => pkg.identifier.clone(),
+    }
+}
+
+/// Splits a package's declared arguments into ones with a fixed value (appended directly to
+/// `args`) and free-form positional ones the user fills in at install time. Shared between the
+/// npx and uvx branches of `normalize` — both runtimes take a flat argv after the package spec.
+fn split_package_arguments(pkg: &RawPackage, mut args: Vec<String>) -> (Vec<String>, Vec<PositionalArgSpec>) {
+    let mut positional_args = Vec::new();
+    for arg in &pkg.package_arguments {
+        if arg.kind.as_deref() == Some("named") {
+            if let (Some(name), Some(value)) =
+                (&arg.name, arg.value.clone().or_else(|| arg.default.clone()))
+            {
+                args.push(name.clone());
+                args.push(value);
+            }
+        } else if let Some(value) = arg.value.clone().or_else(|| arg.default.clone()) {
+            args.push(value);
+        } else {
+            positional_args.push(PositionalArgSpec {
+                description: arg.description.clone().or_else(|| arg.name.clone()),
+                default: arg.default.clone(),
+            });
+        }
+    }
+    (args, positional_args)
+}
+
+/// npm-published (npx-launched) and PyPI-published (uvx-launched) packages, plus remote
+/// Streamable HTTP servers, are installable today — matches what `McpHost` can actually run.
+/// Docker packages still show up in search results (for visibility) but are marked unsupported.
 fn normalize(raw: RawServer) -> CatalogEntry {
     let description = raw.description.clone().unwrap_or_default();
     let repository_url = raw.repository.and_then(|r| r.url);
@@ -174,32 +210,8 @@ fn normalize(raw: RawServer) -> CatalogEntry {
             .map(|t| t.eq_ignore_ascii_case("npm"))
             .unwrap_or(false)
     }) {
-        let mut args = vec!["-y".to_string()];
-        let versioned = match &pkg.version {
-            Some(v) if !v.is_empty() => format!("{}@{}", pkg.identifier, v),
-            _ => pkg.identifier.clone(),
-        };
-        args.push(versioned);
-
-        let mut positional_args = Vec::new();
-        for arg in &pkg.package_arguments {
-            if arg.kind.as_deref() == Some("named") {
-                if let (Some(name), Some(value)) =
-                    (&arg.name, arg.value.clone().or_else(|| arg.default.clone()))
-                {
-                    args.push(name.clone());
-                    args.push(value);
-                }
-            } else if let Some(value) = arg.value.clone().or_else(|| arg.default.clone()) {
-                args.push(value);
-            } else {
-                positional_args.push(PositionalArgSpec {
-                    description: arg.description.clone().or_else(|| arg.name.clone()),
-                    default: arg.default.clone(),
-                });
-            }
-        }
-
+        let args = vec!["-y".to_string(), versioned_identifier(pkg)];
+        let (args, positional_args) = split_package_arguments(pkg, args);
         let env = pkg.environment_variables.iter().map(env_from_kv).collect();
         (
             InstallSpec::Npx {
@@ -208,10 +220,26 @@ fn normalize(raw: RawServer) -> CatalogEntry {
             },
             env,
         )
+    } else if let Some(pkg) = raw.packages.iter().find(|p| {
+        p.registry_type
+            .as_deref()
+            .map(|t| t.eq_ignore_ascii_case("pypi"))
+            .unwrap_or(false)
+    }) {
+        let args = vec![versioned_identifier(pkg)];
+        let (args, positional_args) = split_package_arguments(pkg, args);
+        let env = pkg.environment_variables.iter().map(env_from_kv).collect();
+        (
+            InstallSpec::Uvx {
+                args,
+                positional_args,
+            },
+            env,
+        )
     } else if !raw.packages.is_empty() || !raw.remotes.is_empty() {
         (
             InstallSpec::Unsupported {
-                reason: "Only npm-based (npx) and remote HTTP servers are supported yet".into(),
+                reason: "Only npm (npx), PyPI (uvx), and remote HTTP servers are supported yet".into(),
             },
             Vec::new(),
         )
@@ -298,4 +326,147 @@ pub async fn mcp_registry_search(
         entries,
         next_cursor: raw.metadata.and_then(|m| m.next_cursor),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn raw_server(value: serde_json::Value) -> RawServer {
+        serde_json::from_value(value).expect("test fixture should deserialize as RawServer")
+    }
+
+    #[test]
+    fn is_latest_version_defaults_true_when_meta_missing() {
+        assert!(is_latest_version(&json!({ "name": "acme/thing" })));
+    }
+
+    #[test]
+    fn is_latest_version_defaults_true_when_meta_malformed() {
+        assert!(is_latest_version(&json!({ "_meta": { "something-else": {} } })));
+        assert!(is_latest_version(
+            &json!({ "_meta": { "io.modelcontextprotocol.registry/official": {} } })
+        ));
+    }
+
+    #[test]
+    fn is_latest_version_respects_explicit_flag() {
+        assert!(is_latest_version(&json!({
+            "_meta": { "io.modelcontextprotocol.registry/official": { "isLatest": true } }
+        })));
+        assert!(!is_latest_version(&json!({
+            "_meta": { "io.modelcontextprotocol.registry/official": { "isLatest": false } }
+        })));
+    }
+
+    #[test]
+    fn normalize_prefers_remote_streamable_http_over_packages() {
+        let raw = raw_server(json!({
+            "name": "acme/server",
+            "description": "does things",
+            "remotes": [
+                { "type": "streamable-http", "url": "https://acme.example/mcp" },
+            ],
+            "packages": [
+                { "registryType": "npm", "identifier": "acme-server" },
+            ],
+        }));
+        let entry = normalize(raw);
+        match entry.install {
+            InstallSpec::RemoteHttp { url } => assert_eq!(url, "https://acme.example/mcp"),
+            other => panic!("expected RemoteHttp, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn normalize_matches_remote_type_case_insensitively() {
+        let raw = raw_server(json!({
+            "name": "acme/server",
+            "remotes": [{ "type": "Streamable-HTTP", "url": "https://acme.example/mcp" }],
+        }));
+        let entry = normalize(raw);
+        assert!(matches!(entry.install, InstallSpec::RemoteHttp { .. }));
+    }
+
+    #[test]
+    fn normalize_builds_npx_args_with_pinned_version() {
+        let raw = raw_server(json!({
+            "name": "acme/server",
+            "packages": [
+                { "registryType": "npm", "identifier": "acme-server", "version": "1.2.3" },
+            ],
+        }));
+        let entry = normalize(raw);
+        match entry.install {
+            InstallSpec::Npx { args, positional_args } => {
+                assert_eq!(args, vec!["-y".to_string(), "acme-server@1.2.3".to_string()]);
+                assert!(positional_args.is_empty());
+            }
+            other => panic!("expected Npx, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn normalize_splits_named_vs_positional_package_arguments() {
+        let raw = raw_server(json!({
+            "name": "acme/server",
+            "packages": [{
+                "registryType": "npm",
+                "identifier": "acme-server",
+                "packageArguments": [
+                    { "type": "named", "name": "--config", "value": "prod" },
+                    { "type": "positional", "description": "workspace path" },
+                ],
+            }],
+        }));
+        let entry = normalize(raw);
+        match entry.install {
+            InstallSpec::Npx { args, positional_args } => {
+                assert!(args.contains(&"--config".to_string()));
+                assert!(args.contains(&"prod".to_string()));
+                assert_eq!(positional_args.len(), 1);
+                assert_eq!(positional_args[0].description.as_deref(), Some("workspace path"));
+            }
+            other => panic!("expected Npx, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn normalize_marks_docker_packages_unsupported() {
+        let raw = raw_server(json!({
+            "name": "acme/server",
+            "packages": [{ "registryType": "oci", "identifier": "acme-server" }],
+        }));
+        let entry = normalize(raw);
+        assert!(matches!(entry.install, InstallSpec::Unsupported { .. }));
+    }
+
+    #[test]
+    fn normalize_builds_uvx_args_for_pypi_packages() {
+        let raw = raw_server(json!({
+            "name": "acme/server",
+            "packages": [
+                { "registryType": "pypi", "identifier": "acme-server", "version": "1.2.3" },
+            ],
+        }));
+        let entry = normalize(raw);
+        match entry.install {
+            InstallSpec::Uvx { args, positional_args } => {
+                assert_eq!(args, vec!["acme-server@1.2.3".to_string()]);
+                assert!(positional_args.is_empty());
+            }
+            other => panic!("expected Uvx, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn normalize_marks_entries_with_no_install_info_unsupported() {
+        let raw = raw_server(json!({ "name": "acme/server" }));
+        let entry = normalize(raw);
+        match entry.install {
+            InstallSpec::Unsupported { reason } => assert!(reason.contains("no install information")),
+            other => panic!("expected Unsupported, got {other:?}"),
+        }
+    }
 }

@@ -5,6 +5,7 @@ import {
   providerModelsNeedApiKey,
   providerSupportsLiveModels,
 } from "../lib/providerModels";
+import { clearCrashLog, readCrashLog, revealCrashLog } from "../lib/crashlog";
 import type { ProviderRow } from "../lib/db";
 
 export interface ProviderDraft {
@@ -28,6 +29,7 @@ interface Props {
   onToggle: (id: string, enabled: boolean) => Promise<void>;
   onReorder: (id: string, direction: "up" | "down") => Promise<void>;
   onEdit: (id: string, draft: ProviderEditDraft) => Promise<void>;
+  onOpenOnboarding: () => void;
   onClose: () => void;
 }
 
@@ -104,7 +106,16 @@ function EditProviderRow({
   );
 }
 
-export function SettingsPanel({ providers, onAdd, onRemove, onToggle, onReorder, onEdit, onClose }: Props) {
+export function SettingsPanel({
+  providers,
+  onAdd,
+  onRemove,
+  onToggle,
+  onReorder,
+  onEdit,
+  onOpenOnboarding,
+  onClose,
+}: Props) {
   const [type, setType] = useState<ProviderType>("groq");
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState(PROVIDER_MANIFEST["groq"].defaultModel);
@@ -116,6 +127,23 @@ export function SettingsPanel({ providers, onAdd, onRemove, onToggle, onReorder,
   const [modelsStatus, setModelsStatus] = useState<"idle" | "loading" | "loaded" | "unavailable">(
     "idle",
   );
+  const [crashLogText, setCrashLogText] = useState<string | null>(null);
+  const [crashLogBusy, setCrashLogBusy] = useState(false);
+
+  async function handleShowCrashLog() {
+    setCrashLogBusy(true);
+    try {
+      const text = await readCrashLog();
+      setCrashLogText(text || "Nothing logged yet.");
+    } finally {
+      setCrashLogBusy(false);
+    }
+  }
+
+  async function handleClearCrashLog() {
+    await clearCrashLog();
+    setCrashLogText("Nothing logged yet.");
+  }
 
   function handleTypeChange(next: ProviderType) {
     setType(next);
@@ -223,7 +251,10 @@ export function SettingsPanel({ providers, onAdd, onRemove, onToggle, onReorder,
 
         <p className="settings-hint">
           Add your own free-tier API keys. When one runs out of free requests, StudyLLM
-          automatically switches to the next one in the list.
+          automatically switches to the next one in the list.{" "}
+          <button type="button" className="btn btn-ghost btn-sm" onClick={onOpenOnboarding}>
+            Run setup guide
+          </button>
         </p>
 
         {formError && <p className="error">{formError}</p>}
@@ -341,6 +372,26 @@ export function SettingsPanel({ providers, onAdd, onRemove, onToggle, onReorder,
             Add provider
           </button>
         </form>
+
+        <div className="add-provider-form">
+          <h3>Crash log</h3>
+          <p className="settings-hint">
+            A local-only log of MCP server errors and app crashes — nothing here ever leaves this
+            computer. Useful if something breaks and you want to see what happened.
+          </p>
+          <div className="provider-edit-actions">
+            <button type="button" className="btn btn-secondary btn-sm" onClick={handleShowCrashLog} disabled={crashLogBusy}>
+              {crashLogBusy ? "Loading…" : "Show log"}
+            </button>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => revealCrashLog().catch(() => {})}>
+              Reveal in folder
+            </button>
+            <button type="button" className="btn btn-danger btn-sm" onClick={handleClearCrashLog}>
+              Clear
+            </button>
+          </div>
+          {crashLogText !== null && <pre className="tool-block-pre">{crashLogText}</pre>}
+        </div>
       </div>
     </div>
   );

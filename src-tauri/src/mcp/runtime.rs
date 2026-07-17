@@ -4,7 +4,11 @@ use tauri::{AppHandle, Emitter, Manager};
 
 /// Node LTS build used for the portable download fallback. Bump periodically;
 /// any Node 22.x satisfies `npx`, so exact patch freshness isn't critical.
-const NODE_VERSION: &str = "22.11.0";
+const NODE_VERSION: &str = "22.23.1";
+
+/// `uv`/`uvx` release used for the portable download fallback (uvx-launched, PyPI-published
+/// MCP servers). Bump periodically.
+const UV_VERSION: &str = "0.11.29";
 
 /// Locate a usable `npx`: prefer one already on PATH, then a previously
 /// downloaded portable copy, then download one into app-local data.
@@ -19,6 +23,21 @@ pub async fn ensure_npx(app: &AppHandle) -> Result<PathBuf, String> {
     }
 
     download_and_extract_node(app).await
+}
+
+/// Locate a usable `uvx`: prefer one already on PATH, then a previously downloaded portable
+/// copy, then download one into app-local data. Mirrors `ensure_npx` above.
+pub async fn ensure_uvx(app: &AppHandle) -> Result<PathBuf, String> {
+    if let Some(path) = find_on_path("uvx") {
+        return Ok(path);
+    }
+
+    let cached = platform_uvx_path(&uv_install_dir(app)?);
+    if cached.is_file() {
+        return Ok(cached);
+    }
+
+    download_and_extract_uv(app).await
 }
 
 fn find_on_path(bin: &str) -> Option<PathBuf> {
@@ -75,6 +94,103 @@ fn download_url() -> Result<String, String> {
 
 fn emit_log(app: &AppHandle, message: impl Into<String>) {
     let _ = app.emit("mcp://runtime-log", message.into());
+}
+
+fn uv_install_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    let base = app.path().app_local_data_dir().map_err(|e| e.to_string())?;
+    Ok(base.join("uv-runtime").join(UV_VERSION))
+}
+
+/// Unlike Node's archives, uv's Windows zip is flat (no subfolder) while the macOS/Linux
+/// tar.gz archives extract into a subfolder named after the target triple.
+fn uv_archive_subdir() -> Result<Option<String>, String> {
+    if cfg!(windows) {
+        Ok(None)
+    } else if cfg!(target_os = "macos") {
+        let arch = if cfg!(target_arch = "aarch64") { "aarch64" } else { "x86_64" };
+        Ok(Some(format!("uv-{arch}-apple-darwin")))
+    } else if cfg!(target_os = "linux") {
+        Ok(Some("uv-x86_64-unknown-linux-gnu".to_string()))
+    } else {
+        Err("Automatic uv install isn't supported on this OS".into())
+    }
+}
+
+fn uv_download_filename() -> Result<String, String> {
+    if cfg!(windows) {
+        Ok("uv-x86_64-pc-windows-msvc.zip".to_string())
+    } else if cfg!(target_os = "macos") {
+        let arch = if cfg!(target_arch = "aarch64") { "aarch64" } else { "x86_64" };
+        Ok(format!("uv-{arch}-apple-darwin.tar.gz"))
+    } else if cfg!(target_os = "linux") {
+        Ok("uv-x86_64-unknown-linux-gnu.tar.gz".to_string())
+    } else {
+        Err("Automatic uv install isn't supported on this OS".into())
+    }
+}
+
+fn platform_uvx_path(install_dir: &Path) -> PathBuf {
+    let bin_name = if cfg!(windows) { "uvx.exe" } else { "uvx" };
+    match uv_archive_subdir().unwrap_or(None) {
+        Some(subdir) => install_dir.join(subdir).join(bin_name),
+        None => install_dir.join(bin_name),
+    }
+}
+
+async fn download_and_extract_uv(app: &AppHandle) -> Result<PathBuf, String> {
+    let install_dir = uv_install_dir(app)?;
+    tokio::fs::create_dir_all(&install_dir)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let filename = uv_download_filename()?;
+    let url = format!("https://github.com/astral-sh/uv/releases/download/{UV_VERSION}/{filename}");
+    emit_log(app, "Downloading uv runtime (one-time, ~15-20MB)...");
+
+    let response = reqwest::get(&url).await.map_err(|e| e.to_string())?;
+    if !response.status().is_success() {
+        return Err(format!("Failed to download uv runtime: HTTP {}", response.status()));
+    }
+    let bytes = response.bytes().await.map_err(|e| e.to_string())?;
+
+    emit_log(app, "Extracting uv runtime...");
+    let install_dir_for_extract = install_dir.clone();
+    let is_windows = cfg!(windows);
+    tokio::task::spawn_blocking(move || -> Result<(), String> {
+        if is_windows {
+            let cursor = std::io::Cursor::new(bytes);
+            let mut archive = zip::ZipArchive::new(cursor).map_err(|e| e.to_string())?;
+            archive
+                .extract(&install_dir_for_extract)
+                .map_err(|e| e.to_string())
+        } else {
+            let decoder = flate2::read::GzDecoder::new(&bytes[..]);
+            let mut archive = tar::Archive::new(decoder);
+            archive
+                .unpack(&install_dir_for_extract)
+                .map_err(|e| e.to_string())
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+
+    let uvx = platform_uvx_path(&install_dir);
+    if !uvx.is_file() {
+        return Err("uv download completed but uvx was not found in the archive".into());
+    }
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Ok(meta) = std::fs::metadata(&uvx) {
+            let mut perms = meta.permissions();
+            perms.set_mode(perms.mode() | 0o111);
+            let _ = std::fs::set_permissions(&uvx, perms);
+        }
+    }
+
+    emit_log(app, "uv runtime ready.");
+    Ok(uvx)
 }
 
 async fn download_and_extract_node(app: &AppHandle) -> Result<PathBuf, String> {

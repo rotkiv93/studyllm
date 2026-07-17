@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { McpServerRow } from "../lib/db";
 import type { CatalogEntry } from "../lib/mcp";
-import { computeTrustTier, searchCatalog, trustTierLabel, type TrustTier } from "../lib/mcpCatalog";
+import { clearCatalogCache, computeTrustTier, searchCatalog, trustTierLabel, type TrustTier } from "../lib/mcpCatalog";
 
 export interface ResolvedInstall {
   entry: CatalogEntry;
@@ -62,7 +62,9 @@ export function McpMarketplace({ servers, onInstall, onClose }: Props) {
     setInstallTarget(entry);
     setEnvInputs(Object.fromEntries(entry.requiredEnv.map((v) => [v.name, v.default ?? ""])));
     setPositionalInputs(
-      entry.install.kind === "npx" ? entry.install.positionalArgs.map((p) => p.default ?? "") : [],
+      entry.install.kind === "npx" || entry.install.kind === "uvx"
+        ? entry.install.positionalArgs.map((p) => p.default ?? "")
+        : [],
     );
     setAcknowledged(false);
   }
@@ -80,7 +82,7 @@ export function McpMarketplace({ servers, onInstall, onClose }: Props) {
   function missingRequirements(entry: CatalogEntry): boolean {
     const missingEnv = entry.requiredEnv.some((v) => v.isRequired && !envInputs[v.name]?.trim());
     const missingPositional =
-      entry.install.kind === "npx" &&
+      (entry.install.kind === "npx" || entry.install.kind === "uvx") &&
       entry.install.positionalArgs.some((_, i) => !positionalInputs[i]?.trim());
     return missingEnv || missingPositional;
   }
@@ -93,7 +95,7 @@ export function McpMarketplace({ servers, onInstall, onClose }: Props) {
     if (missingRequirements(entry)) return;
 
     let finalArgs: string[] = [];
-    if (entry.install.kind === "npx") {
+    if (entry.install.kind === "npx" || entry.install.kind === "uvx") {
       finalArgs = [...entry.install.args, ...positionalInputs.map((v) => v.trim()).filter(Boolean)];
     }
     const envValues = entry.requiredEnv.map((v) => ({
@@ -150,6 +152,17 @@ export function McpMarketplace({ servers, onInstall, onClose }: Props) {
           <p className="notice">
             Registry unreachable{searchError ? ` (${searchError})` : ""} — showing cached results
             {cacheAgeMs != null ? ` from ${Math.round(cacheAgeMs / 60000)} min ago` : ""}.
+            {" "}
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={async () => {
+                await clearCatalogCache();
+                runSearch(query);
+              }}
+            >
+              Clear cache
+            </button>
           </p>
         )}
 
@@ -212,16 +225,8 @@ export function McpMarketplace({ servers, onInstall, onClose }: Props) {
                 </p>
               )}
 
-              {installTarget.install.kind === "remoteHttp" && installTarget.requiredEnv.length > 1 && (
-                <p className="notice">
-                  This server declares multiple secrets/headers, but only one authorization token
-                  can be sent per remote connection right now — the first value below will be used
-                  as the bearer token; the rest are ignored.
-                </p>
-              )}
-
               <div className="add-provider-form">
-                {installTarget.install.kind === "npx" &&
+                {(installTarget.install.kind === "npx" || installTarget.install.kind === "uvx") &&
                   installTarget.install.positionalArgs.map((arg, i) => (
                     <label key={i}>
                       {arg.description ?? `Argument ${i + 1}`}

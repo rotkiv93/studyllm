@@ -21,6 +21,8 @@ import {
   deleteMcpServer,
   insertToolCall,
   listToolCallsForConversation,
+  renameConversation,
+  deleteMessagesFrom,
   type ConversationRow,
   type ProviderRow,
   type McpServerRow,
@@ -29,10 +31,12 @@ import {
 import { SettingsPanel, type ProviderDraft, type ProviderEditDraft } from "./components/SettingsPanel";
 import { McpPanel } from "./components/McpPanel";
 import { McpMarketplace, type ResolvedInstall } from "./components/McpMarketplace";
+import { OnboardingWizard } from "./components/OnboardingWizard";
+import { checkForUpdate, installPendingUpdateAndRelaunch, type UpdateInfo } from "./lib/updater";
 import { Sidebar } from "./components/Sidebar";
 import { ToolCallBlock } from "./components/ToolCallBlock";
 import { Markdown } from "./components/Markdown";
-import { IconCheck, IconCopy, IconSend } from "./components/icons";
+import { IconCheck, IconCopy, IconEdit, IconRefresh, IconSend, IconStop } from "./components/icons";
 import {
   callMcpTool,
   filesystemServerArgs,
@@ -53,7 +57,7 @@ function newId(): string {
 }
 
 type DisplayMessage =
-  | { role: "user" | "assistant"; content: string }
+  | { role: "user" | "assistant"; content: string; id?: string; providerLabel?: string; model?: string }
   | {
       role: "tool";
       toolCallId: string;
@@ -107,6 +111,10 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showMcp, setShowMcp] = useState(false);
   const [showMarketplace, setShowMarketplace] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
+  const [updateInstalling, setUpdateInstalling] = useState(false);
+  const [updateError, setUpdateError] = useState<string | null>(null);
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
@@ -116,7 +124,9 @@ export default function App() {
   const [mcpToolsByServer, setMcpToolsByServer] = useState<Record<string, McpToolInfo[]>>({});
   const [conversations, setConversations] = useState<ConversationRow[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(
+    () => localStorage.getItem("sidebarCollapsed") === "1",
+  );
   const [pendingApproval, setPendingApproval] = useState<{
     id: string;
     serverName: string;
@@ -125,18 +135,41 @@ export default function App() {
   } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const routerRef = useRef<ProviderRouter>(new ProviderRouter([]));
+  const abortControllerRef = useRef<AbortController | null>(null);
   const conversationIdRef = useRef<string | null>(null);
   const approvalResolvers = useRef<Map<string, (approved: boolean) => void>>(new Map());
 
   useEffect(() => {
-    refreshProviders();
-    refreshMcpServers();
+    (async () => {
+      const rows = await listProviders();
+      setProviders(rows);
+      if (rows.length === 0 && localStorage.getItem("onboardingDismissed") !== "1") {
+        setShowOnboarding(true);
+      }
+      await refreshProviders();
+    })();
     refreshConversations();
+    checkForUpdate().then((info) => {
+      if (info) setUpdateInfo(info);
+    });
+    (async () => {
+      const rows = await listMcpServers();
+      setMcpServers(rows);
+      for (const server of rows.filter((s) => s.autostart)) {
+        try {
+          await handleStartMcpServer(server);
+        } catch {
+          // Best-effort autostart; leave the server stopped and let the user retry from the panel.
+        }
+      }
+    })();
     const unlisten = onMcpServerStatusChanged(async (event) => {
       if (event.status === "running") {
         try {
           const tools = await listMcpTools(event.id);
           setMcpToolsByServer((prev) => ({ ...prev, [event.id]: tools }));
+          await updateMcpServer(event.id, { cached_tools_json: JSON.stringify(tools) });
+          await refreshMcpServers();
         } catch {
           // Server reported running but tool listing failed; leave tools as-is.
         }
@@ -187,17 +220,43 @@ export default function App() {
       else toolsByMessage.set(t.message_id, [t]);
     }
     const display: DisplayMessage[] = rows.flatMap((m) => {
-      const tools = toolsByMessage.get(m.id) ?? [];
-      const toolBlocks: DisplayMessage[] = tools.map((t) => ({
-        role: "tool",
-        toolCallId: t.tool_call_id,
-        toolName: t.tool_key,
-        input: safeJsonParse(t.input_json),
-        output: t.output_text ?? "",
-        isError: !!t.is_error,
-        pending: false,
-      }));
-      return [...toolBlocks, { role: m.role, content: m.content }];
+      const providerLabel =
+        m.role === "assistant"
+          ? (providers.find((p) => p.id === m.provider_used)?.label ?? m.provider_used ?? undefined)
+          : undefined;
+      const model = m.role === "assistant" ? (m.model_used ?? undefined) : undefined;
+      const tools = (toolsByMessage.get(m.id) ?? []).slice().sort((a, b) => a.seq - b.seq);
+
+      if (tools.length === 0) {
+        return [{ role: m.role, content: m.content, id: m.id, providerLabel, model }];
+      }
+
+      // Interleave persisted tool calls back with the text segments they fell between, using
+      // each call's text_offset (a snapshot of how much assistant text had streamed in by the
+      // time the call was made) — matches the original live-streaming interleave order instead
+      // of always rendering "all tool calls, then the text".
+      const parts: DisplayMessage[] = [];
+      let cursor = 0;
+      for (const t of tools) {
+        const offset = Math.max(cursor, Math.min(t.text_offset, m.content.length));
+        if (offset > cursor) {
+          parts.push({ role: "assistant", content: m.content.slice(cursor, offset) });
+        }
+        parts.push({
+          role: "tool",
+          toolCallId: t.tool_call_id,
+          toolName: t.tool_key,
+          input: safeJsonParse(t.input_json),
+          output: t.output_text ?? "",
+          isError: !!t.is_error,
+          pending: false,
+        });
+        cursor = offset;
+      }
+      // Trailing segment always carries the message id (even if empty) so retry/edit can still
+      // locate this turn; an empty-content assistant entry is filtered out at render time.
+      parts.push({ role: "assistant", content: m.content.slice(cursor), id: m.id, providerLabel, model });
+      return parts;
     });
     setMessages(display);
     conversationIdRef.current = id;
@@ -211,6 +270,11 @@ export default function App() {
     if (id === activeConversationId) {
       handleNewChat();
     }
+    await refreshConversations();
+  }
+
+  async function handleRenameConversation(id: string, title: string) {
+    await renameConversation(id, title);
     await refreshConversations();
   }
 
@@ -231,6 +295,8 @@ export default function App() {
       env_refs_json: "{}",
       trust_tier: "official",
       tool_permissions_json: "{}",
+      autostart: 0,
+      cached_tools_json: "[]",
     });
     await refreshMcpServers();
     await startMcpServer(id, args);
@@ -251,14 +317,13 @@ export default function App() {
   async function handleStartMcpServer(server: McpServerRow) {
     const env = await resolveServerEnv(server);
     if (server.transport === "remote-http" && server.url) {
-      const token = Object.values(env)[0];
-      await startRemoteMcpServer(server.id, server.url, token || undefined);
+      await startRemoteMcpServer(server.id, server.url, env);
     } else {
       const args: string[] =
         server.kind === "filesystem" && server.scoped_path
           ? filesystemServerArgs(server.scoped_path)
           : JSON.parse(server.args_json);
-      await startMcpServer(server.id, args, env);
+      await startMcpServer(server.id, args, env, server.command === "uvx" ? "uvx" : "npx");
     }
   }
 
@@ -280,7 +345,7 @@ export default function App() {
       id,
       name: resolved.entry.name,
       kind: "catalog",
-      command: isRemote ? "" : "npx",
+      command: isRemote ? "" : resolved.entry.install.kind === "uvx" ? "uvx" : "npx",
       args_json: JSON.stringify(resolved.finalArgs),
       scoped_path: null,
       enabled: 1,
@@ -290,6 +355,8 @@ export default function App() {
       env_refs_json: JSON.stringify(envRefs),
       trust_tier: resolved.trustTier,
       tool_permissions_json: "{}",
+      autostart: 0,
+      cached_tools_json: "[]",
     };
     await insertMcpServer(row);
     await refreshMcpServers();
@@ -298,7 +365,12 @@ export default function App() {
 
   async function handleUpdateMcpServer(
     id: string,
-    patch: Partial<Pick<McpServerRow, "name" | "args_json" | "scoped_path" | "url" | "env_refs_json" | "tool_permissions_json">>,
+    patch: Partial<
+      Pick<
+        McpServerRow,
+        "name" | "args_json" | "scoped_path" | "url" | "env_refs_json" | "tool_permissions_json" | "autostart"
+      >
+    >,
   ) {
     await updateMcpServer(id, patch);
     await refreshMcpServers();
@@ -307,11 +379,17 @@ export default function App() {
   async function handleUpdateMcpServerEnv(
     server: McpServerRow,
     updates: Record<string, { isSecret: boolean; value: string }>,
+    removedKeys: string[] = [],
   ) {
     const existing = JSON.parse(server.env_refs_json || "{}") as Record<
       string,
       { secret: boolean; value: string }
     >;
+    for (const key of removedKeys) {
+      const current = existing[key];
+      if (current?.secret) await deleteCredential(current.value);
+      delete existing[key];
+    }
     for (const [name, update] of Object.entries(updates)) {
       const current = existing[name];
       if (update.isSecret) {
@@ -473,9 +551,8 @@ export default function App() {
     await refreshProviders();
   }
 
-  async function sendMessage(e: React.FormEvent) {
-    e.preventDefault();
-    if (!input.trim() || isStreaming) return;
+  async function runSend(text: string) {
+    if (!text.trim() || isStreaming) return;
     if (providers.filter((p) => p.enabled).length === 0) {
       setError("Add at least one provider in Settings first.");
       return;
@@ -486,44 +563,51 @@ export default function App() {
 
     if (!conversationIdRef.current) {
       conversationIdRef.current = newId();
-      await createConversation(conversationIdRef.current, input.trim().slice(0, 60));
+      await createConversation(conversationIdRef.current, text.trim().slice(0, 60));
       setActiveConversationId(conversationIdRef.current);
       await refreshConversations();
     }
     const conversationId = conversationIdRef.current;
 
-    const userMessage: ChatMessage = { role: "user", content: input.trim() };
+    const userMessage: ChatMessage = { role: "user", content: text.trim() };
+    const userMessageId = newId();
+    const userCreatedAt = Date.now();
+    const userDisplay: DisplayMessage = { role: "user", content: userMessage.content, id: userMessageId };
     const priorHistory: ChatMessage[] = messages
       .filter((m): m is Extract<DisplayMessage, { role: "user" | "assistant" }> => m.role !== "tool")
       .map((m) => ({ role: m.role, content: m.content }));
     const nextHistory = [...priorHistory, userMessage];
     const baseMessages = messages;
-    setMessages([...baseMessages, userMessage]);
+    setMessages([...baseMessages, userDisplay]);
     setInput("");
     setIsStreaming(true);
     await insertMessage({
-      id: newId(),
+      id: userMessageId,
       conversation_id: conversationId,
       role: "user",
       content: userMessage.content,
       provider_used: null,
       model_used: null,
-      created_at: Date.now(),
+      created_at: userCreatedAt,
     });
 
     let tail: DisplayMessage[] = [{ role: "assistant", content: "" }];
-    const commitTail = () => setMessages([...baseMessages, userMessage, ...tail]);
+    const commitTail = () => setMessages([...baseMessages, userDisplay, ...tail]);
     commitTail();
 
     let finalProviderId: string | null = null;
+    let finalProviderLabel: string | null = null;
     let finalModel: string | null = null;
     let finalTokens = 0;
     let assistantText = "";
     const tools = buildMcpTools();
-    let toolCallsForTurn: { toolCallId: string; toolName: string; input: unknown; output: string; isError: boolean }[] = [];
+    let toolCallsForTurn: { toolCallId: string; toolName: string; input: unknown; output: string; isError: boolean; textOffset: number }[] = [];
+    const toolCallOffsets = new Map<string, number>();
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
 
     try {
-      for await (const event of routerRef.current.streamReply(nextHistory, tools)) {
+      for await (const event of routerRef.current.streamReply(nextHistory, tools, abortController.signal)) {
         if (event.type === "chunk") {
           assistantText += event.text;
           const last = tail[tail.length - 1];
@@ -534,6 +618,7 @@ export default function App() {
           }
           commitTail();
         } else if (event.type === "tool-call") {
+          toolCallOffsets.set(event.toolCallId, assistantText.length);
           tail = [
             ...tail,
             {
@@ -564,6 +649,7 @@ export default function App() {
                 input: call.input,
                 output: call.output,
                 isError: call.isError,
+                textOffset: toolCallOffsets.get(call.toolCallId) ?? assistantText.length,
               },
             ];
           }
@@ -574,6 +660,7 @@ export default function App() {
             assistantText = "";
             tail = [{ role: "assistant", content: "" }];
             toolCallsForTurn = [];
+            toolCallOffsets.clear();
             commitTail();
           } else if (ev.kind === "auth-error") {
             setNotice(`${ev.providerLabel} key looks invalid — disabled it. Check Settings.`);
@@ -587,13 +674,14 @@ export default function App() {
           }
         } else if (event.type === "done") {
           finalProviderId = event.providerId;
+          finalProviderLabel = event.providerLabel;
           finalModel = event.model;
           finalTokens = event.estimatedTokens;
         }
       }
 
       if (!assistantText && !finalProviderId && toolCallsForTurn.length === 0) {
-        setMessages([...baseMessages, userMessage]);
+        setMessages([...baseMessages, userDisplay]);
       } else {
         const assistantMessageId = newId();
         await insertMessage({
@@ -615,9 +703,17 @@ export default function App() {
             output_text: call.output,
             is_error: call.isError ? 1 : 0,
             seq: i,
+            text_offset: call.textOffset,
             created_at: Date.now(),
           });
         }
+        setMessages((prev) =>
+          prev.map((m, i) =>
+            i === prev.length - 1 && m.role === "assistant"
+              ? { ...m, id: assistantMessageId, providerLabel: finalProviderLabel ?? undefined, model: finalModel ?? undefined }
+              : m,
+          ),
+        );
         await touchConversation(conversationId);
         if (finalProviderId) {
           const today = new Date().toISOString().slice(0, 10);
@@ -626,11 +722,66 @@ export default function App() {
         await refreshConversations();
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong.");
-      setMessages([...baseMessages, userMessage]);
+      if (!abortController.signal.aborted) {
+        setError(err instanceof Error ? err.message : "Something went wrong.");
+        setMessages([...baseMessages, userDisplay]);
+      }
     } finally {
+      abortControllerRef.current = null;
       setIsStreaming(false);
     }
+  }
+
+  function handleStopStreaming() {
+    abortControllerRef.current?.abort();
+  }
+
+  async function handleInstallUpdate() {
+    setUpdateInstalling(true);
+    setUpdateError(null);
+    try {
+      await installPendingUpdateAndRelaunch();
+    } catch (err) {
+      setUpdateError(err instanceof Error ? err.message : "Couldn't install the update.");
+      setUpdateInstalling(false);
+    }
+  }
+
+  async function sendMessage(e: React.FormEvent) {
+    e.preventDefault();
+    await runSend(input);
+  }
+
+  /** Drops this message and everything after it from both UI state and SQLite. Returns the
+   * truncated list so callers can chain further action (e.g. resending) off it. */
+  async function truncateFrom(id: string): Promise<DisplayMessage[]> {
+    const idx = messages.findIndex((m) => m.role !== "tool" && m.id === id);
+    if (idx === -1) return messages;
+    const truncated = messages.slice(0, idx);
+    setMessages(truncated);
+    if (conversationIdRef.current) {
+      await deleteMessagesFrom(conversationIdRef.current, id);
+    }
+    return truncated;
+  }
+
+  async function handleEditMessage(id: string, content: string) {
+    if (isStreaming) return;
+    await truncateFrom(id);
+    setInput(content);
+  }
+
+  async function handleRetryMessage(assistantId: string) {
+    if (isStreaming) return;
+    const idx = messages.findIndex((m) => m.role !== "tool" && m.id === assistantId);
+    if (idx <= 0) return;
+    let userIdx = idx - 1;
+    while (userIdx >= 0 && messages[userIdx].role !== "user") userIdx--;
+    const userMsg = messages[userIdx];
+    if (!userMsg || userMsg.role !== "user" || !userMsg.id) return;
+    const content = userMsg.content;
+    await truncateFrom(userMsg.id);
+    await runSend(content);
   }
 
   const activeTitle = conversations.find((c) => c.id === activeConversationId)?.title;
@@ -644,10 +795,17 @@ export default function App() {
         disabled={isStreaming}
         mcpRunningCount={Object.keys(mcpToolsByServer).length}
         activeProviderCount={providers.filter((p) => p.enabled).length}
-        onToggleCollapsed={() => setSidebarCollapsed((v) => !v)}
+        onToggleCollapsed={() =>
+          setSidebarCollapsed((v) => {
+            const next = !v;
+            localStorage.setItem("sidebarCollapsed", next ? "1" : "0");
+            return next;
+          })
+        }
         onNewChat={handleNewChat}
         onSelectConversation={handleSelectConversation}
         onDeleteConversation={handleDeleteConversation}
+        onRenameConversation={handleRenameConversation}
         onOpenSettings={() => setShowSettings(true)}
         onOpenMcp={() => setShowMcp(true)}
       />
@@ -677,7 +835,33 @@ export default function App() {
               <div key={i} className={`message message-${m.role}`}>
                 <div className="message-head">
                   <span className="message-role">{m.role === "user" ? "You" : "Assistant"}</span>
+                  {m.role === "assistant" && (m.providerLabel || m.model) && (
+                    <span className="message-provenance">
+                      via {m.providerLabel ?? "provider"}
+                      {m.model ? ` · ${m.model}` : ""}
+                    </span>
+                  )}
                   {m.role === "assistant" && m.content && !isStreaming && <CopyButton text={m.content} />}
+                  {m.role === "user" && !isStreaming && m.id && (
+                    <button
+                      type="button"
+                      className="message-copy"
+                      title="Edit and resend"
+                      onClick={() => handleEditMessage(m.id!, m.content)}
+                    >
+                      <IconEdit size={13} />
+                    </button>
+                  )}
+                  {m.role === "assistant" && m.id && !isStreaming && (
+                    <button
+                      type="button"
+                      className="message-copy"
+                      title="Retry this reply"
+                      onClick={() => handleRetryMessage(m.id!)}
+                    >
+                      <IconRefresh size={13} />
+                    </button>
+                  )}
                 </div>
                 {m.role === "assistant" ? (
                   m.content ? (
@@ -693,6 +877,15 @@ export default function App() {
           })}
         </div>
 
+        {updateInfo && (
+          <p className="notice update-banner">
+            Version {updateInfo.version} is available (you're on {updateInfo.currentVersion}).{" "}
+            <button type="button" className="btn btn-primary btn-sm" onClick={handleInstallUpdate} disabled={updateInstalling}>
+              {updateInstalling ? "Installing…" : "Restart to update"}
+            </button>
+          </p>
+        )}
+        {updateError && <p className="error">{updateError}</p>}
         {notice && <p className="notice">{notice}</p>}
         {error && <p className="error">{error}</p>}
 
@@ -704,14 +897,25 @@ export default function App() {
             onChange={(e) => setInput(e.currentTarget.value)}
             disabled={isStreaming}
           />
-          <button
-            type="submit"
-            className="btn btn-primary btn-icon composer-send"
-            disabled={isStreaming || !input.trim()}
-            title="Send"
-          >
-            <IconSend size={16} />
-          </button>
+          {isStreaming ? (
+            <button
+              type="button"
+              className="btn btn-danger btn-icon composer-send"
+              onClick={handleStopStreaming}
+              title="Stop generating"
+            >
+              <IconStop size={16} />
+            </button>
+          ) : (
+            <button
+              type="submit"
+              className="btn btn-primary btn-icon composer-send"
+              disabled={!input.trim()}
+              title="Send"
+            >
+              <IconSend size={16} />
+            </button>
+          )}
         </form>
       </main>
 
@@ -723,7 +927,19 @@ export default function App() {
           onToggle={handleToggleProvider}
           onReorder={handleReorderProvider}
           onEdit={handleEditProvider}
+          onOpenOnboarding={() => setShowOnboarding(true)}
           onClose={() => setShowSettings(false)}
+        />
+      )}
+
+      {showOnboarding && (
+        <OnboardingWizard
+          onAddProvider={handleAddProvider}
+          onAddFilesystem={handleAddFilesystemServer}
+          onClose={() => {
+            localStorage.setItem("onboardingDismissed", "1");
+            setShowOnboarding(false);
+          }}
         />
       )}
 

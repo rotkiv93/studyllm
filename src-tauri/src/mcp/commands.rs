@@ -1,11 +1,16 @@
 use std::collections::HashMap;
 
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
+use crate::crashlog::CrashLog;
 use super::host::{McpCallOutcome, McpHost, McpToolInfo};
 use super::runtime;
 
 fn emit_status(app: &AppHandle, id: &str, status: &str, message: Option<String>) {
+    if status == "error" {
+        app.state::<CrashLog>()
+            .append(app, format!("mcp[{id}] failed to start: {}", message.as_deref().unwrap_or("unknown error")));
+    }
     let _ = app.emit(
         "mcp://server-status-changed",
         serde_json::json!({ "id": id, "status": status, "message": message }),
@@ -17,12 +22,18 @@ pub async fn mcp_start_server(
     app: AppHandle,
     host: State<'_, McpHost>,
     id: String,
+    runtime_kind: String,
     args: Vec<String>,
     env: HashMap<String, String>,
 ) -> Result<Vec<McpToolInfo>, String> {
     emit_status(&app, &id, "starting", None);
 
-    let npx = match runtime::ensure_npx(&app).await {
+    let resolved = if runtime_kind == "uvx" {
+        runtime::ensure_uvx(&app).await
+    } else {
+        runtime::ensure_npx(&app).await
+    };
+    let binary = match resolved {
         Ok(path) => path,
         Err(e) => {
             emit_status(&app, &id, "error", Some(e.clone()));
@@ -30,7 +41,7 @@ pub async fn mcp_start_server(
         }
     };
 
-    match host.start(id.clone(), &npx, args, env).await {
+    match host.start(&app, id.clone(), &binary, args, env).await {
         Ok(tools) => {
             emit_status(&app, &id, "running", None);
             Ok(tools)
@@ -48,11 +59,11 @@ pub async fn mcp_start_remote_server(
     host: State<'_, McpHost>,
     id: String,
     url: String,
-    auth_header: Option<String>,
+    headers: HashMap<String, String>,
 ) -> Result<Vec<McpToolInfo>, String> {
     emit_status(&app, &id, "starting", None);
 
-    match host.start_remote(id.clone(), url, auth_header).await {
+    match host.start_remote(id.clone(), url, headers).await {
         Ok(tools) => {
             emit_status(&app, &id, "running", None);
             Ok(tools)

@@ -108,5 +108,15 @@ pub fn migrations() -> Vec<Migration> {
             "#,
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 5,
+            description: "tool-call text offsets + mcp server autostart flag + cached tool list",
+            sql: r#"
+                ALTER TABLE tool_calls ADD COLUMN text_offset INTEGER NOT NULL DEFAULT 0;
+                ALTER TABLE mcp_servers ADD COLUMN autostart INTEGER NOT NULL DEFAULT 0;
+                ALTER TABLE mcp_servers ADD COLUMN cached_tools_json TEXT NOT NULL DEFAULT '[]';
+            "#,
+            kind: MigrationKind::Up,
+        },
     ]
 }

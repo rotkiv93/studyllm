@@ -59,6 +59,11 @@ export interface McpServerRow {
   trust_tier: string;
   /** JSON: Record<toolName, { enabled: boolean; permission: 'allow' | 'ask' | 'deny' }>. Tools absent from this map default to enabled+allow. */
   tool_permissions_json: string;
+  /** 1 = start this server automatically after the app launches. */
+  autostart: number;
+  /** JSON: McpToolInfo[] snapshot from the last time this server was running — lets the tool
+   * permission UI work while the server is stopped. */
+  cached_tools_json: string;
 }
 
 export interface ToolCallRow {
@@ -71,6 +76,9 @@ export interface ToolCallRow {
   output_text: string | null;
   is_error: number;
   seq: number;
+  /** Length of the assistant's persisted `content` text emitted before this call was made —
+   * lets history replay interleave tool blocks with text segments in their original order. */
+  text_offset: number;
   created_at: number;
 }
 
@@ -221,11 +229,29 @@ export async function listMessages(conversationId: string): Promise<MessageRow[]
   );
 }
 
+export async function deleteMessagesFrom(conversationId: string, fromMessageId: string): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    `DELETE FROM tool_calls WHERE message_id IN (
+       SELECT id FROM messages
+       WHERE conversation_id = $1
+         AND created_at >= (SELECT created_at FROM messages WHERE id = $2)
+     )`,
+    [conversationId, fromMessageId],
+  );
+  await db.execute(
+    `DELETE FROM messages
+     WHERE conversation_id = $1
+       AND created_at >= (SELECT created_at FROM messages WHERE id = $2)`,
+    [conversationId, fromMessageId],
+  );
+}
+
 export async function insertToolCall(row: ToolCallRow): Promise<void> {
   const db = await getDb();
   await db.execute(
-    `INSERT INTO tool_calls (id, message_id, tool_call_id, tool_key, input_json, output_text, is_error, seq, created_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+    `INSERT INTO tool_calls (id, message_id, tool_call_id, tool_key, input_json, output_text, is_error, seq, text_offset, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
     [
       row.id,
       row.message_id,
@@ -235,6 +261,7 @@ export async function insertToolCall(row: ToolCallRow): Promise<void> {
       row.output_text,
       row.is_error,
       row.seq,
+      row.text_offset,
       row.created_at,
     ],
   );
@@ -260,8 +287,8 @@ export async function insertMcpServer(row: McpServerRow): Promise<void> {
   const db = await getDb();
   await db.execute(
     `INSERT INTO mcp_servers
-       (id, name, kind, command, args_json, scoped_path, enabled, created_at, transport, url, env_refs_json, trust_tier, tool_permissions_json)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+       (id, name, kind, command, args_json, scoped_path, enabled, created_at, transport, url, env_refs_json, trust_tier, tool_permissions_json, autostart, cached_tools_json)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
     [
       row.id,
       row.name,
@@ -276,6 +303,8 @@ export async function insertMcpServer(row: McpServerRow): Promise<void> {
       row.env_refs_json,
       row.trust_tier,
       row.tool_permissions_json,
+      row.autostart,
+      row.cached_tools_json,
     ],
   );
 }
@@ -283,7 +312,17 @@ export async function insertMcpServer(row: McpServerRow): Promise<void> {
 export async function updateMcpServer(
   id: string,
   patch: Partial<
-    Pick<McpServerRow, "name" | "args_json" | "scoped_path" | "url" | "env_refs_json" | "tool_permissions_json">
+    Pick<
+      McpServerRow,
+      | "name"
+      | "args_json"
+      | "scoped_path"
+      | "url"
+      | "env_refs_json"
+      | "tool_permissions_json"
+      | "autostart"
+      | "cached_tools_json"
+    >
   >,
 ): Promise<void> {
   const db = await getDb();
@@ -347,4 +386,18 @@ export async function searchCachedCatalogEntries(query: string): Promise<McpCata
     "SELECT * FROM mcp_catalog_cache WHERE name LIKE $1 OR description LIKE $1 ORDER BY fetched_at DESC",
     [like],
   );
+}
+
+/** Days after which a stale catalog cache entry is dropped on next successful live search. */
+export const CATALOG_CACHE_TTL_DAYS = 14;
+
+export async function evictStaleCatalogEntries(ttlDays: number = CATALOG_CACHE_TTL_DAYS): Promise<void> {
+  const db = await getDb();
+  const cutoff = Date.now() - ttlDays * 24 * 60 * 60 * 1000;
+  await db.execute("DELETE FROM mcp_catalog_cache WHERE fetched_at < $1", [cutoff]);
+}
+
+export async function clearCatalogCache(): Promise<void> {
+  const db = await getDb();
+  await db.execute("DELETE FROM mcp_catalog_cache", []);
 }

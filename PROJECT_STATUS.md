@@ -57,13 +57,25 @@ Full original architecture/phase plan: `C:\Users\47852\.claude\plans\i-want-to-c
   provider) it silently falls back to the static `suggestedModels` datalist — the model field is
   and remains a plain free-text `<input>`, so a model id can always be typed manually regardless.
   `SettingsPanel.tsx` shows a small status line (loading/loaded-N/unavailable) below the field.
-- **Phase 5 — polish, code signing, CI/release, auto-updater, onboarding**: 🚧 In progress.
-  CI/release pipeline done (see below). Code-signing wiring done this session (opt-in via repo
-  secrets, see README "Release signing"), but no secrets have actually been added yet, so
-  published builds are still unsigned until a maintainer generates and adds them. **Still not
-  done**: auto-updater plugin (no `TAURI_SIGNING_PRIVATE_KEY`/`latest.json` publishing step
-  exists), first-run onboarding wizard, local-only crash log. These three are the remaining
-  Phase 5 items from the original plan doc.
+- **Phase 5 — polish, code signing, CI/release, auto-updater, onboarding**: ✅ Feature-complete
+  (code-wiring side). CI/release pipeline done (see below). Code-signing wiring done (opt-in via
+  repo secrets, see README "Release signing"), but no secrets have actually been added yet, so
+  published builds are still unsigned until a maintainer generates and adds them — that step is
+  inherently manual (buying a cert, enrolling in Apple's Developer Program) and can't be automated.
+  **Auto-updater**: `tauri-plugin-updater` + `tauri-plugin-process` wired in, `src/lib/updater.ts`
+  checks `github.com/rotkiv93/studyllm/releases/latest/download/latest.json` on launch and shows an
+  in-app "Restart to update" banner (`App.tsx`); `tauri.conf.json` has
+  `bundle.createUpdaterArtifacts: true` + a `plugins.updater.pubkey`; `release.yml` forwards
+  `TAURI_SIGNING_PRIVATE_KEY`/`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. A signing keypair was generated
+  locally (`src-tauri/updater-signing-key.pem` + password, gitignored) — **still needs a
+  maintainer** to add those two as repo secrets (README "Auto-updater (maintainers)") before
+  updates actually take effect; until then the check just silently finds nothing. **First-run
+  onboarding wizard**: `src/components/OnboardingWizard.tsx` — pick provider → free-key link →
+  paste + live-verify (reuses `providerModels.ts`) → optional filesystem MCP install; auto-shows
+  when no providers exist (tracked via `localStorage`, re-openable from Settings). **Local-only
+  crash log**: `src-tauri/src/crashlog.rs`, ring-buffered to `<app-local-data>/studyllm.log`, fed by
+  MCP stderr/start-failures, Rust panics, and frontend JS errors; "Show log"/"Reveal in
+  folder"/"Clear" in Settings.
   UI shell redesigned (Claude-desktop-style): a persistent left sidebar (`src/components/Sidebar.tsx`)
   lists conversation history (click to reopen, hover-to-delete, collapsible to an icon rail) and
   hosts Settings/MCP servers as icon buttons at its bottom, replacing the old header text buttons;
@@ -74,47 +86,57 @@ Full original architecture/phase plan: `C:\Users\47852\.claude\plans\i-want-to-c
 
 ## Known simplifications / limitations in the current Phase 3/4 implementation
 
-- Only **npm-published packages (launched via npx)** and **remote Streamable HTTP** servers are
-  installable. Registry entries whose only packages are `uvx`/Python or Docker are still shown in
-  marketplace search (for visibility/awareness) but marked `unsupported` and can't be installed —
-  no `uvx`/Docker runtime support exists yet.
-- **Remote (Streamable HTTP) auth is limited to a single bearer token.** rmcp 0.9's client
-  transport (`StreamableHttpClientTransportConfig`) only exposes one `auth_header`, not arbitrary
-  custom headers — so a registry entry declaring multiple required secrets/headers for a remote
-  server can only get one of them wired in (`McpMarketplace.tsx` picks the first resolved value
-  and warns in the install form when this applies).
+- **npm-published (npx) and PyPI-published (uvx) packages**, plus **remote Streamable HTTP**
+  servers, are installable. `registry.rs`'s `normalize()` recognizes `registryType: "npm"` and
+  `"pypi"` packages and builds the matching `InstallSpec::Npx`/`::Uvx` (both use the same
+  `pkg@version` argv convention); `runtime.rs` has a portable-`uv` bootstrap
+  (`ensure_uvx`/`download_and_extract_uv`) mirroring the existing Node one for machines without
+  `uvx` on PATH. Docker/OCI packages are still shown in search (for visibility) but marked
+  `unsupported` — no container runtime story exists here, and that's out of scope.
+- **Remote (Streamable HTTP) auth supports multiple headers.** `host.rs`'s `start_remote` takes
+  the full resolved header map for a server; a header literally named `Authorization`
+  (case-insensitive) still goes through rmcp's `auth_header` bearer-token config (unchanged
+  behavior for existing installs), and every other header name is sent verbatim via a custom
+  `reqwest::Client` built with `.default_headers(...)` and passed to rmcp through
+  `StreamableHttpClientTransport::with_client(...)` — `reqwest::Client` already implements rmcp's
+  `StreamableHttpClient` trait, so this needed no rmcp version bump, just constructing our own
+  client instead of the default one. The marketplace no longer warns about only-the-first-secret
+  being used, because that's no longer true.
 - **Trust tiers are a heuristic, not a real audit**: `official` = reverse-DNS name under
   `io.modelcontextprotocol*` or a repo under `github.com/modelcontextprotocol/servers`; `verified`
   = any other entry with a `github.com`/`gitlab.com` repository URL; everything else is
   `community`. This is exactly the "best-effort, not a real sandbox" mitigation described in the
   original plan — installing a community server still lets it run arbitrary code as the OS user.
-- The MCP catalog cache (`mcp_catalog_cache` table) has no TTL-based eviction — every successful
-  live search upserts into it and it's only ever read as a fallback when the live registry request
-  throws (offline, DNS blocked, registry outage), matching the "must degrade gracefully" plan
-  requirement. There's no manual "clear cache" UI.
+- The MCP catalog cache (`mcp_catalog_cache` table) now evicts entries older than
+  `CATALOG_CACHE_TTL_DAYS` (14 days, `db.ts`) after every successful *live* search — never on the
+  cache-fallback path itself, so a long offline stretch can't wipe the only fallback data. A
+  "Clear cache" button appears in the marketplace whenever cached results are being shown.
 - `npx`-launched servers get a minimal, explicit env allowlist (`PATH`, a few OS/Node
   essentials) plus the server's own declared `required_env` — **not** the full inherited parent
   environment — per the plan's "minimal env inheritance" safety layer. This is best-effort:
   spawning `npx` with a fully cleared environment is known to break in obscure ways on Windows,
   so a small fixed allowlist is kept rather than clearing everything.
-- The Node/npx portable-runtime bootstrap (`src-tauri/src/mcp/runtime.rs`) downloads a hardcoded
-  Node version (`NODE_VERSION` const — bump periodically) from nodejs.org if `npx` isn't already
-  on PATH. The download+extract code path is written to be cross-platform (zip on Windows,
-  tar.gz elsewhere) but was only exercised end-to-end on Windows this session — Linux/macOS
-  extraction paths are unverified in practice.
-- MCP servers are **not auto-started** on app launch; the user must click "Start" in the MCP panel
-  each session. Installed server rows (including catalog installs, with their resolved
-  transport/url/env refs) do persist in SQLite across restarts.
+- The Node/npx and uv/uvx portable-runtime bootstraps (`src-tauri/src/mcp/runtime.rs`) download a
+  hardcoded version (`NODE_VERSION`/`UV_VERSION` consts — bump periodically) if the binary isn't
+  already on PATH. Both are written to be cross-platform (flat zip on Windows, subfoldered tar.gz
+  on macOS/Linux — uv's Windows archive is flat while its Unix archives extract into a subfolder,
+  the opposite split from Node's, both handled explicitly) but were only exercised end-to-end on
+  Windows — Linux/macOS extraction paths are unverified in practice.
+- MCP servers with their `autostart` flag set (a per-server checkbox in `McpPanel.tsx`, off by
+  default for new installs) are started automatically after DB init on launch
+  (`App.tsx`'s mount effect); a failed autostart just leaves that server stopped for the user to
+  retry manually. Servers without the flag still require a manual "Start" click each session, same
+  as before.
 - **Fixed this session**: tool calls/results are now persisted to a new `tool_calls` table
   (migration v4, `src-tauri/src/db.rs`) — one row per resolved call, linked to the assistant
   `messages` row it belongs to (`message_id`) with a `seq` for ordering. `sendMessage` in
   `App.tsx` accumulates resolved calls during streaming and writes them right after the assistant
   message row is inserted; `handleSelectConversation` now also fetches
-  `listToolCallsForConversation` and re-renders each assistant turn's tool blocks *before* that
-  turn's text bubble. This is a simplification of the original interleaving — live streaming can
-  interleave text/tool-call/text/tool-call within one turn, but persisted history always shows
-  "all this turn's tool calls, then the text" — acceptable since the point was making past tool
-  calls visible at all, not exact replay fidelity. `deleteConversation` cascades tool_calls too
+  `listToolCallsForConversation`. **Interleaving fixed in a later session**: `tool_calls` gained a
+  `text_offset` column (migration v5) — a snapshot of `assistantText.length` at the moment each
+  call was made — so replay now slices the persisted `content` at those offsets and interleaves
+  text segments with tool blocks in their original order, instead of always rendering "all this
+  turn's tool calls, then the text." `deleteConversation` cascades tool_calls too
   (no real FK cascade — SQLite FKs aren't enforced here, deletes are explicit, same pattern the
   existing messages/conversations delete already used).
   **Verified against the live SQLite DB after the user reported doubt that this worked**: queried
@@ -133,9 +155,10 @@ Full original architecture/phase plan: `C:\Users\47852\.claude\plans\i-want-to-c
   there's no separate "selected/deselected" flag, `deny` doubles as that. `ask` still exposes the
   tool but its `execute` first calls `requestToolApproval`, which resolves a promise from a modal
   rendered at the bottom of `App.tsx` (Allow/Deny buttons); the tool call blocks until the user
-  responds. Managed from `McpPanel.tsx`'s per-server "Tools (N)" expandable list — only available
-  while a server is *running* (tool names/descriptions come from `toolsByServer`, populated by
-  `listMcpTools` on server start; there's no way to see/configure a stopped server's tools yet).
+  responds. Managed from `McpPanel.tsx`'s per-server "Tools (N)" expandable list. **Now also works
+  cold**: `mcp_servers` gained a `cached_tools_json` column, refreshed every time a server reports
+  `running`; the panel falls back to it (with a "showing the last-known list" note) when the
+  server is stopped, so tool permissions can be edited without starting it first.
 - **Added this session — editable MCP configs**: `McpPanel.tsx` has an inline "Edit" form per
   server (`updateMcpServer` in `db.ts`, a plain `UPDATE ... WHERE id`). Supports: renaming
   (`name`), changing a filesystem server's scoped folder (re-picks via the native folder dialog,
@@ -143,8 +166,11 @@ Full original architecture/phase plan: `C:\Users\47852\.claude\plans\i-want-to-c
   path), changing a remote server's `url`, and rotating/editing values for any env vars already in
   `env_refs_json` (secret ones get a "leave blank to keep current value" password field routed
   through `setCredential` against the *existing* keychain ref rather than minting a new one; if
-  running, the server is restarted with the freshly resolved env). Editing does **not** support
-  adding/removing env var *keys*, only changing the value of ones already there from install time.
+  running, the server is restarted with the freshly resolved env). **Now also supports
+  adding/removing env var *keys***, not just changing existing values: the edit form has a
+  per-key "Remove"/"Undo" toggle plus a "+ Add variable" row for brand-new name/value/secret
+  entries; `handleUpdateMcpServerEnv` takes a `removedKeys` list and cleans up the keychain entry
+  for any removed secret.
 - **Added this session — MCP panel redesign**: replaced the flat server list with a "Pinned"
   section (always shows Filesystem — with an inline "Add…" card if not yet installed — plus any
   installed server whose name matches `/gmail|google[- ]?drive|google/i`, per the "put Google
@@ -180,9 +206,11 @@ Full original architecture/phase plan: `C:\Users\47852\.claude\plans\i-want-to-c
   already supported this at the DB layer, just had no UI), and optionally paste a new API key
   (blank = keep the current one) which overwrites the existing keychain entry via `setCredential`
   rather than creating a new `secret_ref`.
-- MCP child process `stderr` is inherited (visible in the terminal running `npm run tauri dev`),
-  not piped into the UI as a live log. Only coarse status (`starting`/`running`/`stopped`/`error`)
-  and Node-download progress are surfaced via events.
+- MCP child process `stderr` is now piped (`Stdio::piped()` via
+  `TokioChildProcess::builder(...).stderr(...)`) and forwarded line-by-line as `mcp://server-log`
+  events; `McpPanel.tsx` has a per-server "Logs" button/drawer (last 300 lines, in-memory) instead
+  of it only being visible in the terminal running `npm run tauri dev`. Also feeds the local-only
+  crash log file (`crashlog.rs`).
 - `McpHost::call_tool` always forwards `arguments` as an object (`{}` at minimum), never
   omitting the field — some MCP servers' schemas (e.g. the official filesystem server's zod
   validation) reject a JSON-RPC call with a missing/null `arguments` for zero-parameter tools,
@@ -254,9 +282,10 @@ Full original architecture/phase plan: `C:\Users\47852\.claude\plans\i-want-to-c
 
 ## CI / release pipeline (Phase 5, first slice)
 
-- `.github/workflows/ci.yml` — runs on every push/PR to `main`: frontend typecheck+build
-  (`npm run build`) and `cargo check --all-targets` (Ubuntu, with the webkit2gtk/appindicator
-  system deps Tauri needs to even typecheck on Linux). Fast sanity check, no installers built.
+- `.github/workflows/ci.yml` — runs on every push/PR to `main`: `npm run lint`, `npm test`
+  (Vitest), frontend typecheck+build (`npm run build`), `cargo check --all-targets`, and
+  `cargo test` (Ubuntu, with the webkit2gtk/appindicator system deps Tauri needs to even typecheck
+  on Linux). Fast sanity check, no installers built.
 - `.github/workflows/release.yml` — runs on pushing a `v*` tag (or manual `workflow_dispatch`).
   Matrix-builds installers via `tauri-apps/tauri-action` across macOS (aarch64 + x86_64 targets,
   separate jobs since `tauri-action` doesn't produce a universal binary that way), Ubuntu 22.04
@@ -275,9 +304,12 @@ Full original architecture/phase plan: `C:\Users\47852\.claude\plans\i-want-to-c
   repo yet — that's a manual, maintainer-only step (buying a cert, enrolling in the Apple
   Developer Program) documented in README "Release signing (maintainers)". Until they're added,
   `tauri-action`/the bundler just skip signing for that platform and the build stays unsigned, so
-  this doesn't block releases either way. No auto-updater plugin yet, so no
-  `TAURI_SIGNING_PRIVATE_KEY`/`latest.json` publishing step exists — separate Phase 5 slice, still
-  not started. No first-run onboarding wizard, no local-only crash log — also not started.
+  this doesn't block releases either way. **Auto-updater signing now wired too**:
+  `TAURI_SIGNING_PRIVATE_KEY`/`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` are forwarded the same way, and
+  `tauri.conf.json`'s `bundle.createUpdaterArtifacts: true` makes `tauri-action` publish a signed
+  `latest.json` + per-platform update archives once those two secrets exist — see README
+  "Auto-updater (maintainers)". A keypair was generated locally but its secrets haven't been added
+  to the repo yet, same "not blocking, opt-in" story as code signing.
   macOS/Linux release jobs remain untested end-to-end (no Mac/Linux machine available) — only
   inspected for correctness against the standard `tauri-action` quickstart pattern.
 
@@ -319,13 +351,17 @@ option researched:
 
 ## Key files (orientation)
 
-- `src/App.tsx` — top-level UI state, chat send/receive loop, wires providers + MCP tools together;
-  also owns catalog-install → SQLite-row → keychain-secret → server-start orchestration
-  (`handleInstallFromCatalog`/`handleStartMcpServer`/`resolveServerEnv`), conversation
-  history navigation (`handleNewChat`/`handleSelectConversation`/`handleDeleteConversation`, now
-  also replaying persisted tool calls), per-tool "ask" approval (`requestToolApproval`/
-  `resolveApproval` + the approval modal), and MCP server config editing
-  (`handleUpdateMcpServer`/`handleUpdateMcpServerEnv`/`handleEditFilesystemPath`).
+- `src/App.tsx` — top-level UI state, chat send/receive loop (`runSend`, with `sendMessage` as its
+  form-submit wrapper), wires providers + MCP tools together; also owns catalog-install → SQLite-row
+  → keychain-secret → server-start orchestration (`handleInstallFromCatalog`/
+  `handleStartMcpServer`/`resolveServerEnv`), conversation history navigation
+  (`handleNewChat`/`handleSelectConversation`/`handleDeleteConversation`/`handleRenameConversation`,
+  replaying persisted tool calls interleaved with text via `text_offset`), message
+  edit/retry (`handleEditMessage`/`handleRetryMessage`/`truncateFrom`), stream cancellation
+  (`handleStopStreaming` via `AbortController`), per-tool "ask" approval (`requestToolApproval`/
+  `resolveApproval` + the approval modal), MCP server config editing
+  (`handleUpdateMcpServer`/`handleUpdateMcpServerEnv`/`handleEditFilesystemPath`), and the
+  auto-updater check/install (`handleInstallUpdate`).
 - `src/components/Sidebar.tsx` — left-hand conversation history list + collapsible icon rail that
   opens Settings/MCP panel (Claude-desktop-style shell); `src/components/icons.tsx` — the inline
   SVG icon set it (and the composer's send button) use.
@@ -351,15 +387,28 @@ option researched:
   (`ToolPermissionRow`) driving `tool_permissions_json`. Delegates actual start logic to
   `App.tsx`'s `onStart`.
 - `src/components/McpMarketplace.tsx` — registry search/browse UI, required-env-var install form,
-  non-official install warning + ack checkbox.
+  non-official install warning + ack checkbox, "Clear cache" when showing stale results.
+- `src/components/OnboardingWizard.tsx` — first-run setup flow (provider → key → verify → optional
+  filesystem MCP); re-openable from Settings.
+- `src/lib/updater.ts` — auto-updater check/install wrapper (`@tauri-apps/plugin-updater` +
+  `plugin-process`'s `relaunch`).
+- `src/lib/crashlog.ts` — frontend wrapper for the Rust crash-log commands.
 - `docs/index.html` — static marketing landing page (see "Marketing website" above); not wired
   into the Vite app build, served as-is via GitHub Pages.
 - `src-tauri/src/mcp/host.rs` — in-memory registry of running MCP child/remote connections + rmcp
-  client calls; `start` (stdio, scoped env) and `start_remote` (Streamable HTTP, single bearer
-  token) both funnel into `finish_start`.
+  client calls; `start` (stdio, scoped env, piped stderr forwarded as `mcp://server-log` events)
+  and `start_remote` (Streamable HTTP, full resolved header map — see multi-header note above)
+  both funnel into `finish_start`.
 - `src-tauri/src/mcp/registry.rs` — fetches + tolerantly normalizes the official MCP registry's
-  `/v0/servers` response into installable `CatalogEntry`s.
-- `src-tauri/src/mcp/runtime.rs` — `npx` resolution + portable Node download/extract fallback.
+  `/v0/servers` response into installable `CatalogEntry`s (`Npx`/`Uvx`/`RemoteHttp`/`Unsupported`);
+  has `#[cfg(test)]` unit tests for `normalize()`/`is_latest_version()`.
+- `src-tauri/src/mcp/runtime.rs` — `npx`/`uvx` resolution + portable Node/uv download/extract
+  fallback (`ensure_npx`/`ensure_uvx`).
 - `src-tauri/src/mcp/commands.rs` — Tauri command surface for the above.
+- `src-tauri/src/crashlog.rs` — ring-buffered local-only crash log (MCP stderr/failures, Rust
+  panics, frontend errors), flushed to `<app-local-data>/studyllm.log`.
 - `src-tauri/src/db.rs` — SQLite migrations (source of truth for the schema).
 - `src-tauri/src/credentials.rs` — OS keychain read/write/delete for API keys.
+- `eslint.config.js` — flat ESLint config (`npm run lint`); `src/**/*.test.ts` — Vitest suite
+  (`npm test`), covering `mcpCatalog.ts`, `providerRouter.ts` (mocked `streamText`), and
+  `providerModels.ts`.

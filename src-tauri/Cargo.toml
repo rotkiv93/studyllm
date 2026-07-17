@@ -1,8 +1,8 @@
 [package]
 name = "studyllm"
-version = "0.1.0"
+version = "0.2.0"
 description = "A Tauri App"
-authors = ["you"]
+authors = ["Victor Lamas"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -24,6 +24,8 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri-plugin-sql = { version = "2", features = ["sqlite"] }
 tauri-plugin-dialog = "2"
+tauri-plugin-updater = "2.10.1"
+tauri-plugin-process = "2"
 keyring = "4"
 uuid = { version = "1", features = ["v4"] }
 rmcp = { version = "0.9", features = ["client", "transport-child-process", "transport-streamable-http-client", "transport-streamable-http-client-reqwest"] }

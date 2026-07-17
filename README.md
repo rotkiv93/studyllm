@@ -198,6 +198,35 @@ Codesigning alone works with just the certificate secrets; notarization needs al
 No signing step exists in the Linux ecosystem the way Windows/macOS have one — AppImage/`.deb`
 artifacts build and publish unsigned with no warning to fix.
 
+## Auto-updater (maintainers)
+
+Installed builds check `https://github.com/rotkiv93/studyllm/releases/latest/download/latest.json`
+on launch (`src/lib/updater.ts`) and show an in-app "Restart to update" banner when a newer
+version is found — no separate updater UI to build or ship. This only works once a signing
+keypair exists and its secrets are added to the repo; until then, the check silently finds
+nothing (fails closed, same as an unsigned release) and the app works exactly as it does today.
+
+A keypair (`updater-signing-key.pem` + password, gitignored, never commit these) was already
+generated for this repo via:
+
+```bash
+npx tauri signer generate -w src-tauri/updater-signing-key.pem -p '<a strong password>'
+```
+
+The public half is already committed in `src-tauri/tauri.conf.json`'s `plugins.updater.pubkey`.
+To finish enabling it, add these two repo secrets under **Settings → Secrets and variables →
+Actions** (get the values from whoever generated the keypair, or regenerate a new one the same
+way — regenerating invalidates updates for anyone who already installed a build signed with the
+old key, so only do that if the original key is lost):
+
+- `TAURI_SIGNING_PRIVATE_KEY` — the full contents of `updater-signing-key.pem`
+- `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` — the password chosen above
+
+Once both are set, every tagged release automatically publishes a signed `latest.json` plus
+per-platform update archives alongside the normal installers (`bundle.createUpdaterArtifacts:
+true` in `tauri.conf.json` is what tells `tauri-action` to produce them) — nothing else to wire
+up. Until then, the updater check just never finds anything, so it's safe to leave unset.
+
 <div align="center">
 
 *Built for students who'd rather spend money on textbooks than API subscriptions.*

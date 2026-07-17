@@ -5,6 +5,7 @@ import {
   getToolPermission,
   isMcpServerRunning,
   onMcpRuntimeLog,
+  onMcpServerLog,
   onMcpServerStatusChanged,
   parseToolPermissions,
   stopMcpServer,
@@ -12,6 +13,8 @@ import {
   type McpToolInfo,
   type ToolPermissionMode,
 } from "../lib/mcp";
+
+const MAX_LOG_LINES_PER_SERVER = 300;
 import { trustTierLabel, type TrustTier } from "../lib/mcpCatalog";
 
 interface Props {
@@ -22,9 +25,25 @@ interface Props {
   onRemove: (id: string) => Promise<void>;
   onUpdateServer: (
     id: string,
-    patch: Partial<Pick<McpServerRow, "name" | "args_json" | "scoped_path" | "url" | "env_refs_json" | "tool_permissions_json">>,
+    patch: Partial<
+      Pick<
+        McpServerRow,
+        | "name"
+        | "args_json"
+        | "scoped_path"
+        | "url"
+        | "env_refs_json"
+        | "tool_permissions_json"
+        | "autostart"
+        | "cached_tools_json"
+      >
+    >,
   ) => Promise<void>;
-  onUpdateEnv: (server: McpServerRow, updates: Record<string, { isSecret: boolean; value: string }>) => Promise<void>;
+  onUpdateEnv: (
+    server: McpServerRow,
+    updates: Record<string, { isSecret: boolean; value: string }>,
+    removedKeys?: string[],
+  ) => Promise<void>;
   onEditFilesystemPath: (server: McpServerRow, newPath: string) => Promise<void>;
   onOpenMarketplace: () => void;
   onClose: () => void;
@@ -78,7 +97,10 @@ function EditServerForm({
 }: {
   server: McpServerRow;
   onSave: (patch: Partial<Pick<McpServerRow, "name" | "url">>) => Promise<void>;
-  onSaveEnv: (updates: Record<string, { isSecret: boolean; value: string }>) => Promise<void>;
+  onSaveEnv: (
+    updates: Record<string, { isSecret: boolean; value: string }>,
+    removedKeys?: string[],
+  ) => Promise<void>;
   onEditFilesystemPath: (newPath: string) => Promise<void>;
   onCancel: () => void;
 }) {
@@ -86,8 +108,31 @@ function EditServerForm({
   const [url, setUrl] = useState(server.url ?? "");
   const envRefs = JSON.parse(server.env_refs_json || "{}") as Record<string, { secret: boolean; value: string }>;
   const [envDrafts, setEnvDrafts] = useState<Record<string, string>>({});
+  const [removedKeys, setRemovedKeys] = useState<Set<string>>(new Set());
+  const [newVars, setNewVars] = useState<{ name: string; value: string; isSecret: boolean }[]>([]);
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  function toggleRemoved(key: string) {
+    setRemovedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  function addNewVarRow() {
+    setNewVars((prev) => [...prev, { name: "", value: "", isSecret: false }]);
+  }
+
+  function updateNewVar(index: number, patch: Partial<{ name: string; value: string; isSecret: boolean }>) {
+    setNewVars((prev) => prev.map((v, i) => (i === index ? { ...v, ...patch } : v)));
+  }
+
+  function removeNewVarRow(index: number) {
+    setNewVars((prev) => prev.filter((_, i) => i !== index));
+  }
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -100,10 +145,16 @@ function EditServerForm({
       }
       const envUpdates: Record<string, { isSecret: boolean; value: string }> = {};
       for (const [key, value] of Object.entries(envDrafts)) {
-        if (!value.trim()) continue;
+        if (!value.trim() || removedKeys.has(key)) continue;
         envUpdates[key] = { isSecret: envRefs[key]?.secret ?? false, value: value.trim() };
       }
-      if (Object.keys(envUpdates).length > 0) await onSaveEnv(envUpdates);
+      for (const v of newVars) {
+        if (!v.name.trim() || !v.value.trim()) continue;
+        envUpdates[v.name.trim()] = { isSecret: v.isSecret, value: v.value.trim() };
+      }
+      if (Object.keys(envUpdates).length > 0 || removedKeys.size > 0) {
+        await onSaveEnv(envUpdates, Array.from(removedKeys));
+      }
       onCancel();
     } catch (err) {
       setFormError(describeError(err));
@@ -155,23 +206,75 @@ function EditServerForm({
           </label>
         )}
 
-        {Object.keys(envRefs).length > 0 && (
+        {(Object.keys(envRefs).length > 0 || newVars.length > 0) && (
           <div className="mcp-env-edit">
             <span className="tool-block-section-label">Environment variables</span>
             {Object.entries(envRefs).map(([key, ref]) => (
-              <label key={key}>
-                {key}
-                {ref.secret && <span className="trust-badge trust-community"> secret</span>}
-                <input
-                  type={ref.secret ? "password" : "text"}
-                  value={envDrafts[key] ?? ""}
-                  onChange={(e) => setEnvDrafts((prev) => ({ ...prev, [key]: e.currentTarget.value }))}
-                  placeholder={ref.secret ? "Leave blank to keep current value" : ref.value}
-                />
-              </label>
+              <div key={key} className="mcp-env-row">
+                <label className={removedKeys.has(key) ? "mcp-env-removed" : ""}>
+                  {key}
+                  {ref.secret && <span className="trust-badge trust-community"> secret</span>}
+                  <input
+                    type={ref.secret ? "password" : "text"}
+                    value={envDrafts[key] ?? ""}
+                    onChange={(e) => setEnvDrafts((prev) => ({ ...prev, [key]: e.currentTarget.value }))}
+                    placeholder={
+                      removedKeys.has(key)
+                        ? "Will be removed on save"
+                        : ref.secret
+                          ? "Leave blank to keep current value"
+                          : ref.value
+                    }
+                    disabled={removedKeys.has(key)}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className={`btn btn-sm ${removedKeys.has(key) ? "btn-secondary" : "btn-danger"}`}
+                  onClick={() => toggleRemoved(key)}
+                >
+                  {removedKeys.has(key) ? "Undo" : "Remove"}
+                </button>
+              </div>
+            ))}
+
+            {newVars.map((v, i) => (
+              <div key={i} className="mcp-env-row">
+                <label>
+                  Name
+                  <input
+                    value={v.name}
+                    onChange={(e) => updateNewVar(i, { name: e.currentTarget.value })}
+                    placeholder="ENV_VAR_NAME"
+                  />
+                </label>
+                <label>
+                  Value
+                  <input
+                    type={v.isSecret ? "password" : "text"}
+                    value={v.value}
+                    onChange={(e) => updateNewVar(i, { value: e.currentTarget.value })}
+                  />
+                </label>
+                <label className="mcp-env-secret-toggle">
+                  <input
+                    type="checkbox"
+                    checked={v.isSecret}
+                    onChange={(e) => updateNewVar(i, { isSecret: e.currentTarget.checked })}
+                  />
+                  secret
+                </label>
+                <button type="button" className="btn btn-danger btn-sm" onClick={() => removeNewVarRow(i)}>
+                  Remove
+                </button>
+              </div>
             ))}
           </div>
         )}
+
+        <button type="button" className="btn btn-secondary btn-sm" onClick={addNewVarRow}>
+          + Add variable
+        </button>
 
         <div className="provider-edit-actions">
           <button type="submit" className="btn btn-primary btn-sm" disabled={busy}>
@@ -207,6 +310,8 @@ export function McpPanel({
   const [search, setSearch] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [managingToolsId, setManagingToolsId] = useState<string | null>(null);
+  const [viewingLogsId, setViewingLogsId] = useState<string | null>(null);
+  const [logsByServer, setLogsByServer] = useState<Record<string, string[]>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -229,9 +334,17 @@ export function McpPanel({
       setStatusMessages((prev) => ({ ...prev, [event.id]: event.message ?? "" }));
     });
     const unlistenLog = onMcpRuntimeLog((message) => setRuntimeLog(message));
+    const unlistenServerLog = onMcpServerLog(({ id, line }) => {
+      setLogsByServer((prev) => {
+        const existing = prev[id] ?? [];
+        const next = [...existing, line].slice(-MAX_LOG_LINES_PER_SERVER);
+        return { ...prev, [id]: next };
+      });
+    });
     return () => {
       unlistenStatus.then((f) => f());
       unlistenLog.then((f) => f());
+      unlistenServerLog.then((f) => f());
     };
   }, []);
 
@@ -294,7 +407,19 @@ export function McpPanel({
 
   function renderServerCard(s: McpServerRow) {
     const status = statuses[s.id] ?? "stopped";
-    const tools = toolsByServer[s.id];
+    const liveTools = toolsByServer[s.id];
+    const cachedTools: McpToolInfo[] = liveTools
+      ? []
+      : (() => {
+          try {
+            const parsed = JSON.parse(s.cached_tools_json || "[]");
+            return Array.isArray(parsed) ? (parsed as McpToolInfo[]) : [];
+          } catch {
+            return [];
+          }
+        })();
+    const tools = liveTools ?? (cachedTools.length > 0 ? cachedTools : undefined);
+    const isCachedToolList = !liveTools && !!tools;
     const permissions = parseToolPermissions(s.tool_permissions_json);
 
     if (editingId === s.id) {
@@ -344,10 +469,27 @@ export function McpPanel({
             className="btn btn-secondary btn-sm"
             onClick={() => setManagingToolsId(managingToolsId === s.id ? null : s.id)}
             disabled={!tools || tools.length === 0}
-            title={!tools || tools.length === 0 ? "Start the server to see its tools" : undefined}
+            title={!tools || tools.length === 0 ? "Start the server to see its tools" : "Configure this server's tools"}
           >
             Tools{tools ? ` (${tools.length})` : ""}
           </button>
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={() => setViewingLogsId(viewingLogsId === s.id ? null : s.id)}
+            disabled={s.transport !== "stdio"}
+            title={s.transport !== "stdio" ? "Logs are only available for locally-spawned servers" : "View this server's stderr output"}
+          >
+            Logs{(logsByServer[s.id]?.length ?? 0) > 0 ? ` (${logsByServer[s.id].length})` : ""}
+          </button>
+          <label className="mcp-autostart-toggle" title="Start this server automatically when the app launches">
+            <input
+              type="checkbox"
+              checked={!!s.autostart}
+              onChange={(e) => onUpdateServer(s.id, { autostart: e.currentTarget.checked ? 1 : 0 })}
+            />
+            Autostart
+          </label>
           <button type="button" className="btn btn-secondary btn-sm" onClick={() => setEditingId(s.id)}>
             Edit
           </button>
@@ -357,16 +499,33 @@ export function McpPanel({
         </div>
 
         {managingToolsId === s.id && tools && tools.length > 0 && (
-          <ul className="tool-perm-list">
-            {tools.map((t) => (
-              <ToolPermissionRow
-                key={t.name}
-                tool={t}
-                permission={getToolPermission(permissions, t.name)}
-                onChange={(mode) => handleToolPermissionChange(s, t.name, mode)}
-              />
-            ))}
-          </ul>
+          <>
+            {isCachedToolList && (
+              <p className="settings-hint">
+                Showing the tool list from the last time this server ran — start it to refresh.
+              </p>
+            )}
+            <ul className="tool-perm-list">
+              {tools.map((t) => (
+                <ToolPermissionRow
+                  key={t.name}
+                  tool={t}
+                  permission={getToolPermission(permissions, t.name)}
+                  onChange={(mode) => handleToolPermissionChange(s, t.name, mode)}
+                />
+              ))}
+            </ul>
+          </>
+        )}
+
+        {viewingLogsId === s.id && (
+          <div className="mcp-log-drawer">
+            {logsByServer[s.id] && logsByServer[s.id].length > 0 ? (
+              <pre className="tool-block-pre">{logsByServer[s.id].join("\n")}</pre>
+            ) : (
+              <p className="settings-hint">No log output yet — logs appear once the server writes to stderr.</p>
+            )}
+          </div>
         )}
       </li>
     );

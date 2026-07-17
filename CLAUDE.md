@@ -16,11 +16,14 @@ npm run tauri dev     # run the full desktop app (spawns Vite dev server itself)
 npm run build          # tsc typecheck + vite production build of the frontend
 npm run tauri build   # produce a native installer/binary via Cargo + the built frontend
 npm run preview       # preview the built frontend
+npm run lint          # ESLint (flat config, eslint.config.js)
+npm test              # Vitest (src/**/*.test.ts)
 ```
 
-There is no test suite and no lint script configured in `package.json`. `npm run build`'s `tsc` step is the only automated correctness check (strict mode, `noUnusedLocals`/`noUnusedParameters` enabled — unused vars/params are build errors, not just warnings).
+`npm run build`'s `tsc` step is strict mode with `noUnusedLocals`/`noUnusedParameters` enabled —
+unused vars/params are build errors, not just warnings.
 
-Rust side (`src-tauri/`) can be checked directly with `cargo check` / `cargo build` from within `src-tauri/` if iterating on Rust without wanting a full `tauri build`.
+Rust side (`src-tauri/`) can be checked directly with `cargo check` / `cargo build` from within `src-tauri/` if iterating on Rust without wanting a full `tauri build`. `cargo test` runs the `#[cfg(test)]` suite (currently `mcp/registry.rs`).
 
 ## Project status doc — read this first
 
@@ -52,7 +55,10 @@ MCP server processes).
   opaque `secret_ref`/keychain entry does.
 - **Tauri config** (`src-tauri/tauri.conf.json`, `src-tauri/capabilities/default.json`) wires the
   dev server on port 1420 (fixed/strict, required by Tauri) to the native shell, and declares the
-  webview's permission set. CSP is currently disabled (`security.csp: null`). **Any new
+  webview's permission set. `security.csp` is a real policy (script/style locked to `'self'`,
+  `connect-src` allows `https:` broadly since users point at arbitrary provider base URLs, plus
+  `ipc:`/`http://ipc.localhost` for Tauri's own bridge) — if you add an inline script/style or a
+  new external host dependency, update it. **Any new
   Tauri/plugin command needs its permission added to `capabilities/default.json` or it silently
   fails at runtime** — e.g. `sql:default` alone does NOT include `sql:allow-execute`; check the
   plugin's own `permissions/default.toml` rather than assuming a `*:default` set is comprehensive.

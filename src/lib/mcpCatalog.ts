@@ -3,8 +3,12 @@ import {
   upsertCatalogEntries,
   listCachedCatalogEntries,
   searchCachedCatalogEntries,
+  evictStaleCatalogEntries,
+  clearCatalogCache,
   type McpCatalogCacheRow,
 } from "./db";
+
+export { clearCatalogCache };
 
 export type TrustTier = "official" | "verified" | "community";
 
@@ -84,6 +88,10 @@ export async function searchCatalog(query: string): Promise<CatalogSearchResult>
     if (page.entries.length > 0) {
       await upsertCatalogEntries(page.entries.map((e) => toCacheRow(e, Date.now())));
     }
+    // Best-effort: only ever evicted as a side effect of a successful live search (never on the
+    // cache-fallback path below), so a long-running offline stretch can't wipe the only fallback
+    // data available.
+    await evictStaleCatalogEntries();
     return { entries: sortByTrust(page.entries), source: "live", cacheAgeMs: null, error: null };
   } catch (err) {
     const cached = query.trim()

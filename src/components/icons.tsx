@@ -126,3 +126,29 @@ export function IconLoader(props: IconProps) {
     </Icon>
   );
 }
+
+export function IconEdit(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+    </Icon>
+  );
+}
+
+export function IconRefresh(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <polyline points="23 4 23 10 17 10" />
+      <polyline points="1 20 1 14 7 14" />
+      <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+    </Icon>
+  );
+}
+
+export function IconStop(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="5" y="5" width="14" height="14" rx="1.5" fill="currentColor" stroke="none" />
+    </Icon>
+  );
+}

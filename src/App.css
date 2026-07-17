@@ -356,7 +356,8 @@ body {
   white-space: nowrap;
 }
 
-.conversation-item-delete {
+.conversation-item-delete,
+.conversation-item-rename {
   flex-shrink: 0;
   margin-right: 0.2em;
   opacity: 0;
@@ -366,13 +367,29 @@ body {
   border: none;
 }
 
-.conversation-item:hover .conversation-item-delete {
+.conversation-item:hover .conversation-item-delete,
+.conversation-item:hover .conversation-item-rename {
   opacity: 1;
 }
 
 .conversation-item-delete:hover {
   color: var(--color-danger);
   background: var(--color-danger-soft);
+}
+
+.conversation-item-rename:hover {
+  color: var(--color-accent);
+  background: var(--color-accent-soft);
+}
+
+.conversation-item-renaming {
+  padding: 0.2em 0.4em;
+}
+
+.conversation-rename-input {
+  width: 100%;
+  font-size: var(--font-size-sm);
+  padding: 0.4em 0.5em;
 }
 
 .sidebar-footer {
@@ -581,13 +598,20 @@ body {
   transition: opacity var(--transition-fast), background-color var(--transition-fast), color var(--transition-fast);
 }
 
-.message-assistant:hover .message-copy {
+.message-assistant:hover .message-copy,
+.message-user:hover .message-copy {
   opacity: 1;
 }
 
 .message-copy:hover {
   background-color: var(--color-surface-hover);
   color: var(--color-text-primary);
+}
+
+.message-provenance {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  opacity: 0.7;
 }
 
 /* ---- Tool call blocks ---- */
@@ -900,6 +924,14 @@ body {
   margin: 0 auto;
 }
 
+.update-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
 /* ==========================================================================
    Composer
    ========================================================================== */
@@ -1157,6 +1189,10 @@ button {
   gap: var(--space-2);
 }
 
+/* Specificity trap: this is (0,1,1) — higher than a bare class selector (0,1,0). Any new
+   component nested inside .provider-list (cards, edit rows, tool-perm rows, etc.) will silently
+   lose the properties below unless its own selector is also li-prefixed, e.g. `li.my-component`,
+   regardless of source order. */
 .provider-list li {
   display: flex;
   justify-content: space-between;
@@ -1256,6 +1292,43 @@ li.provider-edit-row {
 }
 
 /* ==========================================================================
+   Onboarding wizard
+   ========================================================================== */
+
+.onboarding-panel {
+  max-width: 480px;
+}
+
+.onboarding-provider-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-2);
+  margin: var(--space-2) 0;
+}
+
+.onboarding-provider-choice {
+  padding: 0.65em 0.85em;
+  background: var(--color-surface-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-primary);
+  font-weight: var(--font-weight-normal);
+  text-align: left;
+  transition: border-color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.onboarding-provider-choice:hover {
+  border-color: var(--color-border-strong);
+}
+
+.onboarding-provider-choice-active {
+  border-color: var(--color-accent);
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  font-weight: var(--font-weight-medium);
+}
+
+/* ==========================================================================
    Forms
    ========================================================================== */
 
@@ -1352,6 +1425,30 @@ li.mcp-server-card.mcp-server-card-empty {
   gap: var(--space-2);
   border-top: 1px solid var(--color-border);
   padding-top: var(--space-2);
+}
+
+.mcp-env-row {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+}
+
+.mcp-env-row label {
+  flex: 1;
+  min-width: 0;
+}
+
+.mcp-env-removed {
+  opacity: 0.5;
+}
+
+.mcp-env-secret-toggle {
+  flex: 0 0 auto;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.35em;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
 }
 
 .tool-perm-list {

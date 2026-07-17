@@ -60,8 +60,14 @@ jobs:
       # macOS: APPLE_CERTIFICATE (base64 .p12) + APPLE_CERTIFICATE_PASSWORD for codesigning,
       # plus APPLE_ID/APPLE_PASSWORD (app-specific password)/APPLE_TEAM_ID for notarization —
       # all five are required together to notarize; codesigning alone works with just the
-      # certificate pair. Once an auto-updater is wired up, TAURI_SIGNING_PRIVATE_KEY /
-      # TAURI_SIGNING_PRIVATE_KEY_PASSWORD secrets will also need to be added here.
+      # certificate pair.
+      #
+      # TAURI_SIGNING_PRIVATE_KEY / TAURI_SIGNING_PRIVATE_KEY_PASSWORD sign the *updater*
+      # artifacts (separate from the code-signing certs above) — required for the auto-updater
+      # to trust a release. `tauri.conf.json`'s `bundle.createUpdaterArtifacts: true` makes
+      # tauri-action emit a signed `latest.json` + per-platform update archives alongside the
+      # normal installers automatically once these two secrets are set; see README "Auto-updater
+      # (maintainers)" for how the keypair was generated.
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -73,6 +79,8 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'StudyLLM ${{ github.ref_name }}'

@@ -85,7 +85,11 @@ export class ProviderRouter {
     return DEFAULT_COOLDOWN_MS;
   }
 
-  async *streamReply(history: ChatMessage[], tools?: ToolSet): AsyncGenerator<StreamEvent> {
+  async *streamReply(
+    history: ChatMessage[],
+    tools?: ToolSet,
+    abortSignal?: AbortSignal,
+  ): AsyncGenerator<StreamEvent> {
     const messages: ModelMessage[] = history.map((m) => ({
       role: m.role,
       content: m.content,
@@ -113,11 +117,16 @@ export class ProviderRouter {
         const result = streamText({
           model: client(candidate.model),
           messages,
+          abortSignal,
           ...(tools && Object.keys(tools).length > 0 ? { tools, stopWhen: isStepCount(8) } : {}),
         });
 
         let estimatedTokens = 0;
         for await (const part of result.stream) {
+          if (abortSignal?.aborted) {
+            yield { type: "done", providerId: candidate.id, providerLabel: candidate.label, model: candidate.model, estimatedTokens };
+            return;
+          }
           if (part.type === "text-delta") {
             estimatedTokens += Math.ceil(part.text.length / 4);
             yield { type: "chunk", text: part.text };
@@ -158,6 +167,11 @@ export class ProviderRouter {
         };
         return;
       } catch (error) {
+        if (abortSignal?.aborted) {
+          yield { type: "done", providerId: candidate.id, providerLabel: candidate.label, model: candidate.model, estimatedTokens: 0 };
+          return;
+        }
+
         const statusCode = APICallError.isInstance(error) ? error.statusCode : undefined;
 
         if (statusCode === 401 || statusCode === 403) {
