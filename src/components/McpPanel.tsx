@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { McpServerRow } from "../lib/db";
 import {
@@ -13,9 +13,10 @@ import {
   type McpToolInfo,
   type ToolPermissionMode,
 } from "../lib/mcp";
+import { McpMarketplace, type ResolvedInstall } from "./McpMarketplace";
+import { trustTierLabel, type TrustTier } from "../lib/mcpCatalog";
 
 const MAX_LOG_LINES_PER_SERVER = 300;
-import { trustTierLabel, type TrustTier } from "../lib/mcpCatalog";
 
 interface Props {
   servers: McpServerRow[];
@@ -45,13 +46,11 @@ interface Props {
     removedKeys?: string[],
   ) => Promise<void>;
   onEditFilesystemPath: (server: McpServerRow, newPath: string) => Promise<void>;
-  onOpenMarketplace: () => void;
+  onInstall: (resolved: ResolvedInstall) => Promise<void>;
   onClose: () => void;
-  /** Rendered as a DOM descendant of this panel's own overlay (not a sibling) so a nested modal
-   * like the marketplace gets the `.settings-overlay .settings-overlay` nested backdrop/z-index
-   * instead of competing as an equal-z-index sibling overlay. */
-  children?: ReactNode;
 }
+
+type PanelTab = "installed" | "discover";
 
 type Status = "stopped" | "starting" | "running" | "error";
 
@@ -298,10 +297,10 @@ export function McpPanel({
   onUpdateServer,
   onUpdateEnv,
   onEditFilesystemPath,
-  onOpenMarketplace,
+  onInstall,
   onClose,
-  children,
 }: Props) {
+  const [tab, setTab] = useState<PanelTab>("installed");
   const [statuses, setStatuses] = useState<Record<string, Status>>({});
   const [statusMessages, setStatusMessages] = useState<Record<string, string>>({});
   const [runtimeLog, setRuntimeLog] = useState<string | null>(null);
@@ -533,7 +532,7 @@ export function McpPanel({
 
   return (
     <div className="settings-overlay">
-      <div className="settings-panel">
+      <div className="settings-panel settings-panel-wide">
         <div className="settings-header">
           <h2>MCP Servers</h2>
           <button type="button" className="btn btn-ghost btn-sm" onClick={onClose}>
@@ -541,53 +540,73 @@ export function McpPanel({
           </button>
         </div>
 
-        <p className="settings-hint">
-          MCP servers give the assistant extra tools, like reading and writing files on this
-          computer. Only add servers you trust. Set a tool to "Ask every time" to approve each
-          call, or "Deny" to hide it from the assistant entirely. Every allowed tool call is shown
-          in the chat.
-        </p>
-
-        {formError && <p className="error">{formError}</p>}
-        {runtimeLog && <p className="notice">{runtimeLog}</p>}
-
-        <h3 className="mcp-section-title">Pinned</h3>
-        <ul className="provider-list mcp-card-list">
-          {pinned.map(renderServerCard)}
-          {!hasFilesystem && (
-            <li className="mcp-server-card mcp-server-card-empty">
-              <div className="provider-row-main">
-                <strong>Filesystem</strong>
-                <span className="provider-model">Let the assistant read/write files in a folder you choose.</span>
-              </div>
-              <button type="button" className="btn btn-secondary btn-sm" onClick={handleAddFilesystem} disabled={busy}>
-                {busy ? "Adding…" : "Add…"}
-              </button>
-            </li>
-          )}
-        </ul>
-
-        <h3 className="mcp-section-title">All servers</h3>
-        <input
-          className="mcp-search"
-          placeholder="Search installed servers…"
-          value={search}
-          onChange={(e) => setSearch(e.currentTarget.value)}
-        />
-        <ul className="provider-list mcp-card-list">
-          {rest.map(renderServerCard)}
-          {rest.length === 0 && (
-            <li className="empty-state">{query ? "No servers match your search." : "No other servers installed."}</li>
-          )}
-        </ul>
-
-        <div className="add-provider-form">
-          <button type="button" className="btn btn-secondary" onClick={onOpenMarketplace}>
-            Browse marketplace…
+        <div className="mcp-tabs" role="tablist">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === "installed"}
+            className={`mcp-tab-btn${tab === "installed" ? " mcp-tab-btn-active" : ""}`}
+            onClick={() => setTab("installed")}
+          >
+            Installed
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === "discover"}
+            className={`mcp-tab-btn${tab === "discover" ? " mcp-tab-btn-active" : ""}`}
+            onClick={() => setTab("discover")}
+          >
+            Discover
           </button>
         </div>
+
+        {tab === "installed" ? (
+          <>
+            <p className="settings-hint">
+              MCP servers give the assistant extra tools, like reading and writing files on this
+              computer. Only add servers you trust. Set a tool to "Ask every time" to approve each
+              call, or "Deny" to hide it from the assistant entirely. Every allowed tool call is
+              shown in the chat.
+            </p>
+
+            {formError && <p className="error">{formError}</p>}
+            {runtimeLog && <p className="notice">{runtimeLog}</p>}
+
+            <h3 className="mcp-section-title">Pinned</h3>
+            <ul className="provider-list mcp-card-list">
+              {pinned.map(renderServerCard)}
+              {!hasFilesystem && (
+                <li className="mcp-server-card mcp-server-card-empty">
+                  <div className="provider-row-main">
+                    <strong>Filesystem</strong>
+                    <span className="provider-model">Let the assistant read/write files in a folder you choose.</span>
+                  </div>
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={handleAddFilesystem} disabled={busy}>
+                    {busy ? "Adding…" : "Add…"}
+                  </button>
+                </li>
+              )}
+            </ul>
+
+            <h3 className="mcp-section-title">All servers</h3>
+            <input
+              className="mcp-search"
+              placeholder="Search installed servers…"
+              value={search}
+              onChange={(e) => setSearch(e.currentTarget.value)}
+            />
+            <ul className="provider-list mcp-card-list">
+              {rest.map(renderServerCard)}
+              {rest.length === 0 && (
+                <li className="empty-state">{query ? "No servers match your search." : "No other servers installed."}</li>
+              )}
+            </ul>
+          </>
+        ) : (
+          <McpMarketplace servers={servers} onInstall={onInstall} />
+        )}
       </div>
-      {children}
     </div>
   );
 }

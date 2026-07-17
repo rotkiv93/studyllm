@@ -3,6 +3,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import type { McpServerRow } from "../lib/db";
 import type { CatalogEntry } from "../lib/mcp";
 import { clearCatalogCache, computeTrustTier, searchCatalog, trustTierLabel, type TrustTier } from "../lib/mcpCatalog";
+import { IconCheck } from "./icons";
 
 export interface ResolvedInstall {
   entry: CatalogEntry;
@@ -16,7 +17,24 @@ export interface ResolvedInstall {
 interface Props {
   servers: McpServerRow[];
   onInstall: (resolved: ResolvedInstall) => Promise<void>;
-  onClose: () => void;
+}
+
+const TRUST_TOOLTIP: Record<TrustTier, string> = {
+  official: "Built and maintained by the MCP project itself.",
+  verified: "Made by an outside developer whose source code is public, but not audited by StudyLLM.",
+  community: "An unverified tool from an independent developer — it can run code on this computer with your permissions.",
+};
+
+const AVATAR_CLASSES = ["avatar-c0", "avatar-c1", "avatar-c2"];
+
+function avatarClass(name: string): string {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = (hash + name.charCodeAt(i)) % AVATAR_CLASSES.length;
+  return AVATAR_CLASSES[hash];
+}
+
+function isPopular(entry: CatalogEntry): boolean {
+  return /filesystem|gmail|google[- ]?drive|google/i.test(entry.name);
 }
 
 function looksLikePath(description: string | null): boolean {
@@ -24,7 +42,50 @@ function looksLikePath(description: string | null): boolean {
   return /path|directory|folder/.test(d);
 }
 
-export function McpMarketplace({ servers, onInstall, onClose }: Props) {
+function MarketplaceCard({
+  entry,
+  installed,
+  onInstall,
+}: {
+  entry: CatalogEntry;
+  installed: boolean;
+  onInstall: () => void;
+}) {
+  const tier = computeTrustTier(entry);
+  const unsupported = entry.install.kind === "unsupported";
+  return (
+    <li className="marketplace-card">
+      <div className="marketplace-card-head">
+        <span className={`marketplace-card-avatar ${avatarClass(entry.name)}`}>
+          {entry.name.trim().charAt(0).toUpperCase() || "?"}
+        </span>
+        <div className="marketplace-card-title">
+          <strong>{entry.name}</strong>
+          <span className={`trust-badge trust-${tier}`} title={TRUST_TOOLTIP[tier]}>
+            {trustTierLabel(tier)}
+          </span>
+        </div>
+      </div>
+      <p className="marketplace-card-desc">{entry.description}</p>
+      {entry.install.kind === "unsupported" && (
+        <p className="marketplace-unsupported">{entry.install.reason}</p>
+      )}
+      <div className="marketplace-card-footer">
+        {installed ? (
+          <span className="marketplace-added">
+            <IconCheck size={14} /> Added
+          </span>
+        ) : (
+          <button type="button" className="btn btn-primary btn-sm" disabled={unsupported} onClick={onInstall}>
+            Add
+          </button>
+        )}
+      </div>
+    </li>
+  );
+}
+
+export function McpMarketplace({ servers, onInstall }: Props) {
   const [query, setQuery] = useState("");
   const [entries, setEntries] = useState<CatalogEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -116,183 +177,167 @@ export function McpMarketplace({ servers, onInstall, onClose }: Props) {
     }
   }
 
+  const query_ = query.trim();
+  const popular = query_ ? [] : entries.filter(isPopular);
+  const popularIds = new Set(popular.map((e) => e.id));
+  const rest = entries.filter((e) => !popularIds.has(e.id));
+
   return (
-    <div className="settings-overlay">
-      <div className="settings-panel">
-        <div className="settings-header">
-          <h2>MCP Marketplace</h2>
-          <button type="button" className="btn btn-ghost btn-sm" onClick={onClose}>
-            Close
-          </button>
-        </div>
+    <>
+      <p className="settings-hint">
+        Add extra tools the assistant can use, like reading files or checking your inbox. Only add
+        tools from people or projects you trust — check the badge before adding.
+      </p>
 
-        <p className="settings-hint">
-          Browsing the official MCP registry. Community servers can run arbitrary code on this
-          computer — check the trust badge before installing, and only add servers you trust.
+      <form
+        className="marketplace-search"
+        onSubmit={(e) => {
+          e.preventDefault();
+          runSearch(query);
+        }}
+      >
+        <input
+          placeholder="Search for a tool…"
+          value={query}
+          onChange={(e) => setQuery(e.currentTarget.value)}
+        />
+        <button type="submit" className="btn btn-primary" disabled={loading}>
+          {loading ? "Searching…" : "Search"}
+        </button>
+      </form>
+
+      {source === "cache" && (
+        <p className="notice">
+          Couldn't reach the tool directory{searchError ? ` (${searchError})` : ""} — showing what
+          was saved{cacheAgeMs != null ? ` from ${Math.round(cacheAgeMs / 60000)} min ago` : ""}.
+          {" "}
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            onClick={async () => {
+              await clearCatalogCache();
+              runSearch(query);
+            }}
+          >
+            Clear saved results
+          </button>
         </p>
+      )}
 
-        <form
-          className="marketplace-search"
-          onSubmit={(e) => {
-            e.preventDefault();
-            runSearch(query);
-          }}
-        >
-          <input
-            placeholder="Search servers…"
-            value={query}
-            onChange={(e) => setQuery(e.currentTarget.value)}
+      {popular.length > 0 && (
+        <>
+          <h3 className="mcp-section-title">Popular</h3>
+          <ul className="marketplace-grid">
+            {popular.map((entry) => (
+              <MarketplaceCard
+                key={entry.id}
+                entry={entry}
+                installed={installedNames.has(entry.name.toLowerCase())}
+                onInstall={() => openInstall(entry)}
+              />
+            ))}
+          </ul>
+        </>
+      )}
+
+      {popular.length > 0 && <h3 className="mcp-section-title">All tools</h3>}
+      <ul className="marketplace-grid">
+        {rest.map((entry) => (
+          <MarketplaceCard
+            key={entry.id}
+            entry={entry}
+            installed={installedNames.has(entry.name.toLowerCase())}
+            onInstall={() => openInstall(entry)}
           />
-          <button type="submit" className="btn btn-primary" disabled={loading}>
-            {loading ? "Searching…" : "Search"}
-          </button>
-        </form>
+        ))}
+        {!loading && entries.length === 0 && <li className="empty-state">No tools found.</li>}
+      </ul>
 
-        {source === "cache" && (
-          <p className="notice">
-            Registry unreachable{searchError ? ` (${searchError})` : ""} — showing cached results
-            {cacheAgeMs != null ? ` from ${Math.round(cacheAgeMs / 60000)} min ago` : ""}.
-            {" "}
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm"
-              onClick={async () => {
-                await clearCatalogCache();
-                runSearch(query);
-              }}
-            >
-              Clear cache
-            </button>
-          </p>
-        )}
-
-        <ul className="provider-list marketplace-list">
-          {entries.map((entry) => {
-            const tier = computeTrustTier(entry);
-            const already = installedNames.has(entry.name.toLowerCase());
-            const unsupported = entry.install.kind === "unsupported";
-            return (
-              <li key={entry.id} className="marketplace-item">
-                <div className="provider-row-main">
-                  <strong>
-                    {entry.name}{" "}
-                    <span className={`trust-badge trust-${tier}`}>{trustTierLabel(tier)}</span>
-                  </strong>
-                  <span className="provider-model">{entry.description}</span>
-                  {entry.install.kind === "unsupported" && (
-                    <span className="provider-model marketplace-unsupported">
-                      {entry.install.reason}
-                    </span>
-                  )}
-                </div>
-                <div className="provider-row-actions">
-                  {already ? (
-                    <span className="settings-hint">Installed</span>
-                  ) : (
-                    <button
-                      type="button"
-                      className="btn btn-primary btn-sm"
-                      disabled={unsupported}
-                      onClick={() => openInstall(entry)}
-                    >
-                      Install
-                    </button>
-                  )}
-                </div>
-              </li>
-            );
-          })}
-          {!loading && entries.length === 0 && (
-            <li className="empty-state">No servers found.</li>
-          )}
-        </ul>
-
-        {installTarget && (
-          <div className="settings-overlay">
-            <div className="settings-panel">
-              <div className="settings-header">
-                <h2>Install {installTarget.name}</h2>
-                <button type="button" className="btn btn-ghost btn-sm" onClick={closeInstall}>
-                  Cancel
-                </button>
-              </div>
-
-              {computeTrustTier(installTarget) !== "official" && (
-                <p className={`error marketplace-warning-${computeTrustTier(installTarget)}`}>
-                  {computeTrustTier(installTarget) === "community"
-                    ? "This is an unverified community server — it can run arbitrary code on this computer with your user account's permissions. Only install it if you trust the publisher."
-                    : "This server's publisher has a public repository but hasn't been audited by StudyLLM. Review it before installing."}
-                </p>
-              )}
-
-              <div className="add-provider-form">
-                {(installTarget.install.kind === "npx" || installTarget.install.kind === "uvx") &&
-                  installTarget.install.positionalArgs.map((arg, i) => (
-                    <label key={i}>
-                      {arg.description ?? `Argument ${i + 1}`}
-                      <div className="marketplace-path-row">
-                        <input
-                          value={positionalInputs[i] ?? ""}
-                          onChange={(e) =>
-                            setPositionalInputs((prev) =>
-                              prev.map((v, idx) => (idx === i ? e.currentTarget.value : v)),
-                            )
-                          }
-                        />
-                        {looksLikePath(arg.description) && (
-                          <button type="button" className="btn btn-secondary btn-sm" onClick={() => pickFolder(i)}>
-                            Choose folder…
-                          </button>
-                        )}
-                      </div>
-                    </label>
-                  ))}
-
-                {installTarget.requiredEnv.map((v) => (
-                  <label key={v.name}>
-                    {v.description ?? v.name}
-                    {v.isRequired ? " *" : " (optional)"}
-                    <input
-                      type={v.isSecret ? "password" : "text"}
-                      placeholder={v.name}
-                      value={envInputs[v.name] ?? ""}
-                      onChange={(e) =>
-                        setEnvInputs((prev) => ({ ...prev, [v.name]: e.currentTarget.value }))
-                      }
-                    />
-                  </label>
-                ))}
-              </div>
-
-              {computeTrustTier(installTarget) !== "official" && (
-                <label className="marketplace-ack">
-                  <input
-                    type="checkbox"
-                    checked={acknowledged}
-                    onChange={(e) => setAcknowledged(e.currentTarget.checked)}
-                  />
-                  I understand the risk and want to install this server anyway.
-                </label>
-              )}
-
-              {installError && <p className="error">{installError}</p>}
-
-              <button
-                type="button"
-                className="btn btn-primary"
-                disabled={
-                  installBusy ||
-                  missingRequirements(installTarget) ||
-                  (computeTrustTier(installTarget) !== "official" && !acknowledged)
-                }
-                onClick={confirmInstall}
-              >
-                {installBusy ? "Installing…" : "Install"}
+      {installTarget && (
+        <div className="settings-overlay">
+          <div className="settings-panel">
+            <div className="settings-header">
+              <h2>Add {installTarget.name}</h2>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={closeInstall}>
+                Cancel
               </button>
             </div>
+
+            {computeTrustTier(installTarget) !== "official" && (
+              <p className={`error marketplace-warning-${computeTrustTier(installTarget)}`}>
+                {computeTrustTier(installTarget) === "community"
+                  ? "This is an unverified community tool — it can run arbitrary code on this computer with your user account's permissions. Only add it if you trust the publisher."
+                  : "This tool's publisher has a public repository but hasn't been audited by StudyLLM. Review it before adding."}
+              </p>
+            )}
+
+            <div className="add-provider-form">
+              {(installTarget.install.kind === "npx" || installTarget.install.kind === "uvx") &&
+                installTarget.install.positionalArgs.map((arg, i) => (
+                  <label key={i}>
+                    {arg.description ?? `Argument ${i + 1}`}
+                    <div className="marketplace-path-row">
+                      <input
+                        value={positionalInputs[i] ?? ""}
+                        onChange={(e) =>
+                          setPositionalInputs((prev) =>
+                            prev.map((v, idx) => (idx === i ? e.currentTarget.value : v)),
+                          )
+                        }
+                      />
+                      {looksLikePath(arg.description) && (
+                        <button type="button" className="btn btn-secondary btn-sm" onClick={() => pickFolder(i)}>
+                          Choose folder…
+                        </button>
+                      )}
+                    </div>
+                  </label>
+                ))}
+
+              {installTarget.requiredEnv.map((v) => (
+                <label key={v.name}>
+                  {v.description ?? v.name}
+                  {v.isRequired ? " *" : " (optional)"}
+                  <input
+                    type={v.isSecret ? "password" : "text"}
+                    placeholder={v.name}
+                    value={envInputs[v.name] ?? ""}
+                    onChange={(e) =>
+                      setEnvInputs((prev) => ({ ...prev, [v.name]: e.currentTarget.value }))
+                    }
+                  />
+                </label>
+              ))}
+            </div>
+
+            {computeTrustTier(installTarget) !== "official" && (
+              <label className="marketplace-ack">
+                <input
+                  type="checkbox"
+                  checked={acknowledged}
+                  onChange={(e) => setAcknowledged(e.currentTarget.checked)}
+                />
+                I understand the risk and want to add this tool anyway.
+              </label>
+            )}
+
+            {installError && <p className="error">{installError}</p>}
+
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={
+                installBusy ||
+                missingRequirements(installTarget) ||
+                (computeTrustTier(installTarget) !== "official" && !acknowledged)
+              }
+              onClick={confirmInstall}
+            >
+              {installBusy ? "Adding…" : "Add"}
+            </button>
           </div>
-        )}
-      </div>
-    </div>
+        </div>
+      )}
+    </>
   );
 }

@@ -6,6 +6,12 @@
 
 - Always try to apply css variables to css styles instead of hardcoding values.
 
+- When making a commit, use a [Conventional Commits](https://www.conventionalcommits.org/) message
+  (`feat:`, `fix:`, `docs:`, `refactor:`, `perf:`, `style:`, `test:`, `build:`, `ci:`, `chore:`,
+  `revert:`, optionally with a `(scope)`). Release notes are auto-generated from these prefixes via
+  `cliff.toml` + the `changelog` job in `.github/workflows/release.yml` — see README "Commit
+  messages → changelog".
+
 ## Commands
 
 ```

@@ -28,9 +28,10 @@ import {
   type McpServerRow,
   type ToolCallRow,
 } from "./lib/db";
-import { SettingsPanel, type ProviderDraft, type ProviderEditDraft } from "./components/SettingsPanel";
+import { ProvidersPanel, type ProviderDraft, type ProviderEditDraft } from "./components/ProvidersPanel";
+import { AppSettingsPanel } from "./components/AppSettingsPanel";
 import { McpPanel } from "./components/McpPanel";
-import { McpMarketplace, type ResolvedInstall } from "./components/McpMarketplace";
+import { type ResolvedInstall } from "./components/McpMarketplace";
 import { OnboardingWizard } from "./components/OnboardingWizard";
 import { Sidebar } from "./components/Sidebar";
 import { ToolCallBlock } from "./components/ToolCallBlock";
@@ -107,9 +108,9 @@ function CopyButton({ text }: { text: string }) {
 
 export default function App() {
   const [providers, setProviders] = useState<ProviderRow[]>([]);
-  const [showSettings, setShowSettings] = useState(false);
+  const [showProviders, setShowProviders] = useState(false);
   const [showMcp, setShowMcp] = useState(false);
-  const [showMarketplace, setShowMarketplace] = useState(false);
+  const [showAppSettings, setShowAppSettings] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
   const [input, setInput] = useState("");
@@ -788,8 +789,9 @@ export default function App() {
         onSelectConversation={handleSelectConversation}
         onDeleteConversation={handleDeleteConversation}
         onRenameConversation={handleRenameConversation}
-        onOpenSettings={() => setShowSettings(true)}
+        onOpenProviders={() => setShowProviders(true)}
         onOpenMcp={() => setShowMcp(true)}
+        onOpenAppSettings={() => setShowAppSettings(true)}
       />
 
       <main className="main-panel">
@@ -892,8 +894,8 @@ export default function App() {
         </form>
       </main>
 
-      {showSettings && (
-        <SettingsPanel
+      {showProviders && (
+        <ProvidersPanel
           providers={providers}
           onAdd={handleAddProvider}
           onRemove={handleRemoveProvider}
@@ -901,9 +903,11 @@ export default function App() {
           onReorder={handleReorderProvider}
           onEdit={handleEditProvider}
           onOpenOnboarding={() => setShowOnboarding(true)}
-          onClose={() => setShowSettings(false)}
+          onClose={() => setShowProviders(false)}
         />
       )}
+
+      {showAppSettings && <AppSettingsPanel onClose={() => setShowAppSettings(false)} />}
 
       {showOnboarding && (
         <OnboardingWizard
@@ -926,17 +930,9 @@ export default function App() {
           onUpdateServer={handleUpdateMcpServer}
           onUpdateEnv={handleUpdateMcpServerEnv}
           onEditFilesystemPath={handleEditFilesystemPath}
-          onOpenMarketplace={() => setShowMarketplace(true)}
+          onInstall={handleInstallFromCatalog}
           onClose={() => setShowMcp(false)}
-        >
-          {showMarketplace && (
-            <McpMarketplace
-              servers={mcpServers}
-              onInstall={handleInstallFromCatalog}
-              onClose={() => setShowMarketplace(false)}
-            />
-          )}
-        </McpPanel>
+        />
       )}
 
       {pendingApproval && (

@@ -5,7 +5,6 @@ import {
   providerModelsNeedApiKey,
   providerSupportsLiveModels,
 } from "../lib/providerModels";
-import { clearCrashLog, readCrashLog, revealCrashLog } from "../lib/crashlog";
 import type { ProviderRow } from "../lib/db";
 
 export interface ProviderDraft {
@@ -106,7 +105,7 @@ function EditProviderRow({
   );
 }
 
-export function SettingsPanel({
+export function ProvidersPanel({
   providers,
   onAdd,
   onRemove,
@@ -127,23 +126,6 @@ export function SettingsPanel({
   const [modelsStatus, setModelsStatus] = useState<"idle" | "loading" | "loaded" | "unavailable">(
     "idle",
   );
-  const [crashLogText, setCrashLogText] = useState<string | null>(null);
-  const [crashLogBusy, setCrashLogBusy] = useState(false);
-
-  async function handleShowCrashLog() {
-    setCrashLogBusy(true);
-    try {
-      const text = await readCrashLog();
-      setCrashLogText(text || "Nothing logged yet.");
-    } finally {
-      setCrashLogBusy(false);
-    }
-  }
-
-  async function handleClearCrashLog() {
-    await clearCrashLog();
-    setCrashLogText("Nothing logged yet.");
-  }
 
   function handleTypeChange(next: ProviderType) {
     setType(next);
@@ -372,26 +354,6 @@ export function SettingsPanel({
             Add provider
           </button>
         </form>
-
-        <div className="add-provider-form">
-          <h3>Crash log</h3>
-          <p className="settings-hint">
-            A local-only log of MCP server errors and app crashes — nothing here ever leaves this
-            computer. Useful if something breaks and you want to see what happened.
-          </p>
-          <div className="provider-edit-actions">
-            <button type="button" className="btn btn-secondary btn-sm" onClick={handleShowCrashLog} disabled={crashLogBusy}>
-              {crashLogBusy ? "Loading…" : "Show log"}
-            </button>
-            <button type="button" className="btn btn-secondary btn-sm" onClick={() => revealCrashLog().catch(() => {})}>
-              Reveal in folder
-            </button>
-            <button type="button" className="btn btn-danger btn-sm" onClick={handleClearCrashLog}>
-              Clear
-            </button>
-          </div>
-          {crashLogText !== null && <pre className="tool-block-pre">{crashLogText}</pre>}
-        </div>
       </div>
     </div>
   );

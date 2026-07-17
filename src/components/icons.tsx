@@ -145,6 +145,16 @@ export function IconRefresh(props: IconProps) {
   );
 }
 
+export function IconKey(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="7.5" cy="15.5" r="5.5" />
+      <path d="M21 2 11.9 11.1" />
+      <path d="m15.5 7.5 3 3L22 7l-3-3" />
+    </Icon>
+  );
+}
+
 export function IconStop(props: IconProps) {
   return (
     <Icon {...props}>

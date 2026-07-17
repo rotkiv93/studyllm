@@ -198,9 +198,14 @@ Full original architecture/phase plan: `C:\Users\47852\.claude\plans\i-want-to-c
   smaller centered dialog. Fixed by giving `McpPanel` a `children` prop and rendering
   `<McpMarketplace>` as its child from `App.tsx` instead of a sibling — it's now a true DOM
   descendant, so the nested-overlay rule applies for real (correct z-index + darker nested
-  backdrop), matching what the CSS was already designed for.
+  backdrop), matching what the CSS was already designed for. **Superseded in a later session**
+  (see "Settings restructure" below): the `children`/`onOpenMarketplace` prop pair described here
+  is gone — the marketplace is no longer opened as its own modal at all, it's inline tab content
+  inside `McpPanel`. The `.settings-overlay .settings-overlay` nested rule this paragraph describes
+  is still real and still in use, just for one narrower case now: the marketplace's own
+  install-confirmation step, which still nests one level inside the (now-tabbed) MCP panel.
 - Providers (LLM API keys, not MCP servers) also gained inline editing this session —
-  `SettingsPanel.tsx`'s `EditProviderRow`: change label/model freely (existing `updateProvider`
+  `ProvidersPanel.tsx`'s (then `SettingsPanel.tsx`) `EditProviderRow`: change label/model freely (existing `updateProvider`
   already supported this at the DB layer, just had no UI), and optionally paste a new API key
   (blank = keep the current one) which overwrites the existing keychain entry via `setCredential`
   rather than creating a new `secret_ref`.
@@ -220,6 +225,37 @@ Full original architecture/phase plan: `C:\Users\47852\.claude\plans\i-want-to-c
   show" regardless of the query. Fixed by reading the `isLatest` flag out of each entry's `_meta`
   (`is_latest_version()` in `registry.rs`) and dropping non-latest versions, plus a defensive
   dedupe-by-name pass for entries where `_meta` is missing/malformed.
+- **Settings restructure, this session**: the old two-button sidebar footer (MCP servers /
+  Settings-with-crash-log) is now three: **Providers**, **MCP Servers**, **Settings**.
+  - `SettingsPanel.tsx` renamed to `ProvidersPanel.tsx` (`ProvidersPanel` component) and now holds
+    only LLM provider (API key) management — the crash-log section moved out.
+  - New `AppSettingsPanel.tsx`: just the crash-log viewer (show/reveal/clear), moved verbatim out
+    of the old `SettingsPanel`. Nothing else lives here yet.
+  - `McpPanel.tsx` gained an `Installed`/`Discover` tab switcher (`.mcp-tabs`) instead of a
+    "Browse marketplace…" button that opened `McpMarketplace` as a separate modal. `McpMarketplace`
+    is no longer a standalone overlay component — it lost its own outer
+    `.settings-overlay`/`.settings-panel`/header/`onClose` and is now rendered as plain tab content
+    inside `McpPanel`'s existing panel chrome when `tab === "discover"`. The one modal it still owns
+    is the install-confirmation step, which nests correctly under `McpPanel`'s overlay via the
+    existing `.settings-overlay .settings-overlay` rule (see the note above the now-superseded
+    "Fixed, reported live by the user" entry). `McpPanel`'s panel also gained a `.settings-panel-wide`
+    modifier (`width: min(720px, 94vw)` vs. the default 560px) since both tabs want more room.
+  - Marketplace redesigned for non-technical users: entries render as a card grid
+    (`.marketplace-grid`/`li.marketplace-card`, not the old `.provider-list` row layout — a fresh
+    class family was used specifically to sidestep the `.provider-list li` specificity trap
+    documented above) with a colored initial-avatar per server (`avatarClass()`, a 3-way hash over
+    `--color-accent-soft`/`--color-success-soft`/`--color-warning-soft`), a plain-language `title`
+    tooltip on each trust badge explaining what Official/Verified/Community actually mean, and
+    "Add"/"Added" wording instead of "Install"/"Installed". A client-side "Popular" row (filesystem
+    + any Google-named entry, same regex heuristic as `McpPanel`'s existing `isPinned`, duplicated
+    locally since it's over a different data shape) surfaces above the full results grid, but only
+    when the search box is empty.
+  - Sidebar: new `IconKey` (`icons.tsx`) for the Providers button; the "no active providers" dot
+    moved from the old Settings button to the new Providers button; `onOpenSettings`/
+    `onOpenMcp` props became `onOpenProviders`/`onOpenMcp`/`onOpenAppSettings`.
+  - Verified via `npm run build` (tsc strict + vite) and `npm run lint` (clean, pre-existing
+    unrelated warnings only). Not yet visually click-tested in the running app — the user already
+    had `npm run tauri dev` open, which should hot-reload these changes via Vite HMR.
 
 ## Visual design system (Phase 5 slice)
 
@@ -359,8 +395,8 @@ option researched:
   `resolveApproval` + the approval modal), MCP server config editing
   (`handleUpdateMcpServer`/`handleUpdateMcpServerEnv`/`handleEditFilesystemPath`).
 - `src/components/Sidebar.tsx` — left-hand conversation history list + collapsible icon rail that
-  opens Settings/MCP panel (Claude-desktop-style shell); `src/components/icons.tsx` — the inline
-  SVG icon set it (and the composer's send button) use.
+  opens the Providers/MCP Servers/Settings panels (Claude-desktop-style shell);
+  `src/components/icons.tsx` — the inline SVG icon set it (and the composer's send button) use.
 - `src/lib/providerRouter.ts` — client-side multi-provider failover + streaming + tool-call events.
 - `src/lib/mcp.ts` — typed frontend wrappers for the Rust MCP commands/events, including the
   catalog/registry types (`CatalogEntry`, `InstallSpec`) mirroring `mcp/registry.rs`, and the
@@ -372,20 +408,28 @@ option researched:
   MCP catalog cache, usage), including `deleteConversation` (cascades to messages + their tool
   calls), `renameConversation`, `updateMcpServer`, and `insertToolCall`/
   `listToolCallsForConversation`.
-- `src/components/SettingsPanel.tsx` — provider (LLM API key) management UI, including inline
-  edit (`EditProviderRow`: label/model/API-key rotation).
+- `src/components/ProvidersPanel.tsx` — provider (LLM API key) management UI, including inline
+  edit (`EditProviderRow`: label/model/API-key rotation). Renamed from `SettingsPanel.tsx`; no
+  longer has the crash-log section (see `AppSettingsPanel.tsx`).
+- `src/components/AppSettingsPanel.tsx` — general app settings: currently just the local crash-log
+  viewer (show/reveal/clear), split out of the old `SettingsPanel.tsx`.
 - `src/lib/providerModels.ts` — per-provider live model-list fetching (public catalogs immediately,
   key-gated ones once an API key is entered), with parsing/filtering per provider and graceful
   fallback to `null` on any failure.
-- `src/components/McpPanel.tsx` — installed MCP server management UI: pinned cards (Filesystem +
-  any Google-named server) above a searchable "All servers" list, start/stop/remove, inline config
+- `src/components/McpPanel.tsx` — installed/discoverable MCP server management UI behind an
+  `Installed`/`Discover` tab switcher (`.mcp-tabs`). Installed tab: pinned cards (Filesystem + any
+  Google-named server) above a searchable "All servers" list, start/stop/remove, inline config
   editing (`EditServerForm`: name/folder/url/env vars), and an expandable per-tool permission list
   (`ToolPermissionRow`) driving `tool_permissions_json`. Delegates actual start logic to
-  `App.tsx`'s `onStart`.
-- `src/components/McpMarketplace.tsx` — registry search/browse UI, required-env-var install form,
-  non-official install warning + ack checkbox, "Clear cache" when showing stale results.
+  `App.tsx`'s `onStart`. Discover tab renders `McpMarketplace` inline (see below) via an `onInstall`
+  prop instead of opening it as a separate modal.
+- `src/components/McpMarketplace.tsx` — registry search/browse UI, rendered as `McpPanel`'s
+  Discover-tab content (not its own overlay/modal). Card-grid layout (`.marketplace-grid`), a
+  client-side curated "Popular" row when the search box is empty, plain-language trust-badge
+  tooltips, "Add"/"Added" wording, required-env-var install form, non-official install warning +
+  ack checkbox (still its own nested modal), "Clear saved results" when showing stale cache.
 - `src/components/OnboardingWizard.tsx` — first-run setup flow (provider → key → verify → optional
-  filesystem MCP); re-openable from Settings.
+  filesystem MCP); re-openable from the Providers panel.
 - `src/lib/crashlog.ts` — frontend wrapper for the Rust crash-log commands.
 - `docs/index.html` — static marketing landing page (see "Marketing website" above); not wired
   into the Vite app build, served as-is via GitHub Pages.

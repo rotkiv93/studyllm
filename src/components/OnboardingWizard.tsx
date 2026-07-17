@@ -2,7 +2,7 @@ import { useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { PROVIDER_MANIFEST, PROVIDER_TYPES, type ProviderType } from "../lib/providers";
 import { fetchProviderModels, providerModelsNeedApiKey, providerSupportsLiveModels } from "../lib/providerModels";
-import type { ProviderDraft } from "./SettingsPanel";
+import type { ProviderDraft } from "./ProvidersPanel";
 
 interface Props {
   onAddProvider: (draft: ProviderDraft) => Promise<void>;

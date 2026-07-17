@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { ConversationRow } from "../lib/db";
-import { IconEdit, IconMenu, IconMessage, IconPlus, IconSettings, IconTool, IconTrash } from "./icons";
+import { IconEdit, IconKey, IconMenu, IconMessage, IconPlus, IconSettings, IconTool, IconTrash } from "./icons";
 
 interface Props {
   conversations: ConversationRow[];
@@ -14,8 +14,9 @@ interface Props {
   onSelectConversation: (id: string) => void;
   onDeleteConversation: (id: string) => void;
   onRenameConversation: (id: string, title: string) => void;
-  onOpenSettings: () => void;
+  onOpenProviders: () => void;
   onOpenMcp: () => void;
+  onOpenAppSettings: () => void;
 }
 
 export function Sidebar({
@@ -30,8 +31,9 @@ export function Sidebar({
   onSelectConversation,
   onDeleteConversation,
   onRenameConversation,
-  onOpenSettings,
+  onOpenProviders,
   onOpenMcp,
+  onOpenAppSettings,
 }: Props) {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
@@ -137,6 +139,16 @@ export function Sidebar({
         <button
           type="button"
           className="sidebar-footer-btn"
+          onClick={onOpenProviders}
+          title="Providers"
+        >
+          <IconKey size={17} />
+          {!collapsed && <span>Providers</span>}
+          {activeProviderCount === 0 && <span className="sidebar-footer-dot" title="No active providers" />}
+        </button>
+        <button
+          type="button"
+          className="sidebar-footer-btn"
           onClick={onOpenMcp}
           title="MCP servers"
         >
@@ -147,12 +159,11 @@ export function Sidebar({
         <button
           type="button"
           className="sidebar-footer-btn"
-          onClick={onOpenSettings}
+          onClick={onOpenAppSettings}
           title="Settings"
         >
           <IconSettings size={17} />
           {!collapsed && <span>Settings</span>}
-          {activeProviderCount === 0 && <span className="sidebar-footer-dot" title="No active providers" />}
         </button>
       </div>
     </aside>
