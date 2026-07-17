@@ -359,9 +359,11 @@ export function ProvidersPanel({
     setEditingId(null);
   }
 
+  const installedTypes = new Set(providers.map((p) => p.type));
+
   return (
     <div className="settings-overlay">
-      <div className="settings-panel">
+      <div className="settings-panel settings-panel-wide">
         <div className="settings-header">
           <h2>Providers</h2>
           <button type="button" className="btn btn-ghost btn-sm" onClick={onClose}>
@@ -379,6 +381,7 @@ export function ProvidersPanel({
 
         {formError && <p className="error">{formError}</p>}
 
+        <h3 className="mcp-section-title">Your providers</h3>
         <ul className="provider-list">
           {providers.map((p, i) =>
             editingId === p.id ? (
@@ -445,24 +448,32 @@ export function ProvidersPanel({
         </ul>
 
         <form className="add-provider-form" onSubmit={handleAdd}>
-          <h3>Add a provider</h3>
-          <label>
-            Provider
-            <select value={type} onChange={(e) => handleTypeChange(e.currentTarget.value as ProviderType)}>
-              {SELECTABLE_PROVIDER_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {PROVIDER_MANIFEST[t].label}
-                  {PROVIDER_MANIFEST[t].recommended ? " ★" : ""}
-                </option>
-              ))}
-            </select>
-          </label>
-          <p className="provider-free-note">
-            {PROVIDER_MANIFEST[type].recommended && (
-              <span className="provider-badge-recommended">Recommended</span>
-            )}
-            {PROVIDER_MANIFEST[type].freeTierNote}
-          </p>
+          <h3 className="mcp-section-title">Add a provider</h3>
+          <ul className="provider-type-grid">
+            {SELECTABLE_PROVIDER_TYPES.map((t) => (
+              <li key={t}>
+                <button
+                  type="button"
+                  className={`provider-type-card${type === t ? " provider-type-card-selected" : ""}`}
+                  onClick={() => handleTypeChange(t)}
+                  aria-pressed={type === t}
+                >
+                  <span className="provider-type-card-name">
+                    {PROVIDER_MANIFEST[t].label}
+                    {PROVIDER_MANIFEST[t].recommended && (
+                      <span className="provider-badge-recommended">Recommended</span>
+                    )}
+                  </span>
+                  {PROVIDER_MANIFEST[t].freeTierNote && (
+                    <span className="provider-type-card-note">{PROVIDER_MANIFEST[t].freeTierNote}</span>
+                  )}
+                  {installedTypes.has(t) && (
+                    <span className="provider-type-card-configured">✓ Configured</span>
+                  )}
+                </button>
+              </li>
+            ))}
+          </ul>
           <ModelField
             type={type}
             apiKey={apiKey}

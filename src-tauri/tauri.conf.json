@@ -14,9 +14,10 @@
       {
         "title": "studyllm",
         "width": 1000,
-        "height": 720,
+        "height": 680,
         "minWidth": 640,
-        "minHeight": 480
+        "minHeight": 480,
+        "center": true
       }
     ],
     "security": {

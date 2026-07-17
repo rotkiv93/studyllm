@@ -359,6 +359,29 @@ Full original architecture/phase plan: `C:\Users\47852\.claude\plans\i-want-to-c
   - Verified via `npm run build` (tsc strict + vite) and `npm run lint` (clean, pre-existing
     unrelated warnings only). Not yet visually click-tested in the running app — the user already
     had `npm run tauri dev` open, which should hot-reload these changes via Vite HMR.
+- **Providers/MCP panel polish + window sizing, this session** (user-requested UI pass):
+  - `ProvidersPanel` now uses the `.settings-panel-wide` chrome (720px, was the default 560px) and
+    is split into two clearly-separated sections: an **"Your providers"** list (the installed/added
+    providers) on top, and an **"Add a provider"** section below whose provider picker is now a
+    selectable **card grid** (`.provider-type-grid`/`.provider-type-card`) instead of a `<select>`.
+    Each card shows the label, Recommended badge, free-tier note, and a "✓ Configured" marker when a
+    provider of that type is already added (`installedTypes` set over `providers`). Selecting a card
+    drives the same `type` state the old dropdown did, so the model + API-key fields below are
+    unchanged. This gives the "installed in one part, not-installed in another part" separation the
+    user asked for while keeping multi-key failover (you can still re-select an already-configured
+    type to add another key).
+  - `McpPanel`: the installed-servers search box moved to the **top** of the Installed tab (above
+    the Pinned / All servers sections) and now filters *both* sections (`matchesQuery` applied to
+    `pinned` and `rest`); the filesystem "Add…" empty card hides while a query is active. Layout is
+    now consistent with the Providers view (section titles + card lists in a wide panel).
+  - `McpPanel` also gained `.settings-panel-tall` (`min-height: min(78vh, 660px)`) so switching
+    Installed → Discover no longer collapses/re-centers the panel while the marketplace search
+    loads (the previous "it shrinks until the search completes" jump). No separate loading screen —
+    the reserved height just keeps the frame stable.
+  - `tauri.conf.json` window: `height` 720 → 680 and added `"center": true` so the window stops
+    landing partially under the Windows taskbar.
+  - Verified: `npx tsc --noEmit` clean; relaunched `npm run tauri dev` (incremental Rust build,
+    app window opens with the new size).
 
 ## Visual design system (Phase 5 slice)
 

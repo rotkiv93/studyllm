@@ -403,11 +403,10 @@ export function McpPanel({
   }
 
   const hasFilesystem = servers.some((s) => s.kind === "filesystem");
-  const pinned = servers.filter(isPinned);
   const query = search.trim().toLowerCase();
-  const rest = servers
-    .filter((s) => !isPinned(s))
-    .filter((s) => !query || s.name.toLowerCase().includes(query));
+  const matchesQuery = (s: McpServerRow) => !query || s.name.toLowerCase().includes(query);
+  const pinned = servers.filter(isPinned).filter(matchesQuery);
+  const rest = servers.filter((s) => !isPinned(s)).filter(matchesQuery);
 
   function renderServerCard(s: McpServerRow) {
     const status = statuses[s.id] ?? "stopped";
@@ -537,7 +536,7 @@ export function McpPanel({
 
   return (
     <div className="settings-overlay">
-      <div className="settings-panel settings-panel-wide">
+      <div className="settings-panel settings-panel-wide settings-panel-tall">
         <div className="settings-header">
           <h2>MCP Servers</h2>
           <button type="button" className="btn btn-ghost btn-sm" onClick={onClose}>
@@ -578,10 +577,17 @@ export function McpPanel({
             {formError && <p className="error">{formError}</p>}
             {runtimeLog && <p className="notice">{runtimeLog}</p>}
 
+            <input
+              className="mcp-search"
+              placeholder="Search installed servers…"
+              value={search}
+              onChange={(e) => setSearch(e.currentTarget.value)}
+            />
+
             <h3 className="mcp-section-title">Pinned</h3>
             <ul className="provider-list mcp-card-list">
               {pinned.map(renderServerCard)}
-              {!hasFilesystem && (
+              {!hasFilesystem && !query && (
                 <li className="mcp-server-card mcp-server-card-empty">
                   <div className="provider-row-main">
                     <strong>Filesystem</strong>
@@ -592,15 +598,14 @@ export function McpPanel({
                   </button>
                 </li>
               )}
+              {pinned.length === 0 && (query || hasFilesystem) && (
+                <li className="empty-state">
+                  {query ? "No pinned servers match your search." : "No pinned servers."}
+                </li>
+              )}
             </ul>
 
             <h3 className="mcp-section-title">All servers</h3>
-            <input
-              className="mcp-search"
-              placeholder="Search installed servers…"
-              value={search}
-              onChange={(e) => setSearch(e.currentTarget.value)}
-            />
             <ul className="provider-list mcp-card-list">
               {rest.map(renderServerCard)}
               {rest.length === 0 && (

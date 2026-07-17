@@ -1153,6 +1153,12 @@ button {
   width: min(720px, 94vw);
 }
 
+/* Reserve a stable height so switching tabs (e.g. Installed → Discover) doesn't
+   collapse the panel and re-center it while content loads. */
+.settings-panel-tall {
+  min-height: min(78vh, 660px);
+}
+
 .settings-header {
   display: flex;
   justify-content: space-between;
@@ -1254,6 +1260,67 @@ button {
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  font-weight: var(--font-weight-medium);
+}
+
+/* Selectable cards for picking which provider to add (the "not installed" side). */
+.provider-type-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--space-2);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.provider-type-grid li {
+  min-width: 0;
+}
+
+.provider-type-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.3rem;
+  width: 100%;
+  text-align: left;
+  padding: var(--space-3);
+  background: var(--color-surface-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-primary);
+  transition: border-color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.provider-type-card:hover {
+  border-color: var(--color-border-strong);
+}
+
+.provider-type-card-selected,
+.provider-type-card-selected:hover {
+  border-color: var(--color-accent);
+  background: var(--color-accent-soft);
+}
+
+.provider-type-card-name {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-sm);
+}
+
+.provider-type-card-note {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  line-height: var(--line-height-normal);
+}
+
+.provider-type-card-configured {
+  margin-top: auto;
+  font-size: var(--font-size-xs);
+  color: var(--color-success);
   font-weight: var(--font-weight-medium);
 }
 
