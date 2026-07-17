@@ -159,6 +159,22 @@ Full original architecture/phase plan: `C:\Users\47852\.claude\plans\i-want-to-c
   - Re-verified with the same throwaway-Playwright-on-`npm run dev` approach: sidebar renders and
     collapses correctly in both light and dark emulated schemes, no new console errors beyond the
     expected Tauri-`invoke`-missing ones outside the native shell.
+  - **Chat view overhaul (tool calls + markdown), this session**: tool calls are now their own
+    collapsible component (`src/components/ToolCallBlock.tsx`) instead of a flat `<pre>` dump — a
+    status pill (spinner/check/X for pending/success/error), the real tool name plus its owning MCP
+    server name (decoded from the internal `${serverId}_${toolName}` key — server ids are UUIDs and
+    never contain `_`, so the first `_` is always the split point), collapsed by default and
+    auto-expanding on error; expanded view pretty-prints input/output JSON in a `<pre>` capped at
+    `max-height: 260px` with its own scrollbar for long output. Assistant replies now render as real
+    markdown (`src/components/Markdown.tsx`, new deps `react-markdown` + `remark-gfm`) — headings,
+    lists, tables, code blocks, links — instead of plain pre-wrapped text; assistant messages also
+    got a hover-reveal copy-to-clipboard button. New icons in `icons.tsx`: chevron, check, X, copy,
+    spinner. **Bug fixed same session**: `.message`/`.tool-block` were missing `flex-shrink: 0`, so
+    as the `.messages` flex column filled up, flexbox silently shrank earlier message/tool bubbles
+    instead of letting the container scroll (worse on tool blocks, which also have `overflow:
+    hidden` — that drops a flex item's automatic min-size floor from content-size to 0, so it can be
+    squashed all the way down and clip its content instead of showing it). Bubbles now hold their
+    natural height via `flex-shrink: 0` and the tool-output `<pre>` scrolls internally instead.
 
 ## CI / release pipeline (Phase 5, first slice)
 

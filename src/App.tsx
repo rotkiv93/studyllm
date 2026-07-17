@@ -26,7 +26,9 @@ import { SettingsPanel, type ProviderDraft } from "./components/SettingsPanel";
 import { McpPanel } from "./components/McpPanel";
 import { McpMarketplace, type ResolvedInstall } from "./components/McpMarketplace";
 import { Sidebar } from "./components/Sidebar";
-import { IconSend } from "./components/icons";
+import { ToolCallBlock } from "./components/ToolCallBlock";
+import { Markdown } from "./components/Markdown";
+import { IconCheck, IconCopy, IconSend } from "./components/icons";
 import {
   callMcpTool,
   filesystemServerArgs,
@@ -56,6 +58,24 @@ type DisplayMessage =
 
 function sanitizeToolKey(raw: string): string {
   return raw.replace(/[^a-zA-Z0-9_-]/g, "_");
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      className="message-copy"
+      title="Copy message"
+      onClick={async () => {
+        await navigator.clipboard.writeText(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      }}
+    >
+      {copied ? <IconCheck size={13} /> : <IconCopy size={13} />}
+    </button>
+  );
 }
 
 export default function App() {
@@ -478,15 +498,30 @@ export default function App() {
           {messages.length === 0 && <p className="empty-state">Ask anything to get started.</p>}
           {messages.map((m, i) =>
             m.role === "tool" ? (
-              <div key={i} className={`message message-tool${m.isError ? " message-tool-error" : ""}`}>
-                <span className="message-role">🔧 {m.toolName}</span>
-                <pre className="tool-call-input">{JSON.stringify(m.input, null, 2)}</pre>
-                <p>{m.pending ? "Running…" : m.output}</p>
-              </div>
+              <ToolCallBlock
+                key={i}
+                toolName={m.toolName}
+                input={m.input}
+                output={m.output}
+                isError={m.isError}
+                pending={m.pending}
+                mcpServers={mcpServers}
+              />
             ) : (
               <div key={i} className={`message message-${m.role}`}>
-                <span className="message-role">{m.role === "user" ? "You" : "Assistant"}</span>
-                <p>{m.content || (isStreaming && i === messages.length - 1 ? "…" : "")}</p>
+                <div className="message-head">
+                  <span className="message-role">{m.role === "user" ? "You" : "Assistant"}</span>
+                  {m.role === "assistant" && m.content && !isStreaming && <CopyButton text={m.content} />}
+                </div>
+                {m.role === "assistant" ? (
+                  m.content ? (
+                    <Markdown text={m.content} />
+                  ) : (
+                    <p>{isStreaming && i === messages.length - 1 ? "…" : ""}</p>
+                  )
+                ) : (
+                  <p>{m.content}</p>
+                )}
               </div>
             ),
           )}
