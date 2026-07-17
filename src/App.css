@@ -1363,6 +1363,92 @@ li.provider-edit-row {
   color: var(--color-accent);
 }
 
+/* Model picker: free-text input + capability-badged selectable list + tools filter. */
+.model-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.model-tool-filter {
+  flex-direction: row !important;
+  align-items: center;
+  gap: var(--space-2) !important;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.model-tool-filter input {
+  width: auto !important;
+}
+
+.model-option-list {
+  list-style: none;
+  margin: 0;
+  padding: var(--space-1);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-height: 12rem;
+  overflow-y: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-secondary);
+}
+
+.model-option {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+  text-align: left;
+}
+
+.model-option:hover {
+  background: var(--color-surface-hover);
+}
+
+.model-option-selected {
+  background: var(--color-accent-soft);
+  color: var(--color-accent-active);
+}
+
+.model-option-id {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-family-mono);
+}
+
+.model-badge {
+  flex-shrink: 0;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  padding: 0.1rem var(--space-2);
+  border-radius: var(--radius-full);
+  border: 1px solid transparent;
+}
+
+.model-badge-tools {
+  color: var(--color-success);
+  background: var(--color-success-soft);
+  border-color: var(--color-success-soft-border);
+}
+
+.model-badge-notools {
+  color: var(--color-text-muted);
+  background: var(--color-bg-subtle);
+  border-color: var(--color-border);
+}
+
 /* ==========================================================================
    MCP panel: pinned cards, search, per-tool permissions
    ========================================================================== */
@@ -1715,4 +1801,11 @@ li.marketplace-card:hover {
   font-size: var(--font-size-sm);
   color: var(--color-success);
   font-weight: var(--font-weight-medium);
+}
+
+.plugin-connected-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: var(--space-2) 0;
 }

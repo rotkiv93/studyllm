@@ -32,6 +32,7 @@ import { ProvidersPanel, type ProviderDraft, type ProviderEditDraft } from "./co
 import { AppSettingsPanel } from "./components/AppSettingsPanel";
 import { McpPanel } from "./components/McpPanel";
 import { type ResolvedInstall } from "./components/McpMarketplace";
+import { PluginsPanel } from "./components/PluginsPanel";
 import { OnboardingWizard } from "./components/OnboardingWizard";
 import { Sidebar } from "./components/Sidebar";
 import { ToolCallBlock } from "./components/ToolCallBlock";
@@ -50,6 +51,9 @@ import {
   stopMcpServer,
   type McpToolInfo,
 } from "./lib/mcp";
+import { oauthConnect, oauthReconnect } from "./lib/oauth";
+import { appendCrashLog } from "./lib/crashlog";
+import { CONNECTORS, type OAuthConnector } from "./lib/googleConnectors";
 import "./App.css";
 
 function newId(): string {
@@ -68,8 +72,11 @@ type DisplayMessage =
       pending: boolean;
     };
 
+/** Some providers (e.g. Gemini, reached via OpenRouter) reject function/tool names that don't
+ * start with a letter or underscore — MCP server ids are UUIDs, which often start with a digit.
+ * The leading "t" guarantees a valid first character regardless of the id. */
 function sanitizeToolKey(raw: string): string {
-  return raw.replace(/[^a-zA-Z0-9_-]/g, "_");
+  return "t" + raw.replace(/[^a-zA-Z0-9_-]/g, "_");
 }
 
 function safeJsonParse(raw: string): unknown {
@@ -110,6 +117,7 @@ export default function App() {
   const [providers, setProviders] = useState<ProviderRow[]>([]);
   const [showProviders, setShowProviders] = useState(false);
   const [showMcp, setShowMcp] = useState(false);
+  const [showPlugins, setShowPlugins] = useState(false);
   const [showAppSettings, setShowAppSettings] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
@@ -291,6 +299,8 @@ export default function App() {
       tool_permissions_json: "{}",
       autostart: 0,
       cached_tools_json: "[]",
+      oauth_provider: null,
+      oauth_expires_at: null,
     });
     await refreshMcpServers();
     await startMcpServer(id, args);
@@ -309,6 +319,20 @@ export default function App() {
   }
 
   async function handleStartMcpServer(server: McpServerRow) {
+    if (server.oauth_provider) {
+      // OAuth-backed rows must never fall into the static-header path below — their access
+      // token expires hourly, so every (re)start goes through a real Google refresh call
+      // instead of resolving whatever was last cached in the (unused, always "{}") env refs.
+      const target = CONNECTORS.flatMap((c) => c.targets).find((t) => t.serverId === server.id);
+      if (!target) throw new Error(`No connector target found for OAuth server '${server.id}'`);
+      const result = await oauthReconnect(server.id, target.provider);
+      setMcpToolsByServer((prev) => ({ ...prev, [server.id]: result.tools }));
+      await updateMcpServer(server.id, {
+        oauth_expires_at: result.expiresAt,
+        cached_tools_json: JSON.stringify(result.tools),
+      });
+      return;
+    }
     const env = await resolveServerEnv(server);
     if (server.transport === "remote-http" && server.url) {
       await startRemoteMcpServer(server.id, server.url, env);
@@ -351,10 +375,70 @@ export default function App() {
       tool_permissions_json: "{}",
       autostart: 0,
       cached_tools_json: "[]",
+      oauth_provider: null,
+      oauth_expires_at: null,
     };
     await insertMcpServer(row);
     await refreshMcpServers();
     await handleStartMcpServer(row);
+  }
+
+  async function handleConnectGoogle(connector: OAuthConnector) {
+    const results = await oauthConnect(
+      connector.id,
+      connector.scopes,
+      connector.targets.map((t) => ({ serverId: t.serverId, provider: t.provider })),
+    );
+    for (const result of results) {
+      const target = connector.targets.find((t) => t.serverId === result.serverId);
+      if (!target) continue;
+      const existing = mcpServers.find((s) => s.id === result.serverId);
+      if (existing) {
+        await updateMcpServer(result.serverId, {
+          oauth_expires_at: result.expiresAt,
+          cached_tools_json: JSON.stringify(result.tools),
+        });
+      } else {
+        await insertMcpServer({
+          id: result.serverId,
+          name: target.name,
+          kind: "oauth",
+          command: "",
+          args_json: "[]",
+          scoped_path: null,
+          enabled: 1,
+          created_at: Date.now(),
+          transport: "native",
+          url: null,
+          env_refs_json: "{}",
+          trust_tier: "official",
+          tool_permissions_json: "{}",
+          autostart: 1,
+          cached_tools_json: JSON.stringify(result.tools),
+          oauth_provider: connector.id,
+          oauth_expires_at: result.expiresAt,
+        });
+      }
+      setMcpToolsByServer((prev) => ({ ...prev, [result.serverId]: result.tools }));
+    }
+    // oauth_connect already started each connection Rust-side (host.start_remote), so there's no
+    // need to call handleStartMcpServer here the way handleInstallFromCatalog does.
+    await refreshMcpServers();
+  }
+
+  async function handleDisconnectGoogle(serverIds: string[]) {
+    for (const id of serverIds) {
+      await stopMcpServer(id); // also cancels the Rust-side refresh task (McpHost::stop)
+      await deleteCredential(`mcp:${id}:oauth_access`);
+      await deleteCredential(`mcp:${id}:oauth_refresh`);
+      await deleteMcpServer(id);
+      setMcpToolsByServer((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+    }
+    await refreshMcpServers();
   }
 
   async function handleUpdateMcpServer(
@@ -647,6 +731,9 @@ export default function App() {
               },
             ];
           }
+        } else if (event.type === "error") {
+          setError(`The model's response failed: ${event.message}`);
+          appendCrashLog(`stream error: ${event.message}`).catch(() => {});
         } else if (event.type === "router") {
           const ev = event.event;
           if (ev.kind === "switched") {
@@ -661,9 +748,11 @@ export default function App() {
             await refreshProviders();
           } else if (ev.kind === "exhausted") {
             setError(
-              ev.retryInSeconds > 0
-                ? `All your providers are rate-limited. Try again in ~${ev.retryInSeconds}s.`
-                : "All your providers failed. Check your keys in Settings.",
+              ev.toolsUnsupported
+                ? "None of your models support the connected tools. Pick a tool-capable model in Providers, or disable the MCP tools."
+                : ev.retryInSeconds > 0
+                  ? `All your providers are rate-limited. Try again in ~${ev.retryInSeconds}s.`
+                  : "All your providers failed. Check your keys in Settings.",
             );
           }
         } else if (event.type === "done") {
@@ -791,6 +880,7 @@ export default function App() {
         onRenameConversation={handleRenameConversation}
         onOpenProviders={() => setShowProviders(true)}
         onOpenMcp={() => setShowMcp(true)}
+        onOpenPlugins={() => setShowPlugins(true)}
         onOpenAppSettings={() => setShowAppSettings(true)}
       />
 
@@ -932,6 +1022,16 @@ export default function App() {
           onEditFilesystemPath={handleEditFilesystemPath}
           onInstall={handleInstallFromCatalog}
           onClose={() => setShowMcp(false)}
+        />
+      )}
+
+      {showPlugins && (
+        <PluginsPanel
+          connectors={CONNECTORS}
+          servers={mcpServers}
+          onConnect={handleConnectGoogle}
+          onDisconnect={handleDisconnectGoogle}
+          onClose={() => setShowPlugins(false)}
         />
       )}
 

@@ -6,7 +6,7 @@ use crate::crashlog::CrashLog;
 use super::host::{McpCallOutcome, McpHost, McpToolInfo};
 use super::runtime;
 
-fn emit_status(app: &AppHandle, id: &str, status: &str, message: Option<String>) {
+pub(crate) fn emit_status(app: &AppHandle, id: &str, status: &str, message: Option<String>) {
     if status == "error" {
         app.state::<CrashLog>()
             .append(app, format!("mcp[{id}] failed to start: {}", message.as_deref().unwrap_or("unknown error")));

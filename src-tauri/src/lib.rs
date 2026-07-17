@@ -2,6 +2,7 @@ mod crashlog;
 mod credentials;
 mod db;
 mod mcp;
+mod oauth;
 
 use crashlog::CrashLog;
 use mcp::McpHost;
@@ -41,6 +42,8 @@ pub fn run() {
             mcp::commands::mcp_list_tools,
             mcp::commands::mcp_call_tool,
             mcp::registry::mcp_registry_search,
+            oauth::commands::oauth_connect,
+            oauth::commands::oauth_reconnect,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

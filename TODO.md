@@ -13,12 +13,25 @@ Update both docs together when a task lands.
 
 ## Bigger bets
 
-- [ ] **Google OAuth ("Connect Google Account")**. Still not started — needs a maintainer to
-      register a public PKCE OAuth client in Google Cloud Console first (an account action outside
-      what an agent can do), then a loopback-listener token flow + refresh-token-in-keychain +
-      threading periodic refresh into `start_remote`. See PROJECT_STATUS "Google Workspace" for the
-      full finding; nothing about that finding changed even though `start_remote` itself gained
-      multi-header support this round (that was a prerequisite, not the OAuth flow itself).
+- [x] **Google OAuth ("Connect Google Account") engine + Plugins UI**. Implemented: PKCE +
+      loopback-listener flow, refresh-token-in-keychain, periodic refresh threaded into
+      `McpHost` via a background task, and a new sidebar "Plugins" panel with a one-click "Connect
+      Google Account" card.
+- [x] **Register the real Google Cloud OAuth client** — maintainer registered a "Desktop app"
+      client and confirmed the arbitrary-loopback-port redirect works; `config.rs` has real
+      credentials.
+- [x] **Switch Gmail/Drive access to native REST tools, not Google's managed MCP servers** —
+      confirmed live that `gmailmcp.googleapis.com`/`drivemcp.googleapis.com` return
+      `PERMISSION_DENIED` for a personal `@gmail.com` account regardless of scopes/token validity,
+      because Google's Developer Preview Program requires an actual paid Workspace account.
+      Rebuilt as native, in-process Gmail API v1/Drive API v3 REST tools
+      (`src-tauri/src/mcp/google.rs`, `McpHost::start_native`/`update_native_token`) using the same
+      OAuth consent flow. Also fixed a real bug found along the way: rmcp's `auth_header()` wants a
+      bare token and double-prepended `"Bearer "` on remote OAuth connections.
+- [ ] **Live-test the native tools end-to-end**: Connect completes and lists tools (verified); still
+      needed — an actual `gmail_search_messages`/`drive_search_files`-style tool call from chat, a
+      forced-fast-refresh test (shrink `oauth_expires_at` and observe `update_native_token` fire),
+      and a revoke-then-use test to confirm a clean `isError` tool result instead of a hang.
 - [ ] **Real MCP sandboxing**. Trust tiers are still a naming/repo-URL heuristic; installing a
       community server still runs arbitrary code as the OS user. Any real mitigation (container,
       subprocess sandbox, syscall filter) remains a large, dedicated piece of work — deliberately

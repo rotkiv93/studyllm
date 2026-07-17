@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { ConversationRow } from "../lib/db";
-import { IconEdit, IconKey, IconMenu, IconMessage, IconPlus, IconSettings, IconTool, IconTrash } from "./icons";
+import { IconEdit, IconKey, IconMenu, IconMessage, IconPlug, IconPlus, IconSettings, IconTool, IconTrash } from "./icons";
 
 interface Props {
   conversations: ConversationRow[];
@@ -16,6 +16,7 @@ interface Props {
   onRenameConversation: (id: string, title: string) => void;
   onOpenProviders: () => void;
   onOpenMcp: () => void;
+  onOpenPlugins: () => void;
   onOpenAppSettings: () => void;
 }
 
@@ -33,6 +34,7 @@ export function Sidebar({
   onRenameConversation,
   onOpenProviders,
   onOpenMcp,
+  onOpenPlugins,
   onOpenAppSettings,
 }: Props) {
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -155,6 +157,15 @@ export function Sidebar({
           <IconTool size={17} />
           {!collapsed && <span>MCP servers</span>}
           {mcpRunningCount > 0 && <span className="sidebar-footer-badge">{mcpRunningCount}</span>}
+        </button>
+        <button
+          type="button"
+          className="sidebar-footer-btn"
+          onClick={onOpenPlugins}
+          title="Plugins"
+        >
+          <IconPlug size={17} />
+          {!collapsed && <span>Plugins</span>}
         </button>
         <button
           type="button"

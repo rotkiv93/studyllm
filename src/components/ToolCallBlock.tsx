@@ -11,13 +11,16 @@ export interface ToolCallBlockProps {
   mcpServers: McpServerRow[];
 }
 
-/** Sanitized tool keys look like `${serverId}_${toolName}`; server ids (UUIDs) never
- * contain underscores, so the first underscore is always the real separator. */
+/** Sanitized tool keys look like `t${serverId}_${toolName}` — a leading "t" (so the key always
+ * starts with a letter, see sanitizeToolKey in App.tsx) followed by the server id and tool name.
+ * Server ids (UUIDs) never contain underscores, so the first underscore is always the real
+ * separator. */
 function resolveToolLabel(rawKey: string, servers: McpServerRow[]): { server: string | null; tool: string } {
-  const sep = rawKey.indexOf("_");
+  const withoutPrefix = rawKey.startsWith("t") ? rawKey.slice(1) : rawKey;
+  const sep = withoutPrefix.indexOf("_");
   if (sep === -1) return { server: null, tool: rawKey };
-  const serverId = rawKey.slice(0, sep);
-  const tool = rawKey.slice(sep + 1);
+  const serverId = withoutPrefix.slice(0, sep);
+  const tool = withoutPrefix.slice(sep + 1);
   const server = servers.find((s) => s.id === serverId);
   return { server: server?.name ?? null, tool };
 }

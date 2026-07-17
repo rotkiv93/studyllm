@@ -64,13 +64,20 @@ export interface McpServerRow {
   /** JSON: McpToolInfo[] snapshot from the last time this server was running — lets the tool
    * permission UI work while the server is stopped. */
   cached_tools_json: string;
+  /** Set (e.g. `"google"`) only for servers connected via the Plugins OAuth flow; null for every
+   * other server kind. Drives `McpPanel`'s pinning/edit-form branching instead of name-sniffing. */
+  oauth_provider: string | null;
+  /** Epoch milliseconds the current OAuth access token expires at; null for non-OAuth servers.
+   * Only informational on the frontend — the Rust-side refresh loop is what actually keeps the
+   * connection alive, this is just kept in sync for display/autostart-reconnect purposes. */
+  oauth_expires_at: number | null;
 }
 
 export interface ToolCallRow {
   id: string;
   message_id: string;
   tool_call_id: string;
-  /** `${serverId}_${toolName}` — same sanitized key used to register the dynamicTool. */
+  /** `t${serverId}_${toolName}` — same sanitized key used to register the dynamicTool. */
   tool_key: string;
   input_json: string;
   output_text: string | null;
@@ -287,8 +294,8 @@ export async function insertMcpServer(row: McpServerRow): Promise<void> {
   const db = await getDb();
   await db.execute(
     `INSERT INTO mcp_servers
-       (id, name, kind, command, args_json, scoped_path, enabled, created_at, transport, url, env_refs_json, trust_tier, tool_permissions_json, autostart, cached_tools_json)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+       (id, name, kind, command, args_json, scoped_path, enabled, created_at, transport, url, env_refs_json, trust_tier, tool_permissions_json, autostart, cached_tools_json, oauth_provider, oauth_expires_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
     [
       row.id,
       row.name,
@@ -305,6 +312,8 @@ export async function insertMcpServer(row: McpServerRow): Promise<void> {
       row.tool_permissions_json,
       row.autostart,
       row.cached_tools_json,
+      row.oauth_provider,
+      row.oauth_expires_at,
     ],
   );
 }
@@ -322,6 +331,7 @@ export async function updateMcpServer(
       | "tool_permissions_json"
       | "autostart"
       | "cached_tools_json"
+      | "oauth_expires_at"
     >
   >,
 ): Promise<void> {

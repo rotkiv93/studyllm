@@ -38,7 +38,8 @@ export function OnboardingWizard({ onAddProvider, onAddFilesystem, onClose }: Pr
       const models = await fetchProviderModels(type, apiKey);
       if (models && models.length > 0) {
         setVerifyStatus("verified");
-        model = models[0];
+        // Seed a tool-capable model when we can tell one apart; otherwise the first id.
+        model = (models.find((m) => m.supportsTools === true) ?? models[0]).id;
       } else {
         setVerifyStatus("unverified");
         setBusy(false);

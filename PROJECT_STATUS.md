@@ -27,6 +27,9 @@ Full original architecture/phase plan: `C:\Users\47852\.claude\plans\i-want-to-c
   `host.rs` manages running server processes, `runtime.rs` resolves/bootstraps a `npx` binary,
   `commands.rs` exposes it to the frontend as Tauri commands + `mcp://server-status-changed` /
   `mcp://runtime-log` events.
+- **OAuth ("Plugins")** (`src-tauri/src/oauth/`): PKCE + loopback-redirect Google sign-in engine,
+  feeding `McpHost::start_native` with a live, auto-refreshed access token against native Gmail/Drive
+  REST tools (`mcp/google.rs`) — not Google's managed MCP servers. See "Google Workspace" below.
 
 ## Phase status (see the plan doc above for full phase definitions)
 
@@ -56,7 +59,94 @@ Full original architecture/phase plan: `C:\Users\47852\.claude\plans\i-want-to-c
   (Whisper/TTS/embedding/image/video models). On any failure (bad key, offline, unsupported
   provider) it silently falls back to the static `suggestedModels` datalist — the model field is
   and remains a plain free-text `<input>`, so a model id can always be typed manually regardless.
-  `SettingsPanel.tsx` shows a small status line (loading/loaded-N/unavailable) below the field.
+  `ProvidersPanel.tsx` shows a small status line (loading/loaded-N/unavailable) below the field.
+- **Tool-calling compatibility (capability-aware model selection + graceful fail-over)**: many
+  free-tier models don't support tool/function calling, which previously failed opaquely once any
+  MCP tool was attached. Two coordinated pieces now address this:
+  - **Model picker badges + filter** (`src/lib/modelCatalog.ts`, `src/lib/providerModels.ts`,
+    `ProvidersPanel.tsx`'s new shared `ModelField`): `fetchProviderModels` now returns
+    `ModelInfo[]` (`{ id, supportsTools? }`). Tool support is resolved in order — the provider's
+    own metadata (OpenRouter's `supported_parameters` includes `"tools"`; Mistral's
+    `capabilities.function_calling`) → the external **models.dev catalog**
+    (`https://models.dev/api.json`, keyless, keyed provider→model→`tool_call`; fetched once,
+    memoized + `localStorage`-cached ~24h, covers the providers whose own endpoints expose no
+    capability) → `undefined` (unknown). `ModelField` badges tool-capable models (`✓ tools` /
+    subtle `no tools`) and offers a **"Tool-compatible only"** filter (default on) that hides only
+    models known to reject tools; unknowns are always shown and the field stays free-text.
+    `OnboardingWizard.tsx` seeds the first tool-capable model when it can tell.
+  - **Router fail-over** (`src/lib/providerRouter.ts`): `streamReply` derives `toolsAttached`, and
+    on a tools-not-supported failure (a 400/422 `APICallError` — or an in-stream `error` part —
+    whose text matches `/tool|function.?call/i`) it records the `providerId:model` as tool-
+    incompatible **for the session** and fails over to the next provider with the distinct reason
+    "model can't use tools" (no cooldown — the model, not the provider, is the problem). The
+    incompatible model is skipped on later tool-requiring turns but stays fully usable for tool-free
+    turns. When every candidate is tool-incompatible the `exhausted` event carries
+    `toolsUnsupported: true`, and `App.tsx` shows "None of your models support the connected tools —
+    pick a tool-capable model … or disable the MCP tools." Learning is session-only (no DB column).
+- **Fixed this session — three real bugs that made tool calls fail against the maintainer's own
+  live setup**, found by actually driving the built app end-to-end (Tauri's WebDriver support via
+  `tauri-driver` + `msedgedriver`, real provider keys pulled from the OS keychain, the real
+  Filesystem/Gmail/Drive MCP servers) rather than reading the code for correctness:
+  - **Tool names starting with a digit hard-crashed every tool-enabled request on Gemini-family
+    models.** `buildMcpTools()` in `App.tsx` keys each `dynamicTool` as `${serverId}_${toolName}`
+    (`serverId` is a UUID). Gemini's function-calling API (reached here via OpenRouter's Google AI
+    Studio backend) rejects any function name that doesn't start with a letter or underscore —
+    roughly 5/8 of UUIDs start with a digit, so this failed unpredictably depending on which MCP
+    server the id happened to belong to, with a fairly opaque `AI_APICallError: Provider returned
+    error` (400). Fixed: `sanitizeToolKey` (`App.tsx`) now prefixes every key with a fixed `t`,
+    guaranteeing a valid first character regardless of the id. `ToolCallBlock.tsx`'s
+    `resolveToolLabel` (decodes the key back to server/tool name for display) strips that prefix
+    before splitting; it falls back to the un-prefixed split for any pre-existing persisted
+    `tool_calls` rows that don't start with `t` (backward compatible for chat history).
+  - **A rate-limit that survived the AI SDK's own internal retries surfaced as an unrecoverable
+    dead end instead of failing over.** Two related gaps in `providerRouter.ts`: (1) once
+    `streamText`'s built-in retry-with-backoff exhausts its attempts against a 429/5xx, it throws
+    an `AI_RetryError` wrapping the underlying `APICallError`s — not an `APICallError` itself — so
+    the existing `APICallError.isInstance()`/`statusCode` checks silently fell through to the
+    generic "request failed" branch and lost the real status/retry-after; (2) a step-level error
+    delivered as an in-stream `part.type === "error"` (as opposed to a thrown exception) only ever
+    checked for a tool-support message match and otherwise `yield`ed a fatal `error` event and
+    `return`ed immediately — no cooldown, no failover to other configured providers, turn just
+    dies. Fixed: a new `unwrapError()` helper unwraps `RetryError.lastError` before classification
+    (used in both the tools-unsupported check and the statusCode branch), and the in-stream error
+    branch now `throw`s `part.error` so it runs through the exact same classify/cooldown/failover
+    logic as a thrown pre-stream error instead of duplicating (and under-handling) it.
+  - **Groq's Llama 3.3 occasionally garbles its own tool-call output badly enough that Groq's
+    parser 400s (`code: "tool_use_failed"`), and the identical request reliably succeeds on an
+    immediate retry** (confirmed empirically — same request, 2 of 3 raw attempts failed this way,
+    1 succeeded; a 6-run loop through the real `ProviderRouter` showed the same pattern). This
+    isn't a capability gap (the model *can* call tools, and does most of the time) so treating it
+    like the tools-unsupported case would wrongly blacklist a perfectly good model for the rest of
+    the session. Fixed: `isMalformedToolCallError()` duck-types this specific error shape (Groq
+    delivers it as a plain `{message, type, code}` object, not an `Error`/`APICallError`
+    instance) and `streamReply` retries the *same* candidate in place, up to
+    `MAX_MALFORMED_TOOL_CALL_RETRIES` (2) times, before falling through to normal failover — no
+    cooldown, no "switched" event, since it's neither the provider's nor really the model's fault.
+  - Also corrected a stale entry in the maintainer's own provider config found while reproducing
+    this against their real setup: the Cerebras provider was pointed at `llama-3.3-70b`, which
+    Cerebras has since removed from its catalog entirely (every request to it would 400) —
+    repointed to `gpt-oss-120b` (tool-capable per models.dev, currently on Cerebras's catalog). Groq
+    and Cerebras were also both individually re-enabled (only OpenRouter was on, a single point of
+    failure that made every free-tier rate limit user-facing instead of triggering fail-over).
+  - **Known limitation surfaced, not a code bug**: the maintainer's Cerebras account currently
+    returns `402 payment_required` ("Payment required to access this resource. Visit your billing
+    tab.") on *every* Cerebras model, confirmed via direct API calls outside the app — this is
+    Cerebras-side account/billing state, not something fixable here. The router already degrades
+    gracefully around it (classified as a generic request failure → short cooldown → fails over to
+    the next configured provider, no crash) but Cerebras itself won't serve real replies until the
+    maintainer resolves it at https://cloud.cerebras.ai's billing tab.
+  - Verified: `npx tsc --noEmit` clean, `npm test` (21/21) clean, plus live verification against
+    real provider APIs and the real built app (Tauri's WebDriver support via `tauri-driver` +
+    `msedgedriver`, driving `src-tauri/target/debug/studyllm.exe` end-to-end) — a standalone repro
+    against the raw `ai`/`@ai-sdk/openai-compatible` packages reproduced the Gemini 400 before the
+    fix and confirmed it gone after; a `ProviderRouter`-level repro against real Groq credentials
+    showed a full successful tool-call → tool-result → final-answer round trip; a live run through
+    the actual app UI showed clean graceful fail-over across all three configured providers
+    (Groq → Cerebras → OpenRouter) ending in an accurate "All your providers are rate-limited, try
+    again in ~Ns" instead of a crash, once this session's own repeated testing had incidentally
+    exhausted Groq's free daily token cap and hit OpenRouter's upstream congestion on the free Gemma
+    model — both temporary, external, and unrelated to the code fixes above. A one-shot check is
+    scheduled for once Groq's quota resets to do one further live confirmation.
 - **Phase 5 — polish, CI/release, onboarding**: ✅ Done, by deliberate design choice rather than
   left incomplete. Code signing (Windows Authenticode, Apple Developer ID + notarization) and the
   Tauri auto-updater were both fully wired at one point this project's history, but **removed on
@@ -357,37 +447,131 @@ Full original architecture/phase plan: `C:\Users\47852\.claude\plans\i-want-to-c
   website (maintainers)". README's hero section links to it pre-emptively
   (`https://rotkiv93.github.io/studyllm/`).
 
-## Google Workspace (Gmail/Drive) MCP access — researched, not integrated
+## Google Workspace (Gmail/Drive) access — "Plugins" OAuth flow, native REST tools (not managed MCP)
 
-Investigated whether students could get one-click Gmail/Drive tool access the same way they
-install any other marketplace MCP server. Finding: **no easy path exists today**, for either
-option researched:
-- **Google's own official remote Gmail MCP server** (`https://gmailmcp.googleapis.com/mcp/v1`)
-  requires a full OAuth 2.0 authorization-code-with-browser-redirect flow against a *pre-registered*
-  OAuth client ID + secret + redirect URI in Google Cloud Console — there's no static/long-lived
-  token shortcut. This app's remote-server install flow only supports pasting a single static
-  bearer token (see the existing "Remote auth is limited to a single bearer token" limitation
-  above), so it can't drive this without new engineering.
-- **Community npx-installable servers** (e.g. `@gongrzhe/server-gmail-autoauth-mcp`) still require
-  *the end user* to create their own Google Cloud project, enable the Gmail API, generate OAuth
-  credentials, and run a one-time `npx ... auth` terminal command before the server will start —
-  arguably more technical than the free-tier LLM API key flow this app already asks students to do.
-- A genuinely easy version would mean StudyLLM registering its own public (PKCE, no-client-secret)
-  OAuth client with Google, shipping that client id in the app, and building a native
-  "Connect Google Account" flow: system-browser consent → local-loopback Tauri HTTP listener to
-  catch the redirect → token exchange → refresh-token in the OS keychain → periodic access-token
-  refresh threaded into `McpHost::start_remote`'s single-bearer-token model (which currently
-  captures the token once at connect time, not per-call). That's real, scoped, buildable work —
-  but it needs a maintainer to actually create the Google Cloud OAuth client first (an account
-  action outside what an agent can do), and Google's sensitive-scope verification review for a
-  public app adds more lead time. Deliberately not started blind without that groundwork.
+The one-click "Connect Google Account" flow is implemented end-to-end. It calls the plain **Gmail
+API v1 / Drive API v3 REST endpoints directly**, exposed as native, in-process tools
+(`src-tauri/src/mcp/google.rs`) — **not** Google's managed remote MCP servers
+(`gmailmcp.googleapis.com` / `drivemcp.googleapis.com`).
+
+This went back and forth across the session and is now settled with real evidence, not just docs:
+1. First pass: pointed at Google's managed MCP servers, reasoning they might be gated behind a
+   Developer Preview Program with unclear personal-account eligibility.
+2. Reverted to the native-REST approach after the maintainer registered a real OAuth client and
+   the consent screen appeared to let a personal account grant the Gmail-MCP/Drive-MCP scopes
+   directly — seemed to disprove the gating concern.
+3. **Reverted again, this time for good**: connecting with a real, correctly-scoped token against
+   `gmailmcp.googleapis.com` returned `PERMISSION_DENIED: The caller does not have permission`
+   even with both "Gmail MCP API" and "Google Drive MCP API" enabled in Cloud Console. Re-checking
+   Google's Developer Preview Program enrollment page directly confirmed why: enrollment is a
+   **form-based application requiring an actual paid Google Workspace account** — its FAQ states
+   "We cannot add service accounts to the program," and the maintainer's account is a personal
+   `@gmail.com` account. No code-side fix is possible; the managed MCP servers are categorically
+   unreachable from a personal account. Native REST calls need none of that — same OAuth consent
+   screen, just talking to `gmail.googleapis.com` / `www.googleapis.com` (Drive v3) instead.
+
+Along the way, a real bug was also found and fixed in the remote-MCP transport code before this
+final revert: rmcp's `StreamableHttpClientTransportConfig::auth_header()` expects a *bare* bearer
+token and prepends `"Bearer "` itself internally, but the header value being passed in already had
+`"Bearer "` prepended — every remote OAuth-backed request went out as `Authorization: Bearer Bearer
+<token>`, silently rejected as unauthenticated. That's fixed in `mcp/host.rs::start_remote` (strip
+the prefix before calling `auth_header()`) and stays fixed/relevant for any future non-Google
+remote-HTTP server that uses OAuth-style bearer headers, even though Google itself no longer goes
+through that path.
+
+- **OAuth engine** (`src-tauri/src/oauth/{mod.rs,config.rs,flow.rs}`) — unchanged by the native-vs-
+  managed-MCP question, since both need the same PKCE/loopback consent flow: PKCE (S256)
+  code_verifier/code_challenge generation, a from-scratch loopback redirect catcher
+  (`tokio::net::TcpListener` on `127.0.0.1:0`, hand-rolled HTTP request-line parsing — no new HTTP
+  server dependency), authorize-URL building (`access_type=offline&prompt=consent`, required to
+  reliably get a refresh token back), and Google token-exchange/refresh calls via `reqwest`. Google's
+  current docs confirm "Desktop app" OAuth clients accept an arbitrary, OS-assigned loopback port
+  with no pre-registered redirect URI, so `bind_loopback_listener()`'s port-0 approach needs no
+  fixed-port fallback — confirmed by the maintainer's own registered client working. `cargo
+  test`-covered: an RFC 7636 Appendix B PKCE vector, the query parser against canned request lines,
+  and two real-socket integration tests (`await_redirect_catches_a_real_loopback_connection`,
+  `...ignores_stray_requests_then_catches_the_real_one`) that drive an actual `TcpStream` client
+  against the listener. New direct deps: `base64`, `rand`, `sha2`; `tokio` gained the `time` feature.
+  `credentials.rs`'s keyring logic was split into non-command `store`/`load`/`remove` helpers shared
+  by the existing `credentials_*` commands and the OAuth code.
+- **Native Gmail/Drive tools** (`src-tauri/src/mcp/google.rs`): `NativeProvider` (kind `Gmail` or
+  `Drive`, holding the current access token behind a `tokio::sync::RwLock`) exposes a small, static,
+  read-only tool set — `gmail_search_messages`, `gmail_get_message`, `drive_search_files`,
+  `drive_read_file` — each a one-shot `reqwest` call against the real Gmail/Drive REST APIs. A
+  Google API error (4xx/5xx) becomes a soft `McpCallOutcome{is_error:true}` (so the model sees and
+  can reason about it) rather than a hard `Err`; only network/transport failures are hard errors.
+  Gmail body extraction (MIME multipart walking + base64url decode) and the Drive
+  native-doc-vs-binary `mimeType` branch are pure functions covered by `cargo test` against canned
+  JSON fixtures — no network needed to test them.
+- **`McpHost` (`mcp/host.rs`) — `RunningServer` is now an enum**: `Remote { service, tools }` (a
+  real rmcp connection, used by ordinary marketplace remote-HTTP installs) or `Native { provider }`
+  (no live connection to hold open). `start_native`/`update_native_token` are the native
+  counterparts to `start_remote`; a native token refresh is just swapping the string under the
+  provider's lock — no cancel/reconnect, no status flicker, unlike a remote connection's refresh
+  cycle. `RefreshContext` (used by the OAuth refresh loop) no longer carries a target/URL at all,
+  since the only thing that currently gets OAuth treatment (Google) is always native now.
+- **Commands + DB + refresh lifecycle**: `src-tauri/src/oauth/commands.rs` exposes `oauth_connect`
+  (drives one full consent flow, then fans the resulting token pair out to every requested target —
+  Gmail *and* Drive from one consent screen — starting each as a `host.start_native` provider) and
+  `oauth_reconnect` (silent reconnect for an already-connected row, used on app-launch autostart
+  since the previous process's refresh timer died with it). `McpHost` has a `refresh_tasks` map
+  alongside `running`; `stop()` aborts any refresh task before tearing down the connection.
+  `spawn_oauth_refresh` starts a background loop that sleeps until ~5 minutes before the access
+  token's expiry, refreshes it, and calls `update_native_token` with the fresh value. DB migration 6
+  added `mcp_servers.oauth_provider`/`oauth_expires_at` (both null for pre-existing/non-OAuth rows);
+  Google rows now store `transport: "native"`, `url: null`.
+- **Plugins UI**: sidebar view (`Sidebar.tsx`'s 4th icon-rail button, `IconPlug` in `icons.tsx`)
+  opens `PluginsPanel.tsx` — a card grid (reusing the marketplace's `.marketplace-grid`/
+  `li.marketplace-card` chrome) with one card per connector from `src/lib/googleConnectors.ts`'s
+  config-driven registry (now `{serverId, name, provider}` targets, no URL). "Connect Google
+  Account" shows live progress (opening browser / waiting for sign-in / connecting) via a new
+  `oauth://progress` event; once connected, shows a status row per target with a "Disconnect" button
+  (`stopMcpServer` + delete both keychain refs + `deleteMcpServer`). OAuth-backed rows still appear
+  in `McpPanel`'s "Installed" list (pinned via `server.oauth_provider != null` instead of a
+  name-regex) so per-tool permissions keep working, but `EditServerForm` hides the raw URL/env-var
+  fields for them and points to the Plugins panel instead. `App.tsx`'s `handleStartMcpServer` has an
+  OAuth branch (calls `oauthReconnect` instead of the static-header `resolveServerEnv` path) so a
+  stale/expired token is never treated as permanent.
+- **Verified this session**: `cargo test` (28/28, incl. 10 new `mcp::google` unit tests), `cargo
+  check` (clean, no warnings), `npm run build` (tsc strict + vite), `npm run lint` (clean). **Not
+  yet verified**: a real end-to-end tool call from chat against the rebuilt native tools (Connect
+  flow itself — browser round trip, token exchange, provider registration — was live-tested and
+  works; the actual Gmail/Drive REST calls from a model turn have not been exercised yet).
+
+### Setup (manual, human maintainer) — done for the maintainer's own account
+
+1. Google Cloud Console → create/select a project → enable the **Gmail API** and **Google Drive
+   API** (the classic REST APIs — the "Gmail MCP API"/"Google Drive MCP API" services are *not*
+   needed for this native-REST approach, though enabling them is harmless).
+2. Configure the OAuth consent screen (External user type) with scopes `gmail.readonly` and
+   `drive.readonly`. While in Testing mode, add your own Google account as a test user — personal
+   `@gmail.com` accounts work fine here (this is the plain consumer OAuth path every third-party
+   Gmail/Drive integration uses; it's specifically Google's *managed MCP servers* that are
+   Workspace-only).
+3. Create an OAuth 2.0 Client ID of type **"Desktop app"** — confirmed working with the engine's
+   arbitrary-loopback-port redirect, no fixed port needed.
+4. Paste the Client ID/Secret into `src-tauri/src/oauth/config.rs`'s
+   `GOOGLE_OAUTH_CLIENT_ID`/`GOOGLE_OAUTH_CLIENT_SECRET` — **done** for the maintainer's own client.
+   Watch out: a naive find-and-replace of the placeholder client ID string will also silently break
+   `is_configured()`'s comparison (it checks the constant against the *literal placeholder*, not
+   against itself) — hit this once already this session, fixed by keeping that comparison string as
+   `"REPLACE_ME.apps.googleusercontent.com"` regardless of what the constant above it holds.
+5. `npm run tauri dev` → Plugins → "Connect Google Account" opens a real Google consent screen.
+
+Remaining verification gaps: a real tool call from chat against the rebuilt native Gmail/Drive
+tools, a forced-fast-refresh test (shrink a stored `oauth_expires_at` to observe a live
+`update_native_token`), and a revoke-then-use test (confirm a clean `PERMISSION_DENIED`-style error
+surfaces as a tool `isError`, not a hang) — see `TODO.md`.
 
 ## Key files (orientation)
 
 - `src/App.tsx` — top-level UI state, chat send/receive loop (`runSend`, with `sendMessage` as its
   form-submit wrapper), wires providers + MCP tools together; also owns catalog-install → SQLite-row
   → keychain-secret → server-start orchestration (`handleInstallFromCatalog`/
-  `handleStartMcpServer`/`resolveServerEnv`), conversation history navigation
+  `handleStartMcpServer`/`resolveServerEnv`), the Plugins OAuth flow
+  (`handleConnectGoogle`/`handleDisconnectGoogle` — mirrors the catalog-install shape but is driven
+  by `oauth_connect`/`oauth_reconnect` instead of a marketplace form; `handleStartMcpServer` branches
+  to `oauthReconnect` for any row with `oauth_provider` set), conversation history navigation
   (`handleNewChat`/`handleSelectConversation`/`handleDeleteConversation`/`handleRenameConversation`,
   replaying persisted tool calls interleaved with text via `text_offset`), message
   edit/retry (`handleEditMessage`/`handleRetryMessage`/`truncateFrom`), stream cancellation
@@ -395,9 +579,17 @@ option researched:
   `resolveApproval` + the approval modal), MCP server config editing
   (`handleUpdateMcpServer`/`handleUpdateMcpServerEnv`/`handleEditFilesystemPath`).
 - `src/components/Sidebar.tsx` — left-hand conversation history list + collapsible icon rail that
-  opens the Providers/MCP Servers/Settings panels (Claude-desktop-style shell);
+  opens the Providers/MCP Servers/Plugins/Settings panels (Claude-desktop-style shell);
   `src/components/icons.tsx` — the inline SVG icon set it (and the composer's send button) use.
-- `src/lib/providerRouter.ts` — client-side multi-provider failover + streaming + tool-call events.
+- `src/components/PluginsPanel.tsx` — the "Connect Google Account" card grid (one card per
+  `src/lib/googleConnectors.ts` entry), showing live `oauth://progress` status while connecting and
+  a per-target "Disconnect" once connected. `src/lib/oauth.ts` — typed frontend wrappers for the
+  `oauth_connect`/`oauth_reconnect` Tauri commands + the progress event listener.
+  `src/lib/googleConnectors.ts` — the one place Google's OAuth scopes and target native providers
+  (`gmail`/`drive`) live, see "Google Workspace" below.
+- `src/lib/providerRouter.ts` — client-side multi-provider failover + streaming + tool-call events,
+  including session-scoped tools-unsupported detection (skip a tool-incapable model on tool turns,
+  fail over with reason "model can't use tools").
 - `src/lib/mcp.ts` — typed frontend wrappers for the Rust MCP commands/events, including the
   catalog/registry types (`CatalogEntry`, `InstallSpec`) mirroring `mcp/registry.rs`, and the
   per-tool permission types/helpers (`ToolPermissionMode`, `parseToolPermissions`,
@@ -414,12 +606,19 @@ option researched:
 - `src/components/AppSettingsPanel.tsx` — general app settings: currently just the local crash-log
   viewer (show/reveal/clear), split out of the old `SettingsPanel.tsx`.
 - `src/lib/providerModels.ts` — per-provider live model-list fetching (public catalogs immediately,
-  key-gated ones once an API key is entered), with parsing/filtering per provider and graceful
-  fallback to `null` on any failure.
+  key-gated ones once an API key is entered), returning `ModelInfo[]` (`{ id, supportsTools? }`)
+  with per-provider parsing/filtering, tool-capability from first-party metadata merged with the
+  models.dev catalog, and graceful fallback to `null` on any failure.
+- `src/lib/modelCatalog.ts` — fetches/caches the external models.dev capability catalog
+  (`fetchModelCatalog`, memoized + `localStorage` ~24h TTL) and `lookupToolSupport(catalog, type,
+  id)` mapping our `ProviderType`/model id onto the catalog's `tool_call` flag; degrades to
+  "unknown" (never throws) so the UI is never blocked.
 - `src/components/McpPanel.tsx` — installed/discoverable MCP server management UI behind an
   `Installed`/`Discover` tab switcher (`.mcp-tabs`). Installed tab: pinned cards (Filesystem + any
-  Google-named server) above a searchable "All servers" list, start/stop/remove, inline config
-  editing (`EditServerForm`: name/folder/url/env vars), and an expandable per-tool permission list
+  OAuth-connected server, via `server.oauth_provider != null` — no longer a name regex) above a
+  searchable "All servers" list, start/stop/remove, inline config editing (`EditServerForm`:
+  name/folder/url/env vars — hidden for OAuth-backed rows, which point to the Plugins panel
+  instead), and an expandable per-tool permission list
   (`ToolPermissionRow`) driving `tool_permissions_json`. Delegates actual start logic to
   `App.tsx`'s `onStart`. Discover tab renders `McpMarketplace` inline (see below) via an `onInstall`
   prop instead of opening it as a separate modal.
@@ -436,7 +635,15 @@ option researched:
 - `src-tauri/src/mcp/host.rs` — in-memory registry of running MCP child/remote connections + rmcp
   client calls; `start` (stdio, scoped env, piped stderr forwarded as `mcp://server-log` events)
   and `start_remote` (Streamable HTTP, full resolved header map — see multi-header note above)
-  both funnel into `finish_start`.
+  both funnel into `finish_start`. Also owns the OAuth background refresh lifecycle: a
+  `refresh_tasks` map alongside `running`, `stop()` aborting any refresh task before tearing down
+  the connection, and `spawn_oauth_refresh`/`run_oauth_refresh_loop` (opt-in, called only by
+  `oauth::commands` — ordinary marketplace remote-HTTP servers are untouched).
+- `src-tauri/src/oauth/` — the Google OAuth engine: `flow.rs` (PKCE, the from-scratch loopback
+  redirect listener, authorize-URL building, token exchange/refresh — Tauri-free and `cargo
+  test`-covered), `config.rs` (client id/secret placeholders + `is_configured()`), `commands.rs`
+  (`oauth_connect`/`oauth_reconnect` Tauri commands, fan out one consent screen to N MCP server
+  targets). See "Google Workspace" below for status/prerequisites.
 - `src-tauri/src/mcp/registry.rs` — fetches + tolerantly normalizes the official MCP registry's
   `/v0/servers` response into installable `CatalogEntry`s (`Npx`/`Uvx`/`RemoteHttp`/`Unsupported`);
   has `#[cfg(test)]` unit tests for `normalize()`/`is_latest_version()`.

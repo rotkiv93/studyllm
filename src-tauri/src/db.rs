@@ -118,5 +118,14 @@ pub fn migrations() -> Vec<Migration> {
             "#,
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 6,
+            description: "oauth-backed mcp servers: provider id + token expiry",
+            sql: r#"
+                ALTER TABLE mcp_servers ADD COLUMN oauth_provider TEXT;
+                ALTER TABLE mcp_servers ADD COLUMN oauth_expires_at INTEGER;
+            "#,
+            kind: MigrationKind::Up,
+        },
     ]
 }

@@ -162,3 +162,14 @@ export function IconStop(props: IconProps) {
     </Icon>
   );
 }
+
+export function IconPlug(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M12 22v-5" />
+      <path d="M9 8V2" />
+      <path d="M15 8V2" />
+      <path d="M18 8a2 2 0 0 1 2 2v2a8 8 0 0 1-8 8 8 8 0 0 1-8-8v-2a2 2 0 0 1 2-2Z" />
+    </Icon>
+  );
+}

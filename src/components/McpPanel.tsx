@@ -55,8 +55,7 @@ type PanelTab = "installed" | "discover";
 type Status = "stopped" | "starting" | "running" | "error";
 
 function isPinned(server: McpServerRow): boolean {
-  if (server.kind === "filesystem") return true;
-  return /gmail|google[- ]?drive|google/i.test(server.name);
+  return server.kind === "filesystem" || server.oauth_provider != null;
 }
 
 function describeError(err: unknown): string {
@@ -198,82 +197,88 @@ function EditServerForm({
           </label>
         )}
 
-        {server.transport === "remote-http" && (
-          <label>
-            URL
-            <input value={url} onChange={(e) => setUrl(e.currentTarget.value)} placeholder="https://…" />
-          </label>
-        )}
+        {server.oauth_provider ? (
+          <p className="settings-hint">Manage this connection from the Plugins panel.</p>
+        ) : (
+          <>
+            {server.transport === "remote-http" && (
+              <label>
+                URL
+                <input value={url} onChange={(e) => setUrl(e.currentTarget.value)} placeholder="https://…" />
+              </label>
+            )}
 
-        {(Object.keys(envRefs).length > 0 || newVars.length > 0) && (
-          <div className="mcp-env-edit">
-            <span className="tool-block-section-label">Environment variables</span>
-            {Object.entries(envRefs).map(([key, ref]) => (
-              <div key={key} className="mcp-env-row">
-                <label className={removedKeys.has(key) ? "mcp-env-removed" : ""}>
-                  {key}
-                  {ref.secret && <span className="trust-badge trust-community"> secret</span>}
-                  <input
-                    type={ref.secret ? "password" : "text"}
-                    value={envDrafts[key] ?? ""}
-                    onChange={(e) => setEnvDrafts((prev) => ({ ...prev, [key]: e.currentTarget.value }))}
-                    placeholder={
-                      removedKeys.has(key)
-                        ? "Will be removed on save"
-                        : ref.secret
-                          ? "Leave blank to keep current value"
-                          : ref.value
-                    }
-                    disabled={removedKeys.has(key)}
-                  />
-                </label>
-                <button
-                  type="button"
-                  className={`btn btn-sm ${removedKeys.has(key) ? "btn-secondary" : "btn-danger"}`}
-                  onClick={() => toggleRemoved(key)}
-                >
-                  {removedKeys.has(key) ? "Undo" : "Remove"}
-                </button>
+            {(Object.keys(envRefs).length > 0 || newVars.length > 0) && (
+              <div className="mcp-env-edit">
+                <span className="tool-block-section-label">Environment variables</span>
+                {Object.entries(envRefs).map(([key, ref]) => (
+                  <div key={key} className="mcp-env-row">
+                    <label className={removedKeys.has(key) ? "mcp-env-removed" : ""}>
+                      {key}
+                      {ref.secret && <span className="trust-badge trust-community"> secret</span>}
+                      <input
+                        type={ref.secret ? "password" : "text"}
+                        value={envDrafts[key] ?? ""}
+                        onChange={(e) => setEnvDrafts((prev) => ({ ...prev, [key]: e.currentTarget.value }))}
+                        placeholder={
+                          removedKeys.has(key)
+                            ? "Will be removed on save"
+                            : ref.secret
+                              ? "Leave blank to keep current value"
+                              : ref.value
+                        }
+                        disabled={removedKeys.has(key)}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      className={`btn btn-sm ${removedKeys.has(key) ? "btn-secondary" : "btn-danger"}`}
+                      onClick={() => toggleRemoved(key)}
+                    >
+                      {removedKeys.has(key) ? "Undo" : "Remove"}
+                    </button>
+                  </div>
+                ))}
+
+                {newVars.map((v, i) => (
+                  <div key={i} className="mcp-env-row">
+                    <label>
+                      Name
+                      <input
+                        value={v.name}
+                        onChange={(e) => updateNewVar(i, { name: e.currentTarget.value })}
+                        placeholder="ENV_VAR_NAME"
+                      />
+                    </label>
+                    <label>
+                      Value
+                      <input
+                        type={v.isSecret ? "password" : "text"}
+                        value={v.value}
+                        onChange={(e) => updateNewVar(i, { value: e.currentTarget.value })}
+                      />
+                    </label>
+                    <label className="mcp-env-secret-toggle">
+                      <input
+                        type="checkbox"
+                        checked={v.isSecret}
+                        onChange={(e) => updateNewVar(i, { isSecret: e.currentTarget.checked })}
+                      />
+                      secret
+                    </label>
+                    <button type="button" className="btn btn-danger btn-sm" onClick={() => removeNewVarRow(i)}>
+                      Remove
+                    </button>
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
 
-            {newVars.map((v, i) => (
-              <div key={i} className="mcp-env-row">
-                <label>
-                  Name
-                  <input
-                    value={v.name}
-                    onChange={(e) => updateNewVar(i, { name: e.currentTarget.value })}
-                    placeholder="ENV_VAR_NAME"
-                  />
-                </label>
-                <label>
-                  Value
-                  <input
-                    type={v.isSecret ? "password" : "text"}
-                    value={v.value}
-                    onChange={(e) => updateNewVar(i, { value: e.currentTarget.value })}
-                  />
-                </label>
-                <label className="mcp-env-secret-toggle">
-                  <input
-                    type="checkbox"
-                    checked={v.isSecret}
-                    onChange={(e) => updateNewVar(i, { isSecret: e.currentTarget.checked })}
-                  />
-                  secret
-                </label>
-                <button type="button" className="btn btn-danger btn-sm" onClick={() => removeNewVarRow(i)}>
-                  Remove
-                </button>
-              </div>
-            ))}
-          </div>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={addNewVarRow}>
+              + Add variable
+            </button>
+          </>
         )}
-
-        <button type="button" className="btn btn-secondary btn-sm" onClick={addNewVarRow}>
-          + Add variable
-        </button>
 
         <div className="provider-edit-actions">
           <button type="submit" className="btn btn-primary btn-sm" disabled={busy}>

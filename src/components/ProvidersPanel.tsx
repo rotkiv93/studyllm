@@ -4,7 +4,9 @@ import {
   fetchProviderModels,
   providerModelsNeedApiKey,
   providerSupportsLiveModels,
+  type ModelInfo,
 } from "../lib/providerModels";
+import { fetchModelCatalog, lookupToolSupport, type ModelCatalog } from "../lib/modelCatalog";
 import type { ProviderRow } from "../lib/db";
 
 export interface ProviderDraft {
@@ -32,6 +34,158 @@ interface Props {
   onClose: () => void;
 }
 
+/**
+ * Model picker shared by the add form and the per-provider edit row. Loads the live
+ * model list (falling back to the manifest's suggestions), enriches each model with
+ * tool-calling support from the provider's own metadata and the models.dev catalog,
+ * badges tool-capable models, and offers a "Tool-compatible only" filter. The model is
+ * always a free-text `<input>` too, so any id can still be typed.
+ */
+function ModelField({
+  type,
+  apiKey,
+  model,
+  onChange,
+  idPrefix,
+}: {
+  type: ProviderType;
+  apiKey: string;
+  model: string;
+  onChange: (model: string) => void;
+  idPrefix: string;
+}) {
+  const [liveModels, setLiveModels] = useState<ModelInfo[] | null>(null);
+  const [modelsStatus, setModelsStatus] = useState<"idle" | "loading" | "loaded" | "unavailable">(
+    "idle",
+  );
+  const [catalog, setCatalog] = useState<ModelCatalog | null>(null);
+  const [toolOnly, setToolOnly] = useState(true);
+  const modelsRequestId = useRef(0);
+
+  useEffect(() => {
+    let active = true;
+    fetchModelCatalog().then((c) => {
+      if (active) setCatalog(c);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!providerSupportsLiveModels(type)) {
+      setLiveModels(null);
+      setModelsStatus("idle");
+      return;
+    }
+    if (providerModelsNeedApiKey(type) && !apiKey.trim()) {
+      setLiveModels(null);
+      setModelsStatus("idle");
+      return;
+    }
+
+    setModelsStatus("loading");
+    const requestId = ++modelsRequestId.current;
+    const delay = providerModelsNeedApiKey(type) ? 500 : 0;
+    const timer = setTimeout(async () => {
+      const models = await fetchProviderModels(type, apiKey);
+      if (modelsRequestId.current !== requestId) return; // superseded by a newer request
+      if (models && models.length > 0) {
+        setLiveModels(models);
+        setModelsStatus("loaded");
+      } else {
+        setLiveModels(null);
+        setModelsStatus("unavailable");
+      }
+    }, delay);
+    return () => clearTimeout(timer);
+  }, [type, apiKey]);
+
+  const baseOptions: ModelInfo[] =
+    liveModels ?? PROVIDER_MANIFEST[type].suggestedModels.map((id) => ({ id }));
+
+  // Enrich anything still unknown with the catalog (covers manifest suggestions and
+  // providers whose /models endpoint carries no capability metadata).
+  const options: ModelInfo[] = baseOptions.map((m) =>
+    m.supportsTools === undefined
+      ? { ...m, supportsTools: lookupToolSupport(catalog, type, m.id) }
+      : m,
+  );
+
+  const hasCapabilityInfo = options.some((m) => m.supportsTools !== undefined);
+  const visible =
+    toolOnly && hasCapabilityInfo
+      ? options.filter((m) => m.supportsTools !== false || m.id === model)
+      : options;
+
+  return (
+    <div className="model-field">
+      <label>
+        Model
+        <input
+          value={model}
+          onChange={(e) => onChange(e.currentTarget.value)}
+          list={`models-${idPrefix}`}
+          placeholder="Type or pick a model id…"
+        />
+        <datalist id={`models-${idPrefix}`}>
+          {visible.map((m) => (
+            <option key={m.id} value={m.id} />
+          ))}
+        </datalist>
+      </label>
+
+      {hasCapabilityInfo && (
+        <label className="model-tool-filter">
+          <input
+            type="checkbox"
+            checked={toolOnly}
+            onChange={(e) => setToolOnly(e.currentTarget.checked)}
+          />
+          Tool-compatible only
+        </label>
+      )}
+
+      {visible.length > 0 && (
+        <ul className="model-option-list">
+          {visible.map((m) => (
+            <li key={m.id}>
+              <button
+                type="button"
+                className={`model-option${m.id === model ? " model-option-selected" : ""}`}
+                onClick={() => onChange(m.id)}
+              >
+                <span className="model-option-id">{m.id}</span>
+                {m.supportsTools === true && (
+                  <span className="model-badge model-badge-tools">✓ tools</span>
+                )}
+                {m.supportsTools === false && (
+                  <span className="model-badge model-badge-notools">no tools</span>
+                )}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {providerSupportsLiveModels(type) && (
+        <p className="settings-hint">
+          {modelsStatus === "loading" && "Loading live model list…"}
+          {modelsStatus === "loaded" &&
+            `Loaded ${liveModels?.length ?? 0} live models from ${PROVIDER_MANIFEST[type].label}.`}
+          {modelsStatus === "unavailable" &&
+            (providerModelsNeedApiKey(type)
+              ? "Couldn't load live models with this key — showing suggestions. You can still type any model id."
+              : "Couldn't reach the live model list — showing suggestions. You can still type any model id.")}
+          {modelsStatus === "idle" &&
+            providerModelsNeedApiKey(type) &&
+            "Enter an API key to load this provider's live model list."}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function EditProviderRow({
   provider,
   onSave,
@@ -46,7 +200,6 @@ function EditProviderRow({
   const [apiKey, setApiKey] = useState("");
   const [busy, setBusy] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
-  const modelOptions = PROVIDER_MANIFEST[provider.type].suggestedModels;
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -70,19 +223,13 @@ function EditProviderRow({
           Label
           <input value={label} onChange={(e) => setLabel(e.currentTarget.value)} />
         </label>
-        <label>
-          Model
-          <input
-            value={model}
-            onChange={(e) => setModel(e.currentTarget.value)}
-            list={`edit-models-${provider.id}`}
-          />
-          <datalist id={`edit-models-${provider.id}`}>
-            {modelOptions.map((m) => (
-              <option key={m} value={m} />
-            ))}
-          </datalist>
-        </label>
+        <ModelField
+          type={provider.type}
+          apiKey={apiKey}
+          model={model}
+          onChange={setModel}
+          idPrefix={`edit-${provider.id}`}
+        />
         <label>
           API key
           <input
@@ -122,48 +269,10 @@ export function ProvidersPanel({
   const [formError, setFormError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  const [liveModels, setLiveModels] = useState<string[] | null>(null);
-  const [modelsStatus, setModelsStatus] = useState<"idle" | "loading" | "loaded" | "unavailable">(
-    "idle",
-  );
-
   function handleTypeChange(next: ProviderType) {
     setType(next);
     setModel(PROVIDER_MANIFEST[next].defaultModel);
   }
-
-  const modelsRequestId = useRef(0);
-
-  useEffect(() => {
-    if (!providerSupportsLiveModels(type)) {
-      setLiveModels(null);
-      setModelsStatus("idle");
-      return;
-    }
-    if (providerModelsNeedApiKey(type) && !apiKey.trim()) {
-      setLiveModels(null);
-      setModelsStatus("idle");
-      return;
-    }
-
-    setModelsStatus("loading");
-    const requestId = ++modelsRequestId.current;
-    const delay = providerModelsNeedApiKey(type) ? 500 : 0;
-    const timer = setTimeout(async () => {
-      const models = await fetchProviderModels(type, apiKey);
-      if (modelsRequestId.current !== requestId) return; // superseded by a newer request
-      if (models && models.length > 0) {
-        setLiveModels(models);
-        setModelsStatus("loaded");
-      } else {
-        setLiveModels(null);
-        setModelsStatus("unavailable");
-      }
-    }, delay);
-    return () => clearTimeout(timer);
-  }, [type, apiKey]);
-
-  const modelOptions = liveModels ?? PROVIDER_MANIFEST[type].suggestedModels;
 
   function describeError(err: unknown): string {
     return err instanceof Error ? err.message : String(err);
@@ -310,34 +419,13 @@ export function ProvidersPanel({
               ))}
             </select>
           </label>
-          <label>
-            Model
-            <input
-              value={model}
-              onChange={(e) => setModel(e.currentTarget.value)}
-              list={`models-${type}`}
-              placeholder="Type or pick a model id…"
-            />
-            <datalist id={`models-${type}`}>
-              {modelOptions.map((m) => (
-                <option key={m} value={m} />
-              ))}
-            </datalist>
-          </label>
-          {providerSupportsLiveModels(type) && (
-            <p className="settings-hint">
-              {modelsStatus === "loading" && "Loading live model list…"}
-              {modelsStatus === "loaded" &&
-                `Loaded ${liveModels?.length ?? 0} live models from ${PROVIDER_MANIFEST[type].label}.`}
-              {modelsStatus === "unavailable" &&
-                (providerModelsNeedApiKey(type)
-                  ? "Couldn't load live models with this key — showing suggestions. You can still type any model id."
-                  : "Couldn't reach the live model list — showing suggestions. You can still type any model id.")}
-              {modelsStatus === "idle" &&
-                providerModelsNeedApiKey(type) &&
-                "Enter an API key to load this provider's live model list."}
-            </p>
-          )}
+          <ModelField
+            type={type}
+            apiKey={apiKey}
+            model={model}
+            onChange={setModel}
+            idPrefix={`add-${type}`}
+          />
           <label>
             API key
             <input
