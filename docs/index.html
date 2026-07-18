@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="en">
+<html lang="es">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>StudyLLM — free AI chat for students</title>
-<meta name="description" content="A free, cross-platform desktop AI chat app for students. Bring your own free-tier API keys, never get stuck on rate limits, and give the AI real tools via MCP." />
+<title>StudyLLM — IA para estudiar, gratis</title>
+<meta name="description" content="Una app de escritorio para estudiar con IA. Usa tus propias claves gratuitas, suelta tus apuntes y lecturas, y deja que la IA te ayude con herramientas de verdad." />
 <link rel="icon" href="favicon.png" />
 <style>
   :root {
@@ -57,6 +57,8 @@
     align-items: center;
     justify-content: space-between;
     padding: 1.25rem 0;
+    gap: 1rem;
+    flex-wrap: wrap;
   }
   .brand {
     display: flex;
@@ -72,6 +74,27 @@
   nav.top .links a { color: var(--text-muted); text-decoration: none; }
   nav.top .links a:hover { color: var(--text); }
 
+  .lang-switch {
+    display: inline-flex;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  .lang-switch button {
+    appearance: none;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    font: inherit;
+    font-size: 0.82rem;
+    font-weight: 600;
+    padding: 0.3rem 0.75rem;
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease;
+  }
+  .lang-switch button:hover { color: var(--text); }
+  .lang-switch button.active { background: var(--accent); color: var(--accent-contrast); }
+
   .hero {
     text-align: center;
     padding: 3rem 0 2rem;
@@ -85,7 +108,7 @@
   .hero p.sub {
     color: var(--text-muted);
     font-size: 1.15rem;
-    max-width: 620px;
+    max-width: 640px;
     margin: 0 auto 2rem;
   }
 
@@ -128,6 +151,25 @@
     .hero-shot .dark-shot { display: block; }
   }
 
+  .explore-shot {
+    max-width: 780px;
+    margin: 0 auto;
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .explore-shot img { width: 100%; }
+  .explore-points {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1.25rem;
+    max-width: 780px;
+    margin: 2.5rem auto 0;
+  }
+  .explore-point h3 { margin: 0 0 0.35rem; font-size: 1.02rem; }
+  .explore-point p { margin: 0; color: var(--text-muted); font-size: 0.92rem; }
+
   section { padding: 4rem 0; }
   section.alt { background: var(--bg-soft); }
   h2 {
@@ -139,7 +181,7 @@
   .section-sub {
     text-align: center;
     color: var(--text-muted);
-    max-width: 560px;
+    max-width: 580px;
     margin: 0 auto 2.5rem;
   }
 
@@ -206,99 +248,104 @@
       StudyLLM
     </a>
     <div class="links">
-      <a href="#features">Features</a>
-      <a href="#students">For students</a>
-      <a href="#look">Screenshots</a>
+      <a href="#features" data-i18n="nav_features">Qué hace</a>
+      <a href="#students" data-i18n="nav_students">Para estudiar</a>
+      <a href="#explore" data-i18n="nav_explore">Cómo funciona</a>
+      <a href="#look" data-i18n="nav_look">Capturas</a>
       <a href="https://github.com/rotkiv93/studyllm" target="_blank" rel="noreferrer">GitHub</a>
+      <span class="lang-switch" role="group" aria-label="Idioma / Language">
+        <button type="button" data-lang-btn="es">ES</button>
+        <button type="button" data-lang-btn="en">EN</button>
+      </span>
     </div>
   </nav>
 </div>
 
 <div class="wrap" id="top">
   <section class="hero" style="padding-top: 1rem;">
-    <h1>A free AI chat app,<br />built for students.</h1>
-    <p class="sub">
-      Bring your own free-tier API keys and StudyLLM rotates between them so you never hit a rate
-      limit. Then drop in your readings, pick a study mode, add real research tools, and export your
-      work — no subscription, no server, no catch.
+    <h1 data-i18n="hero_h1">Estudia con IA<br />sin pagar una suscripción.</h1>
+    <p class="sub" data-i18n="hero_sub">
+      Pon tus propias claves gratuitas y StudyLLM va alternando entre ellas para que no te quedes
+      bloqueado. Suelta tus apuntes y lecturas, elige un modo de estudio, añade herramientas de
+      investigación y guarda tu trabajo cuando termines.
     </p>
 
     <div class="downloads" id="downloads">
       <a class="btn btn-primary" href="https://github.com/rotkiv93/studyllm/releases/latest" data-os="windows">
         <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 5.1 10 4v7H3V5.1ZM3 18.9 10 20v-7H3v5.9ZM11 4.05 21 3v8H11V4.05ZM11 20l10-1v-8H11v9Z"/></svg>
-        Download for Windows
+        <span data-i18n="dl_win">Descargar para Windows</span>
       </a>
       <a class="btn btn-secondary" href="https://github.com/rotkiv93/studyllm/releases/latest" data-os="mac">
         <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.36 1.43c.09 1.02-.31 2-.9 2.72-.61.74-1.63 1.32-2.63 1.24-.11-.99.36-2.03.94-2.7.65-.75 1.77-1.3 2.59-1.26ZM19.9 17.3c-.5 1.15-.74 1.66-1.38 2.68-.9 1.42-2.16 3.19-3.73 3.2-1.39.02-1.75-.9-3.63-.89-1.88.01-2.28.9-3.67.88-1.57-.02-2.76-1.61-3.66-3.03-2.51-3.95-2.77-8.58-1.22-11.04.97-1.55 2.71-2.61 4.42-2.63 1.4-.03 2.72.94 3.63.94.9 0 2.53-1.17 4.26-.99a4.36 4.36 0 0 1 3.24 1.76c-2.84 1.56-2.38 5.61.5 6.62-.32.94-.4 1.13-.76 1.5Z"/></svg>
-        Download for macOS
+        <span data-i18n="dl_mac">Descargar para macOS</span>
       </a>
       <a class="btn btn-secondary" href="https://github.com/rotkiv93/studyllm/releases/latest" data-os="linux">
         <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2c1.5 0 2.7 1.4 2.7 3.5 0 1.3-.5 2-.9 2.7.6.3 1.1.8 1.4 1.5.9.4 1.8 1.5 1.8 2.9 0 .6-.2 1.1-.4 1.5.5.5.8 1.2.8 2 0 2-2 3.9-5.4 3.9S6.6 18.1 6.6 16.1c0-.8.3-1.5.8-2-.2-.4-.4-.9-.4-1.5 0-1.4.9-2.5 1.8-2.9.3-.7.8-1.2 1.4-1.5-.4-.7-.9-1.4-.9-2.7C9.3 3.4 10.5 2 12 2Z"/></svg>
-        Download for Linux
+        <span data-i18n="dl_linux">Descargar para Linux</span>
       </a>
     </div>
-    <p class="downloads-note">
-      Installers publish automatically to the
-      <a href="https://github.com/rotkiv93/studyllm/releases" target="_blank" rel="noreferrer">GitHub Releases page</a>.
-      Prefer to build from source? See the <a href="https://github.com/rotkiv93/studyllm#building-it-yourself" target="_blank" rel="noreferrer">README</a>.
+    <p class="downloads-note" data-i18n="dl_note">
+      Los instaladores se publican en la
+      <a href="https://github.com/rotkiv93/studyllm/releases" target="_blank" rel="noreferrer">página de Releases de GitHub</a>.
+      ¿Prefieres compilarlo tú? Mira el <a href="https://github.com/rotkiv93/studyllm#building-it-yourself" target="_blank" rel="noreferrer">README</a>.
     </p>
 
     <div class="hero-shot">
-      <img class="light-shot" src="screenshots/hero-light.png" alt="StudyLLM chat with one-click study modes, light mode" />
-      <img class="dark-shot" src="screenshots/hero.png" alt="StudyLLM chat with one-click study modes, dark mode" />
+      <img class="light-shot" src="screenshots/hero-light.png" data-i18n-alt="shot_hero" alt="Chat de StudyLLM con modos de estudio, tema claro" />
+      <img class="dark-shot" src="screenshots/hero.png" data-i18n-alt="shot_hero" alt="Chat de StudyLLM con modos de estudio, tema oscuro" />
     </div>
   </section>
 </div>
 
 <section id="features">
   <div class="wrap">
-    <h2>Why students like it</h2>
-    <p class="section-sub">Everything a paid AI subscription gives you, minus the bill.</p>
+    <h2 data-i18n="feat_heading">Lo que puedes hacer con ella</h2>
+    <p class="section-sub" data-i18n="feat_sub">Herramientas sencillas para leer, escribir, investigar y repasar.</p>
     <div class="features">
       <div class="feature">
         <span class="emoji">🆓</span>
-        <h3>Actually free</h3>
-        <p>Use free API keys from providers like Google Gemini, Mistral, or Groq instead of paying for ChatGPT Plus or Claude Pro.</p>
+        <h3 data-i18n="f1_h">Gratis de verdad</h3>
+        <p data-i18n="f1_p">Usa claves gratuitas de proveedores como Google Gemini, Mistral o Groq. No hace falta pagar ChatGPT Plus ni Claude Pro.</p>
       </div>
       <div class="feature">
         <span class="emoji">🔄</span>
-        <h3>Never rate-limited</h3>
-        <p>Add more than one provider key and StudyLLM automatically switches the moment one runs dry.</p>
+        <h3 data-i18n="f2_h">Sin límites molestos</h3>
+        <p data-i18n="f2_p">Pon más de una clave y la app cambia sola en cuanto una se queda sin cupo.</p>
       </div>
       <div class="feature">
         <span class="emoji">🎓</span>
-        <h3>One-click study modes</h3>
-        <p>Summarize a reading, explain a treaty, outline a literature review, or make flashcards — ready-made prompts so you never start from a blank box.</p>
+        <h3 data-i18n="f3_h">Modos de estudio</h3>
+        <p data-i18n="f3_p">Resume una lectura, explica un tema, esquematiza un trabajo o crea tarjetas de repaso, con prompts listos para no empezar desde cero.</p>
       </div>
       <div class="feature">
         <span class="emoji">📎</span>
-        <h3>Bring your own files</h3>
-        <p>Drag a PDF, Word document, or notes into the chat and the AI reads it — treaties, articles, readings, whatever you're working with.</p>
+        <h3 data-i18n="f4_h">Tus propios archivos</h3>
+        <p data-i18n="f4_p">Arrastra un PDF, un documento de Word o tus apuntes al chat y la IA los lee: tratados, artículos, lecturas, lo que estés trabajando.</p>
       </div>
       <div class="feature">
         <span class="emoji">🔎</span>
-        <h3>Real research tools</h3>
-        <p>Add keyless tools for reading web links, looking things up on Wikipedia, and searching academic literature — in a couple of clicks.</p>
+        <h3 data-i18n="f5_h">Herramientas de investigación</h3>
+        <p data-i18n="f5_p">Añade herramientas sin clave para leer enlaces, buscar en Wikipedia o consultar literatura académica, en un par de clics.</p>
       </div>
       <div class="feature">
         <span class="emoji">📤</span>
-        <h3>Export your work</h3>
-        <p>Turn any conversation into Markdown or save it straight to a Google Doc when you're ready to hand it off.</p>
+        <h3 data-i18n="f6_h">Guarda tu trabajo</h3>
+        <p data-i18n="f6_p">Convierte cualquier conversación en Markdown o guárdala directamente en un Google Doc cuando quieras entregarla.</p>
       </div>
       <div class="feature">
         <span class="emoji">🔗</span>
-        <h3>Connect your Google account</h3>
-        <p>Let the AI work with your Gmail, Calendar, Tasks, Drive, Docs, and Sheets — you sign in with Google directly and approve anything that sends or changes data.</p>
+        <h3 data-i18n="f7_h">Conecta tu cuenta de Google</h3>
+        <p data-i18n="f7_p">Deja que la IA trabaje con tu Gmail, Calendar, Tasks, Drive, Docs y Sheets. Inicias sesión con Google y apruebas tú cualquier cosa que envíe o cambie datos.</p>
       </div>
       <div class="feature">
         <span class="emoji">🔒</span>
-        <h3>Private by default</h3>
-        <p>Keys live in your OS's secure keychain. Chats go straight from your computer to the AI provider — no StudyLLM server in between.</p>
+        <h3 data-i18n="f8_h">Privado</h3>
+        <p data-i18n="f8_p">Las claves se guardan en el llavero seguro de tu sistema. Los chats van directos de tu ordenador al proveedor de IA, sin ningún servidor de StudyLLM en medio.</p>
       </div>
       <div class="feature">
         <span class="emoji">💻</span>
-        <h3>Cross-platform</h3>
-        <p>Native desktop installers for Windows, macOS, and Linux — no browser tab required.</p>
+        <h3 data-i18n="f9_h">En tu ordenador</h3>
+        <p data-i18n="f9_p">Instaladores nativos para Windows, macOS y Linux. Sin pestañas de navegador ni cuentas nuevas.</p>
       </div>
     </div>
   </div>
@@ -306,49 +353,78 @@
 
 <section id="students">
   <div class="wrap">
-    <h2>Made for how students actually work</h2>
-    <p class="section-sub">Reading, writing, research, and revision — with your own sources, not a blank chat box.</p>
+    <h2 data-i18n="students_heading">Pensada para cómo estudias de verdad</h2>
+    <p class="section-sub" data-i18n="students_sub">Leer, escribir, investigar y repasar, con tus propias fuentes y no con un chat en blanco.</p>
 
     <div class="showcase">
       <div class="showcase-text">
-        <h3>Drop in your readings</h3>
-        <p>
-          Drag a treaty PDF, a Word document, or your notes straight into the chat. StudyLLM pulls
-          out the text so the AI can summarize it, answer questions about it, or pull out the key
-          dates and actors — no copy-pasting walls of text.
+        <h3 data-i18n="sc1_h">Suelta tus lecturas</h3>
+        <p data-i18n="sc1_p">
+          Arrastra un PDF, un documento de Word o tus apuntes al chat. StudyLLM saca el texto para que
+          la IA lo resuma, responda preguntas o te señale las fechas y los nombres clave, sin copiar y
+          pegar párrafos enteros.
         </p>
       </div>
       <div class="showcase-shot">
-        <img src="screenshots/attachments.png" alt="Attaching a document to a StudyLLM message" />
+        <img src="screenshots/attachments.png" data-i18n-alt="shot_attach" alt="Adjuntar un documento a un mensaje de StudyLLM" />
       </div>
     </div>
 
     <div class="showcase reverse">
       <div class="showcase-text">
-        <h3>Research and cite, built in</h3>
-        <p>
-          Add ready-to-use tools in a couple of clicks: read any web link, look things up on
-          Wikipedia, or search academic literature. Every tool shows a clear trust badge, and most
-          need no account or API key at all.
+        <h3 data-i18n="sc2_h">Investiga y cita, ya integrado</h3>
+        <p data-i18n="sc2_p">
+          Añade herramientas listas para usar en un par de clics: leer cualquier enlace, buscar en
+          Wikipedia o consultar literatura académica. Cada herramienta muestra un distintivo de
+          confianza claro y la mayoría no necesita cuenta ni clave.
         </p>
       </div>
       <div class="showcase-shot">
-        <img src="screenshots/discover.png" alt="Discovering research tools in the StudyLLM tool catalog" />
+        <img src="screenshots/discover.png" data-i18n-alt="shot_discover" alt="Descubrir herramientas de investigación en StudyLLM" />
       </div>
     </div>
 
     <div class="showcase">
       <div class="showcase-text">
-        <h3>Bring your Google account</h3>
-        <p>
-          Connect Google once and the AI can help with your Gmail, Calendar, Tasks, Drive, Docs, and
-          Sheets. You sign in with Google directly — StudyLLM never sees your password — and anything
-          that sends an email or changes a file asks for your approval first. Finished a draft?
-          Export the whole conversation to Markdown or save it straight to a Google Doc.
+        <h3 data-i18n="sc3_h">Trae tu cuenta de Google</h3>
+        <p data-i18n="sc3_p">
+          Conecta Google una vez y la IA puede ayudarte con tu Gmail, Calendar, Tasks, Drive, Docs y
+          Sheets. Inicias sesión directamente con Google — StudyLLM nunca ve tu contraseña — y todo lo
+          que envíe un correo o cambie un archivo te pide permiso antes. ¿Terminaste un borrador?
+          Expórtalo a Markdown o guárdalo directo en un Google Doc.
         </p>
       </div>
       <div class="showcase-shot">
-        <img src="screenshots/plugins.png" alt="Connecting a Google account in the StudyLLM Plugins panel" />
+        <img src="screenshots/plugins.png" data-i18n-alt="shot_plugins" alt="Conectar una cuenta de Google en StudyLLM" />
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="explore">
+  <div class="wrap">
+    <h2 data-i18n="explore_heading">Mira cómo funciona por dentro</h2>
+    <p class="section-sub" data-i18n="explore_sub">
+      «Chatear con tus documentos» no es una caja negra. Abre el explorador, escribe una pregunta y
+      observa, paso a paso, cómo la IA encuentra y puntúa los pasajes correctos de tu biblioteca.
+    </p>
+
+    <div class="explore-shot">
+      <img src="screenshots/explore.png" data-i18n-alt="shot_explore" alt="El explorador de recuperación de StudyLLM: pasos del proceso, ranking de similitud y mapa del espacio de embeddings" />
+    </div>
+
+    <div class="explore-points">
+      <div class="explore-point">
+        <h3 data-i18n="xp1_h">El proceso, paso a paso</h3>
+        <p data-i18n="xp1_p">Convierte tu pregunta en un vector, la compara con cada pasaje y se queda con los más cercanos, con los números reales de tu propia biblioteca.</p>
+      </div>
+      <div class="explore-point">
+        <h3 data-i18n="xp2_h">Ranking de similitud</h3>
+        <p data-i18n="xp2_p">Cada pasaje puntuado y ordenado, con una línea que marca los que la IA usará de verdad para responder. Ves por qué eligió esas fuentes y no otras.</p>
+      </div>
+      <div class="explore-point">
+        <h3 data-i18n="xp3_h">Mapa del espacio de embeddings</h3>
+        <p data-i18n="xp3_p">Tu pregunta y tus pasajes situados por significado: más cerca es más parecido. Pasa el ratón por un pasaje para leer su texto y su puntuación exacta.</p>
       </div>
     </div>
   </div>
@@ -356,34 +432,34 @@
 
 <section class="alt" id="look">
   <div class="wrap">
-    <h2>A closer look</h2>
-    <p class="section-sub">Set up in under a minute, then give the AI real work to do.</p>
+    <h2 data-i18n="look_heading">Cómo se pone en marcha</h2>
+    <p class="section-sub" data-i18n="look_sub">Listo en menos de un minuto, y luego a darle trabajo de verdad a la IA.</p>
 
     <div class="showcase">
       <div class="showcase-text">
-        <h3>Add your own keys, for free</h3>
-        <p>
-          Open Providers, pick a recommended free tier like Google Gemini or Mistral, and paste in a
-          key — you're chatting in seconds, no card and no account with StudyLLM itself. Add a second
-          or third provider and StudyLLM fails over between them automatically.
+        <h3 data-i18n="sc4_h">Añade tus claves, gratis</h3>
+        <p data-i18n="sc4_p">
+          Abre Proveedores, elige un plan gratuito recomendado como Google Gemini o Mistral y pega una
+          clave: estás chateando en segundos, sin tarjeta y sin cuenta con StudyLLM. Añade un segundo o
+          tercer proveedor y la app alterna entre ellos sola.
         </p>
       </div>
       <div class="showcase-shot">
-        <img src="screenshots/settings.png" alt="Adding a provider in the StudyLLM Providers panel" />
+        <img src="screenshots/settings.png" data-i18n-alt="shot_settings" alt="Añadir un proveedor en el panel de StudyLLM" />
       </div>
     </div>
 
     <div class="showcase reverse">
       <div class="showcase-text">
-        <h3>Give the AI tools to work with</h3>
-        <p>
-          Turn on filesystem access to a folder, or browse the marketplace for more tools. Every
-          tool call is shown transparently in the conversation, and you decide per-tool whether it
-          runs automatically, asks first, or is denied outright.
+        <h3 data-i18n="sc5_h">Dale herramientas a la IA</h3>
+        <p data-i18n="sc5_p">
+          Activa el acceso a una carpeta o busca más herramientas en el catálogo. Cada llamada a una
+          herramienta se ve claramente en la conversación, y tú decides por herramienta si se ejecuta
+          sola, pregunta antes o se bloquea.
         </p>
       </div>
       <div class="showcase-shot">
-        <img src="screenshots/mcp.png" alt="The MCP tools panel in StudyLLM" />
+        <img src="screenshots/mcp.png" data-i18n-alt="shot_mcp" alt="El panel de herramientas MCP de StudyLLM" />
       </div>
     </div>
   </div>
@@ -391,10 +467,10 @@
 
 <section class="cta">
   <div class="wrap">
-    <h2>Ready to try it?</h2>
+    <h2 data-i18n="cta_heading">Descárgalo y ponte a estudiar</h2>
     <div class="downloads">
-      <a class="btn btn-primary" href="https://github.com/rotkiv93/studyllm/releases/latest">Download the latest release</a>
-      <a class="btn btn-secondary" href="https://github.com/rotkiv93/studyllm" target="_blank" rel="noreferrer">View source on GitHub</a>
+      <a class="btn btn-primary" href="https://github.com/rotkiv93/studyllm/releases/latest" data-i18n="cta_dl">Descargar la última versión</a>
+      <a class="btn btn-secondary" href="https://github.com/rotkiv93/studyllm" target="_blank" rel="noreferrer" data-i18n="cta_src">Ver el código en GitHub</a>
     </div>
   </div>
 </section>
@@ -403,12 +479,185 @@
   <div class="wrap">
     <div class="foot-links">
       <a href="https://github.com/rotkiv93/studyllm" target="_blank" rel="noreferrer">GitHub</a>
-      <a href="https://github.com/rotkiv93/studyllm/releases" target="_blank" rel="noreferrer">Releases</a>
-      <a href="https://github.com/rotkiv93/studyllm/issues" target="_blank" rel="noreferrer">Report an issue</a>
+      <a href="https://github.com/rotkiv93/studyllm/releases" target="_blank" rel="noreferrer" data-i18n="foot_releases">Releases</a>
+      <a href="https://github.com/rotkiv93/studyllm/issues" target="_blank" rel="noreferrer" data-i18n="foot_issue">Reportar un problema</a>
     </div>
-    <p>Built for students who'd rather spend money on textbooks than API subscriptions.</p>
+    <p data-i18n="foot_tagline">Hecho por y para estudiantes que prefieren gastar en libros que en suscripciones.</p>
   </div>
 </footer>
+
+<script>
+  var I18N = {
+    es: {
+      __title: "StudyLLM — IA para estudiar, gratis",
+      __desc: "Una app de escritorio para estudiar con IA. Usa tus propias claves gratuitas, suelta tus apuntes y lecturas, y deja que la IA te ayude con herramientas de verdad.",
+      nav_features: "Qué hace",
+      nav_students: "Para estudiar",
+      nav_explore: "Cómo funciona",
+      nav_look: "Capturas",
+      hero_h1: "Estudia con IA<br />sin pagar una suscripción.",
+      hero_sub: "Pon tus propias claves gratuitas y StudyLLM va alternando entre ellas para que no te quedes bloqueado. Suelta tus apuntes y lecturas, elige un modo de estudio, añade herramientas de investigación y guarda tu trabajo cuando termines.",
+      dl_win: "Descargar para Windows",
+      dl_mac: "Descargar para macOS",
+      dl_linux: "Descargar para Linux",
+      dl_note: 'Los instaladores se publican en la <a href="https://github.com/rotkiv93/studyllm/releases" target="_blank" rel="noreferrer">página de Releases de GitHub</a>. ¿Prefieres compilarlo tú? Mira el <a href="https://github.com/rotkiv93/studyllm#building-it-yourself" target="_blank" rel="noreferrer">README</a>.',
+      feat_heading: "Lo que puedes hacer con ella",
+      feat_sub: "Herramientas sencillas para leer, escribir, investigar y repasar.",
+      f1_h: "Gratis de verdad",
+      f1_p: "Usa claves gratuitas de proveedores como Google Gemini, Mistral o Groq. No hace falta pagar ChatGPT Plus ni Claude Pro.",
+      f2_h: "Sin límites molestos",
+      f2_p: "Pon más de una clave y la app cambia sola en cuanto una se queda sin cupo.",
+      f3_h: "Modos de estudio",
+      f3_p: "Resume una lectura, explica un tema, esquematiza un trabajo o crea tarjetas de repaso, con prompts listos para no empezar desde cero.",
+      f4_h: "Tus propios archivos",
+      f4_p: "Arrastra un PDF, un documento de Word o tus apuntes al chat y la IA los lee: tratados, artículos, lecturas, lo que estés trabajando.",
+      f5_h: "Herramientas de investigación",
+      f5_p: "Añade herramientas sin clave para leer enlaces, buscar en Wikipedia o consultar literatura académica, en un par de clics.",
+      f6_h: "Guarda tu trabajo",
+      f6_p: "Convierte cualquier conversación en Markdown o guárdala directamente en un Google Doc cuando quieras entregarla.",
+      f7_h: "Conecta tu cuenta de Google",
+      f7_p: "Deja que la IA trabaje con tu Gmail, Calendar, Tasks, Drive, Docs y Sheets. Inicias sesión con Google y apruebas tú cualquier cosa que envíe o cambie datos.",
+      f8_h: "Privado",
+      f8_p: "Las claves se guardan en el llavero seguro de tu sistema. Los chats van directos de tu ordenador al proveedor de IA, sin ningún servidor de StudyLLM en medio.",
+      f9_h: "En tu ordenador",
+      f9_p: "Instaladores nativos para Windows, macOS y Linux. Sin pestañas de navegador ni cuentas nuevas.",
+      students_heading: "Pensada para cómo estudias de verdad",
+      students_sub: "Leer, escribir, investigar y repasar, con tus propias fuentes y no con un chat en blanco.",
+      sc1_h: "Suelta tus lecturas",
+      sc1_p: "Arrastra un PDF, un documento de Word o tus apuntes al chat. StudyLLM saca el texto para que la IA lo resuma, responda preguntas o te señale las fechas y los nombres clave, sin copiar y pegar párrafos enteros.",
+      sc2_h: "Investiga y cita, ya integrado",
+      sc2_p: "Añade herramientas listas para usar en un par de clics: leer cualquier enlace, buscar en Wikipedia o consultar literatura académica. Cada herramienta muestra un distintivo de confianza claro y la mayoría no necesita cuenta ni clave.",
+      sc3_h: "Trae tu cuenta de Google",
+      sc3_p: "Conecta Google una vez y la IA puede ayudarte con tu Gmail, Calendar, Tasks, Drive, Docs y Sheets. Inicias sesión directamente con Google — StudyLLM nunca ve tu contraseña — y todo lo que envíe un correo o cambie un archivo te pide permiso antes. ¿Terminaste un borrador? Expórtalo a Markdown o guárdalo directo en un Google Doc.",
+      explore_heading: "Mira cómo funciona por dentro",
+      explore_sub: "«Chatear con tus documentos» no es una caja negra. Abre el explorador, escribe una pregunta y observa, paso a paso, cómo la IA encuentra y puntúa los pasajes correctos de tu biblioteca.",
+      xp1_h: "El proceso, paso a paso",
+      xp1_p: "Convierte tu pregunta en un vector, la compara con cada pasaje y se queda con los más cercanos, con los números reales de tu propia biblioteca.",
+      xp2_h: "Ranking de similitud",
+      xp2_p: "Cada pasaje puntuado y ordenado, con una línea que marca los que la IA usará de verdad para responder. Ves por qué eligió esas fuentes y no otras.",
+      xp3_h: "Mapa del espacio de embeddings",
+      xp3_p: "Tu pregunta y tus pasajes situados por significado: más cerca es más parecido. Pasa el ratón por un pasaje para leer su texto y su puntuación exacta.",
+      look_heading: "Cómo se pone en marcha",
+      look_sub: "Listo en menos de un minuto, y luego a darle trabajo de verdad a la IA.",
+      sc4_h: "Añade tus claves, gratis",
+      sc4_p: "Abre Proveedores, elige un plan gratuito recomendado como Google Gemini o Mistral y pega una clave: estás chateando en segundos, sin tarjeta y sin cuenta con StudyLLM. Añade un segundo o tercer proveedor y la app alterna entre ellos sola.",
+      sc5_h: "Dale herramientas a la IA",
+      sc5_p: "Activa el acceso a una carpeta o busca más herramientas en el catálogo. Cada llamada a una herramienta se ve claramente en la conversación, y tú decides por herramienta si se ejecuta sola, pregunta antes o se bloquea.",
+      cta_heading: "Descárgalo y ponte a estudiar",
+      cta_dl: "Descargar la última versión",
+      cta_src: "Ver el código en GitHub",
+      foot_releases: "Releases",
+      foot_issue: "Reportar un problema",
+      foot_tagline: "Hecho por y para estudiantes que prefieren gastar en libros que en suscripciones.",
+      shot_hero: "Chat de StudyLLM con modos de estudio",
+      shot_attach: "Adjuntar un documento a un mensaje de StudyLLM",
+      shot_discover: "Descubrir herramientas de investigación en StudyLLM",
+      shot_plugins: "Conectar una cuenta de Google en StudyLLM",
+      shot_explore: "El explorador de recuperación de StudyLLM: pasos del proceso, ranking de similitud y mapa del espacio de embeddings",
+      shot_settings: "Añadir un proveedor en el panel de StudyLLM",
+      shot_mcp: "El panel de herramientas MCP de StudyLLM"
+    },
+    en: {
+      __title: "StudyLLM — free AI for studying",
+      __desc: "A desktop app for studying with AI. Use your own free-tier keys, drop in your notes and readings, and let the AI help with real tools.",
+      nav_features: "What it does",
+      nav_students: "For studying",
+      nav_explore: "How it works",
+      nav_look: "Screenshots",
+      hero_h1: "Study with AI,<br />without paying for a subscription.",
+      hero_sub: "Bring your own free-tier keys and StudyLLM rotates between them so you don't get stuck. Drop in your notes and readings, pick a study mode, add research tools, and save your work when you're done.",
+      dl_win: "Download for Windows",
+      dl_mac: "Download for macOS",
+      dl_linux: "Download for Linux",
+      dl_note: 'Installers are published on the <a href="https://github.com/rotkiv93/studyllm/releases" target="_blank" rel="noreferrer">GitHub Releases page</a>. Prefer to build it yourself? See the <a href="https://github.com/rotkiv93/studyllm#building-it-yourself" target="_blank" rel="noreferrer">README</a>.',
+      feat_heading: "What you can do with it",
+      feat_sub: "Simple tools for reading, writing, researching, and revising.",
+      f1_h: "Actually free",
+      f1_p: "Use free keys from providers like Google Gemini, Mistral, or Groq. No need to pay for ChatGPT Plus or Claude Pro.",
+      f2_h: "No annoying limits",
+      f2_p: "Add more than one key and the app switches on its own the moment one runs dry.",
+      f3_h: "Study modes",
+      f3_p: "Summarize a reading, explain a topic, outline an essay, or make flashcards — ready-made prompts so you never start from a blank box.",
+      f4_h: "Your own files",
+      f4_p: "Drag a PDF, a Word document, or your notes into the chat and the AI reads it: treaties, articles, readings, whatever you're working with.",
+      f5_h: "Research tools",
+      f5_p: "Add keyless tools for reading links, looking things up on Wikipedia, and searching academic literature — in a couple of clicks.",
+      f6_h: "Save your work",
+      f6_p: "Turn any conversation into Markdown or save it straight to a Google Doc when you're ready to hand it in.",
+      f7_h: "Connect your Google account",
+      f7_p: "Let the AI work with your Gmail, Calendar, Tasks, Drive, Docs, and Sheets. You sign in with Google and approve anything that sends or changes data.",
+      f8_h: "Private",
+      f8_p: "Keys live in your system's secure keychain. Chats go straight from your computer to the AI provider — no StudyLLM server in between.",
+      f9_h: "On your computer",
+      f9_p: "Native installers for Windows, macOS, and Linux. No browser tab, no new accounts.",
+      students_heading: "Made for how you actually study",
+      students_sub: "Reading, writing, research, and revision — with your own sources, not a blank chat box.",
+      sc1_h: "Drop in your readings",
+      sc1_p: "Drag a PDF, a Word document, or your notes straight into the chat. StudyLLM pulls out the text so the AI can summarize it, answer questions, or pull out the key dates and names — no copy-pasting walls of text.",
+      sc2_h: "Research and cite, built in",
+      sc2_p: "Add ready-to-use tools in a couple of clicks: read any web link, look things up on Wikipedia, or search academic literature. Every tool shows a clear trust badge, and most need no account or key at all.",
+      sc3_h: "Bring your Google account",
+      sc3_p: "Connect Google once and the AI can help with your Gmail, Calendar, Tasks, Drive, Docs, and Sheets. You sign in with Google directly — StudyLLM never sees your password — and anything that sends an email or changes a file asks for your approval first. Finished a draft? Export it to Markdown or save it straight to a Google Doc.",
+      explore_heading: "See how it works under the hood",
+      explore_sub: "“Chatting with your documents” isn't a black box. Open the explorer, type a question, and watch — step by step — how the AI finds and scores the right passages from your library.",
+      xp1_h: "The process, step by step",
+      xp1_p: "It turns your question into a vector, compares it against every passage, and keeps the closest ones — with the real numbers from your own library.",
+      xp2_h: "Similarity ranking",
+      xp2_p: "Every passage scored and sorted, with a line marking the ones the AI will actually answer from. You see why it picked those sources and not others.",
+      xp3_h: "Embedding-space map",
+      xp3_p: "Your question and your passages placed by meaning — closer means more similar. Hover a passage to read its text and its exact score.",
+      look_heading: "How to get started",
+      look_sub: "Set up in under a minute, then give the AI real work to do.",
+      sc4_h: "Add your keys, for free",
+      sc4_p: "Open Providers, pick a recommended free tier like Google Gemini or Mistral, and paste in a key — you're chatting in seconds, no card and no account with StudyLLM. Add a second or third provider and the app fails over between them automatically.",
+      sc5_h: "Give the AI tools to work with",
+      sc5_p: "Turn on access to a folder, or browse the catalog for more tools. Every tool call is shown clearly in the conversation, and you decide per-tool whether it runs automatically, asks first, or is denied.",
+      cta_heading: "Download it and get studying",
+      cta_dl: "Download the latest release",
+      cta_src: "View the source on GitHub",
+      foot_releases: "Releases",
+      foot_issue: "Report an issue",
+      foot_tagline: "Made by and for students who'd rather spend money on textbooks than subscriptions.",
+      shot_hero: "StudyLLM chat with study modes",
+      shot_attach: "Attaching a document to a StudyLLM message",
+      shot_discover: "Discovering research tools in StudyLLM",
+      shot_plugins: "Connecting a Google account in StudyLLM",
+      shot_explore: "The StudyLLM retrieval explorer: pipeline steps, similarity ranking, and embedding-space map",
+      shot_settings: "Adding a provider in the StudyLLM panel",
+      shot_mcp: "The StudyLLM MCP tools panel"
+    }
+  };
+
+  function applyLang(lang) {
+    var dict = I18N[lang] || I18N.es;
+    document.documentElement.lang = lang;
+    document.querySelectorAll("[data-i18n]").forEach(function (el) {
+      var k = el.getAttribute("data-i18n");
+      if (dict[k] !== undefined) el.innerHTML = dict[k];
+    });
+    document.querySelectorAll("[data-i18n-alt]").forEach(function (el) {
+      var k = el.getAttribute("data-i18n-alt");
+      if (dict[k] !== undefined) el.setAttribute("alt", dict[k]);
+    });
+    if (dict.__title) document.title = dict.__title;
+    var desc = document.querySelector('meta[name="description"]');
+    if (desc && dict.__desc) desc.setAttribute("content", dict.__desc);
+    document.querySelectorAll("[data-lang-btn]").forEach(function (b) {
+      b.classList.toggle("active", b.getAttribute("data-lang-btn") === lang);
+    });
+    try { localStorage.setItem("studyllm-lang", lang); } catch (e) {}
+  }
+
+  var saved = null;
+  try { saved = localStorage.getItem("studyllm-lang"); } catch (e) {}
+  applyLang(saved === "en" ? "en" : "es");
+
+  document.querySelectorAll("[data-lang-btn]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      applyLang(b.getAttribute("data-lang-btn"));
+    });
+  });
+</script>
 
 </body>
 </html>
