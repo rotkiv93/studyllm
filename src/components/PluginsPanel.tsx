@@ -24,6 +24,51 @@ const PHASE_LABEL: Record<OAuthProgressPhase, string> = {
   error: "Something went wrong.",
 };
 
+/**
+ * One-time Cloud Console setup the user (as the app's OAuth-client owner) must do before the
+ * broadened Workspace scopes will work, plus the reconnect note for anyone upgrading from the old
+ * read-only scopes. Collapsed by default so it doesn't crowd the card.
+ */
+function GoogleSetupInstructions() {
+  return (
+    <details className="plugin-setup">
+      <summary>How to set up Google access</summary>
+      <div className="plugin-setup-body">
+        <p>
+          One-time setup in your{" "}
+          <a href="https://console.cloud.google.com/" target="_blank" rel="noreferrer">
+            Google Cloud Console
+          </a>
+          , then click Connect:
+        </p>
+        <ol>
+          <li>
+            Under <strong>APIs &amp; Services → Library</strong>, enable the Gmail, Google Calendar,
+            Google Tasks, Google Docs, Google Sheets, and Google Drive APIs.
+          </li>
+          <li>
+            Open <strong>APIs &amp; Services → OAuth consent screen</strong> and add these scopes:
+            <code>gmail.modify</code>, <code>gmail.send</code>, <code>calendar</code>,{" "}
+            <code>tasks</code>, <code>documents</code>, <code>spreadsheets</code>, and{" "}
+            <code>drive.readonly</code>.
+          </li>
+          <li>
+            While the consent screen is in "Testing", add your Google address under{" "}
+            <strong>Test users</strong> so Google will let you through.
+          </li>
+          <li>Come back here and click Connect, then approve the permissions in the browser.</li>
+        </ol>
+        <p className="plugin-setup-note">
+          Already connected before? These permissions were recently broadened — <strong>Disconnect
+          then Connect once more</strong> to grant the new access. Actions that send or delete
+          (send email, trash a message, delete an event or task) ask for your approval each time;
+          you can change that per tool in the Tools panel.
+        </p>
+      </div>
+    </details>
+  );
+}
+
 export function PluginsPanel({ connectors, servers, onConnect, onDisconnect, onClose }: Props) {
   const [busyConnectorId, setBusyConnectorId] = useState<string | null>(null);
   const [phaseByConnector, setPhaseByConnector] = useState<Record<string, OAuthProgressPhase>>({});
@@ -102,6 +147,8 @@ export function PluginsPanel({ connectors, servers, onConnect, onDisconnect, onC
                   </div>
                 </div>
                 <p className="marketplace-card-desc">{connector.description}</p>
+
+                {connector.id === "google" && <GoogleSetupInstructions />}
 
                 {isConnected && (
                   <div className="plugin-connected-list">

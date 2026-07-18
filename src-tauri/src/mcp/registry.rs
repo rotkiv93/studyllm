@@ -1,6 +1,16 @@
+use std::sync::OnceLock;
+
 use serde::{Deserialize, Serialize};
 
 const REGISTRY_BASE: &str = "https://registry.modelcontextprotocol.io/v0";
+
+/// Process-wide reqwest client so registry searches reuse pooled/keep-alive connections instead of
+/// paying a fresh TLS handshake on every keystroke-driven search. `Client` is internally an `Arc`,
+/// so cloning it out of the `OnceLock` is cheap.
+fn registry_client() -> reqwest::Client {
+    static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+    CLIENT.get_or_init(reqwest::Client::new).clone()
+}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -278,7 +288,7 @@ pub async fn mcp_registry_search(
     query: Option<String>,
     cursor: Option<String>,
 ) -> Result<RegistryPage, String> {
-    let client = reqwest::Client::new();
+    let client = registry_client();
     let mut req = client
         .get(format!("{REGISTRY_BASE}/servers"))
         .query(&[("limit", "30")]);

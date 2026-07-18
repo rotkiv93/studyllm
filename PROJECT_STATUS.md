@@ -23,13 +23,17 @@ Full original architecture/phase plan: `C:\Users\47852\.claude\plans\i-want-to-c
   messages, tool calls, providers, provider usage, and installed MCP servers (including per-tool
   permissions). API keys never touch SQLite — only an opaque `secret_ref` pointing into the OS
   keychain (via the `keyring` crate, `src-tauri/src/credentials.rs`).
-- **MCP host** (`src-tauri/src/mcp/`): built on the official `rmcp` Rust SDK, stdio transport only.
-  `host.rs` manages running server processes, `runtime.rs` resolves/bootstraps a `npx` binary,
+- **MCP host** (`src-tauri/src/mcp/`): built on the official `rmcp` Rust SDK. Supports three server
+  shapes: local **stdio** child processes, **remote-HTTP** rmcp connections, and in-process
+  **native** providers (the Google Workspace REST tools). `host.rs` manages running servers
+  (`RunningServer` enum: `Remote`/`Native`), `runtime.rs` resolves/bootstraps a `npx` binary,
   `commands.rs` exposes it to the frontend as Tauri commands + `mcp://server-status-changed` /
-  `mcp://runtime-log` events.
+  `mcp://runtime-log` events. `registry.rs` uses a process-wide shared `reqwest::Client`
+  (`OnceLock`) so Discover searches reuse pooled connections.
 - **OAuth ("Plugins")** (`src-tauri/src/oauth/`): PKCE + loopback-redirect Google sign-in engine,
-  feeding `McpHost::start_native` with a live, auto-refreshed access token against native Gmail/Drive
-  REST tools (`mcp/google.rs`) — not Google's managed MCP servers. See "Google Workspace" below.
+  feeding `McpHost::start_native` with a live, auto-refreshed access token against the native Google
+  Workspace REST tools (`mcp/google.rs`) — not Google's managed MCP servers. See "Google Workspace"
+  below.
 
 ## Phase status (see the plan doc above for full phase definitions)
 
@@ -349,10 +353,12 @@ Full original architecture/phase plan: `C:\Users\47852\.claude\plans\i-want-to-c
     documented above) with a colored initial-avatar per server (`avatarClass()`, a 3-way hash over
     `--color-accent-soft`/`--color-success-soft`/`--color-warning-soft`), a plain-language `title`
     tooltip on each trust badge explaining what Official/Verified/Community actually mean, and
-    "Add"/"Added" wording instead of "Install"/"Installed". A client-side "Popular" row (filesystem
-    + any Google-named entry, same regex heuristic as `McpPanel`'s existing `isPinned`, duplicated
-    locally since it's over a different data shape) surfaces above the full results grid, but only
-    when the search box is empty.
+    "Add"/"Added" wording instead of "Install"/"Installed". The "Popular" row above the full results
+    grid (empty-search only) now renders the **curated catalog** `CURATED_ENTRIES`
+    (`src/lib/curatedMcp.ts` — Notion featured first, plus Filesystem/GitHub/Brave Search) directly,
+    de-duped against installed servers by name. It's a static import, so it paints **instantly** with
+    no network wait (replacing the old regex-over-live-results heuristic). See "Discover
+    performance" below.
   - Sidebar: new `IconKey` (`icons.tsx`) for the Providers button; the "no active providers" dot
     moved from the old Settings button to the new Providers button; `onOpenSettings`/
     `onOpenMcp` props became `onOpenProviders`/`onOpenMcp`/`onOpenAppSettings`.
@@ -382,6 +388,21 @@ Full original architecture/phase plan: `C:\Users\47852\.claude\plans\i-want-to-c
     landing partially under the Windows taskbar.
   - Verified: `npx tsc --noEmit` clean; relaunched `npm run tauri dev` (incremental Rust build,
     app window opens with the new size).
+- **Discover performance (curated catalog + stale-while-revalidate)**: the Discover tab no longer
+  blocks the whole grid on a live registry round-trip.
+  - The "Popular" section is the static `CURATED_ENTRIES` import, so it paints on first render with
+    zero network. Notion is featured first — it installs through the *existing* marketplace flow
+    (`handleInstallFromCatalog`) via its npx server + a secret `NOTION_TOKEN` env var (keychain-backed
+    `env_refs_json`), no new Rust or OAuth-engine work.
+  - `McpMarketplace.runSearch` now does **cached-first, then revalidate**: it shows
+    `getCachedCatalog(q)` immediately (cache-only, no network), then awaits `searchCatalog(q)` and
+    swaps in the live results when they arrive. The "couldn't reach the directory" notice only shows
+    if the *final* live fetch fails (`source === "cache"`), so the instant-paint placeholder doesn't
+    flash it.
+  - `mcpCatalog.searchCatalog` fire-and-forgets the cache write + stale eviction (`void … .catch()`)
+    instead of awaiting them before returning results.
+  - `registry.rs` uses a process-wide `OnceLock<reqwest::Client>` so searches reuse pooled/keep-alive
+    connections instead of a fresh TLS handshake per keystroke.
 
 ## Visual design system (Phase 5 slice)
 
@@ -483,12 +504,38 @@ Full original architecture/phase plan: `C:\Users\47852\.claude\plans\i-want-to-c
   website (maintainers)". README's hero section links to it pre-emptively
   (`https://rotkiv93.github.io/studyllm/`).
 
-## Google Workspace (Gmail/Drive) access — "Plugins" OAuth flow, native REST tools (not managed MCP)
+## Google Workspace access — "Plugins" OAuth flow, native REST tools (not managed MCP)
 
-The one-click "Connect Google Account" flow is implemented end-to-end. It calls the plain **Gmail
-API v1 / Drive API v3 REST endpoints directly**, exposed as native, in-process tools
-(`src-tauri/src/mcp/google.rs`) — **not** Google's managed remote MCP servers
-(`gmailmcp.googleapis.com` / `drivemcp.googleapis.com`).
+The one-click "Connect Google Account" flow is implemented end-to-end. It calls the plain **Google
+Workspace REST APIs directly** (Gmail v1, Calendar v3, Tasks v1, Docs v1, Sheets v4, Drive v3),
+exposed as native, in-process tools (`src-tauri/src/mcp/google.rs`) — **not** Google's managed
+remote MCP servers (`gmailmcp.googleapis.com` / `drivemcp.googleapis.com`).
+
+**Full read+write toolset (as of the Workspace-toolset expansion):** the connector fans one consent
+screen out to six native providers (`GoogleKind::{Gmail, Calendar, Tasks, Drive, Docs, Sheets}`),
+~30 tools total, all one-shot `reqwest` calls sharing a `google_api_call` helper (transport failure
+→ hard `Err`; Google 4xx/5xx → soft `McpCallOutcome{is_error:true}`, unchanged contract):
+- **Gmail**: `gmail_search_messages`, `gmail_get_message`, `gmail_search_threads`,
+  `gmail_get_thread`, `gmail_list_labels`, `gmail_create_label`, `gmail_modify_message_labels`,
+  `gmail_list_drafts`, `gmail_create_draft`, `gmail_send_message` *(destructive)*,
+  `gmail_trash_message` *(destructive)*.
+- **Calendar**: `calendar_list_calendars`, `calendar_list_events`, `calendar_search_events`,
+  `calendar_get_event`, `calendar_create_event`, `calendar_update_event`, `calendar_delete_event`
+  *(destructive)*, `calendar_respond_to_event`.
+- **Tasks**: `tasks_list_tasklists`, `tasks_list_tasks`, `tasks_create_task`, `tasks_update_task`
+  (also completes/reopens), `tasks_delete_task` *(destructive)*.
+- **Docs/Sheets**: `docs_create_document`, `docs_append_text`, `sheets_create_spreadsheet`,
+  `sheets_append_row`. (Drive read stays: `drive_search_files`, `drive_read_file`.)
+
+**Destructive tools default to "ask".** `DESTRUCTIVE_GOOGLE_TOOLS` in `googleConnectors.ts` lists the
+send/delete tools; `App.tsx`'s `handleConnectGoogle` seeds each fresh connection's
+`tool_permissions_json` with `"ask"` for any destructive tool it exposes, so those calls block on the
+approval modal until the user relaxes them in the Tools panel. Existing installs are unaffected.
+
+**Reconnect + Cloud Console required:** broadening the scopes invalidates existing consent — every
+connected user must Disconnect → Connect once. The maintainer must also enable the Calendar/Tasks/
+Docs/Sheets APIs and add the new scopes to the OAuth consent screen (see Setup below); the in-app
+"How to set up Google access" section on the Plugins Google card surfaces these steps to the user.
 
 This went back and forth across the session and is now settled with real evidence, not just docs:
 1. First pass: pointed at Google's managed MCP servers, reasoning they might be gated behind a
@@ -530,15 +577,17 @@ through that path.
   against the listener. New direct deps: `base64`, `rand`, `sha2`; `tokio` gained the `time` feature.
   `credentials.rs`'s keyring logic was split into non-command `store`/`load`/`remove` helpers shared
   by the existing `credentials_*` commands and the OAuth code.
-- **Native Gmail/Drive tools** (`src-tauri/src/mcp/google.rs`): `NativeProvider` (kind `Gmail` or
-  `Drive`, holding the current access token behind a `tokio::sync::RwLock`) exposes a small, static,
-  read-only tool set — `gmail_search_messages`, `gmail_get_message`, `drive_search_files`,
-  `drive_read_file` — each a one-shot `reqwest` call against the real Gmail/Drive REST APIs. A
-  Google API error (4xx/5xx) becomes a soft `McpCallOutcome{is_error:true}` (so the model sees and
-  can reason about it) rather than a hard `Err`; only network/transport failures are hard errors.
-  Gmail body extraction (MIME multipart walking + base64url decode) and the Drive
-  native-doc-vs-binary `mimeType` branch are pure functions covered by `cargo test` against canned
-  JSON fixtures — no network needed to test them.
+- **Native Google Workspace tools** (`src-tauri/src/mcp/google.rs`): `NativeProvider` (one of six
+  `GoogleKind` variants, holding the current access token behind a `tokio::sync::RwLock`) exposes
+  that service's tool set — each a one-shot `reqwest` call against the real REST API. A shared
+  `google_api_call(method, url, query, body, token)` + an `api_call!` macro cut the send/status/parse
+  boilerplate; `build_raw_email` (RFC822 + base64url) backs drafts/send; `build_event_body` /
+  `build_task_body` assemble partial-PATCH bodies (only present keys emitted). A Google API error
+  (4xx/5xx) becomes a soft `McpCallOutcome{is_error:true}` (so the model sees and can reason about it)
+  rather than a hard `Err`; only network/transport failures are hard errors. Pure helpers
+  (`build_raw_email`, `build_event_body`, `build_task_body`, arg parsing, Gmail MIME-multipart body
+  extraction, the Drive native-doc-vs-binary `mimeType` branch, `event_time`) are covered by `cargo
+  test` against canned JSON fixtures — no network needed.
 - **`McpHost` (`mcp/host.rs`) — `RunningServer` is now an enum**: `Remote { service, tools }` (a
   real rmcp connection, used by ordinary marketplace remote-HTTP installs) or `Native { provider }`
   (no live connection to hold open). `start_native`/`update_native_token` are the native
@@ -568,22 +617,25 @@ through that path.
   fields for them and points to the Plugins panel instead. `App.tsx`'s `handleStartMcpServer` has an
   OAuth branch (calls `oauthReconnect` instead of the static-header `resolveServerEnv` path) so a
   stale/expired token is never treated as permanent.
-- **Verified this session**: `cargo test` (28/28, incl. 10 new `mcp::google` unit tests), `cargo
-  check` (clean, no warnings), `npm run build` (tsc strict + vite), `npm run lint` (clean). **Not
-  yet verified**: a real end-to-end tool call from chat against the rebuilt native tools (Connect
-  flow itself — browser round trip, token exchange, provider registration — was live-tested and
-  works; the actual Gmail/Drive REST calls from a model turn have not been exercised yet).
+- **Verified (Workspace-toolset expansion)**: `cargo test` (35/35, incl. 17 `mcp::google` unit tests
+  — 7 new for the shared helpers), `npm run build` (tsc strict + vite), `npm run lint` (0 errors),
+  `npm test` (27/27). **Not yet verified**: a real end-to-end tool call from chat against the new
+  Gmail/Calendar/Tasks/Docs/Sheets tools and the destructive-tool "ask" gate — needs a reconnect
+  with the broadened scopes (which in turn needs the maintainer's Cloud Console updated per Setup).
 
 ### Setup (manual, human maintainer) — done for the maintainer's own account
 
-1. Google Cloud Console → create/select a project → enable the **Gmail API** and **Google Drive
-   API** (the classic REST APIs — the "Gmail MCP API"/"Google Drive MCP API" services are *not*
-   needed for this native-REST approach, though enabling them is harmless).
-2. Configure the OAuth consent screen (External user type) with scopes `gmail.readonly` and
+1. Google Cloud Console → create/select a project → enable the classic REST APIs the native tools
+   call: **Gmail API**, **Google Calendar API**, **Google Tasks API**, **Google Docs API**, **Google
+   Sheets API**, and **Google Drive API**. (The "Gmail MCP API"/"Google Drive MCP API" managed
+   services are *not* needed for this native-REST approach.)
+2. Configure the OAuth consent screen (External user type) with the broadened scopes:
+   `gmail.modify`, `gmail.send`, `calendar`, `tasks`, `documents`, `spreadsheets`, and
    `drive.readonly`. While in Testing mode, add your own Google account as a test user — personal
    `@gmail.com` accounts work fine here (this is the plain consumer OAuth path every third-party
-   Gmail/Drive integration uses; it's specifically Google's *managed MCP servers* that are
-   Workspace-only).
+   integration uses; it's specifically Google's *managed MCP servers* that are Workspace-only).
+   **If upgrading from the old read-only scopes, every connected user must Disconnect → Connect once
+   to re-consent.**
 3. Create an OAuth 2.0 Client ID of type **"Desktop app"** — confirmed working with the engine's
    arbitrary-loopback-port redirect, no fixed port needed.
 4. Paste the Client ID/Secret into `src-tauri/src/oauth/config.rs`'s
@@ -619,10 +671,15 @@ surfaces as a tool `isError`, not a hang) — see `TODO.md`.
   `src/components/icons.tsx` — the inline SVG icon set it (and the composer's send button) use.
 - `src/components/PluginsPanel.tsx` — the "Connect Google Account" card grid (one card per
   `src/lib/googleConnectors.ts` entry), showing live `oauth://progress` status while connecting and
-  a per-target "Disconnect" once connected. `src/lib/oauth.ts` — typed frontend wrappers for the
-  `oauth_connect`/`oauth_reconnect` Tauri commands + the progress event listener.
-  `src/lib/googleConnectors.ts` — the one place Google's OAuth scopes and target native providers
-  (`gmail`/`drive`) live, see "Google Workspace" below.
+  a per-target "Disconnect" once connected; also renders the collapsible "How to set up Google
+  access" Cloud Console instructions (`GoogleSetupInstructions`, `.plugin-setup` styles). `src/lib/
+  oauth.ts` — typed frontend wrappers for the `oauth_connect`/`oauth_reconnect` Tauri commands + the
+  progress event listener. `src/lib/googleConnectors.ts` — the one place Google's OAuth scopes and
+  the six target native providers (`gmail`/`calendar`/`tasks`/`drive`/`docs`/`sheets`) live, plus
+  `DESTRUCTIVE_GOOGLE_TOOLS` (seeded to "ask" at connect time); see "Google Workspace" below.
+- `src/lib/curatedMcp.ts` — the hand-curated `CatalogEntry[]` (Notion + Filesystem/GitHub/Brave
+  Search) that backs the Discover "Popular" section for instant paint; installs through the existing
+  marketplace flow. See "Discover performance" above.
 - `src/lib/providerRouter.ts` — client-side multi-provider failover + streaming + tool-call events,
   including session-scoped tools-unsupported detection (skip a tool-incapable model on tool turns,
   fail over with reason "model can't use tools").

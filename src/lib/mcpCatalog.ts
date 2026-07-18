@@ -85,18 +85,20 @@ export interface CatalogSearchResult {
 export async function searchCatalog(query: string): Promise<CatalogSearchResult> {
   try {
     const page = await searchMcpRegistry(query || undefined);
+    // Fire-and-forget the cache write + stale eviction: these are pure side effects for the *next*
+    // visit, so awaiting them just delays returning the results the user is waiting to see. The
+    // eviction only runs on this successful-live path (never on the cache fallback below), so a
+    // long offline stretch can't wipe the only fallback data available.
     if (page.entries.length > 0) {
-      await upsertCatalogEntries(page.entries.map((e) => toCacheRow(e, Date.now())));
+      void upsertCatalogEntries(page.entries.map((e) => toCacheRow(e, Date.now())))
+        .then(() => evictStaleCatalogEntries())
+        .catch(() => {});
+    } else {
+      void evictStaleCatalogEntries().catch(() => {});
     }
-    // Best-effort: only ever evicted as a side effect of a successful live search (never on the
-    // cache-fallback path below), so a long-running offline stretch can't wipe the only fallback
-    // data available.
-    await evictStaleCatalogEntries();
     return { entries: sortByTrust(page.entries), source: "live", cacheAgeMs: null, error: null };
   } catch (err) {
-    const cached = query.trim()
-      ? await searchCachedCatalogEntries(query.trim())
-      : await listCachedCatalogEntries();
+    const cached = await loadCachedCatalog(query);
     const newestFetch = cached.reduce((max, r) => Math.max(max, r.fetched_at), 0);
     return {
       entries: sortByTrust(cached.map(fromCacheRow)),
@@ -105,4 +107,18 @@ export async function searchCatalog(query: string): Promise<CatalogSearchResult>
       error: err instanceof Error ? err.message : String(err),
     };
   }
+}
+
+async function loadCachedCatalog(query: string): Promise<McpCatalogCacheRow[]> {
+  return query.trim() ? searchCachedCatalogEntries(query.trim()) : listCachedCatalogEntries();
+}
+
+/**
+ * Cached-only read for instant paint — never touches the network. The marketplace renders this
+ * immediately on mount / on a keystroke, then kicks off `searchCatalog` in the background and
+ * merges the live results when they arrive (stale-while-revalidate).
+ */
+export async function getCachedCatalog(query: string): Promise<CatalogEntry[]> {
+  const cached = await loadCachedCatalog(query);
+  return sortByTrust(cached.map(fromCacheRow));
 }

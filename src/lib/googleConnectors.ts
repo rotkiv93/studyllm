@@ -18,7 +18,7 @@ export interface OAuthConnectorTarget {
   /** Display name for this specific connection, e.g. "Gmail". */
   name: string;
   /** Which native tool provider to start — see `mcp::google::GoogleKind` on the Rust side. */
-  provider: "gmail" | "drive";
+  provider: "gmail" | "drive" | "calendar" | "tasks" | "docs" | "sheets";
 }
 
 export interface OAuthConnector {
@@ -32,25 +32,48 @@ export interface OAuthConnector {
 
 export const GOOGLE_CONNECTOR: OAuthConnector = {
   id: "google",
-  displayName: "Google (Gmail & Drive)",
-  description: "Connect your Google account to let the assistant read your email and Drive files.",
+  displayName: "Google Workspace",
+  description:
+    "Connect your Google account so the assistant can work with your Gmail, Calendar, Tasks, " +
+    "Drive, Docs, and Sheets — reading and (with your approval) sending, creating, and editing.",
+  // Full read+write across the connected services. `gmail.modify` covers read + label edits +
+  // drafts + trash; `gmail.send` is the separate scope Gmail requires to actually deliver mail.
+  // Drive stays read-only (we only read Drive files; Docs/Sheets creation uses their own APIs).
+  // NOTE: broadening these scopes invalidates existing consent — users must Disconnect → Connect
+  // once to re-consent, and the maintainer must add these scopes + enable the Calendar/Tasks/Docs/
+  // Sheets APIs on the OAuth client in Cloud Console. See PluginsPanel's setup instructions.
   scopes: [
-    "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/gmail.modify",
+    "https://www.googleapis.com/auth/gmail.send",
+    "https://www.googleapis.com/auth/calendar",
+    "https://www.googleapis.com/auth/tasks",
+    "https://www.googleapis.com/auth/documents",
+    "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive.readonly",
   ],
   targets: [
-    {
-      serverId: "google-gmail",
-      name: "Gmail",
-      provider: "gmail",
-    },
-    {
-      serverId: "google-drive",
-      name: "Google Drive",
-      provider: "drive",
-    },
+    { serverId: "google-gmail", name: "Gmail", provider: "gmail" },
+    { serverId: "google-calendar", name: "Google Calendar", provider: "calendar" },
+    { serverId: "google-tasks", name: "Google Tasks", provider: "tasks" },
+    { serverId: "google-drive", name: "Google Drive", provider: "drive" },
+    { serverId: "google-docs", name: "Google Docs", provider: "docs" },
+    { serverId: "google-sheets", name: "Google Sheets", provider: "sheets" },
   ],
   trustTier: "official",
 };
 
 export const CONNECTORS: OAuthConnector[] = [GOOGLE_CONNECTOR];
+
+/**
+ * Tools that create or destroy user data, or send mail on the user's behalf. At connect time these
+ * are seeded into the connection's `tool_permissions_json` as "ask" so each call blocks on the
+ * approval modal (see `App.tsx` `handleConnectGoogle` / `requestToolApproval`). The user can later
+ * relax any of them to "allow" in the MCP panel's per-tool list. Non-destructive tools (search,
+ * read, list, create-draft) are omitted here and default to "allow".
+ */
+export const DESTRUCTIVE_GOOGLE_TOOLS: readonly string[] = [
+  "gmail_send_message",
+  "gmail_trash_message",
+  "calendar_delete_event",
+  "tasks_delete_task",
+];

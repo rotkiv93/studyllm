@@ -53,7 +53,7 @@ import {
 } from "./lib/mcp";
 import { oauthConnect, oauthReconnect } from "./lib/oauth";
 import { appendCrashLog } from "./lib/crashlog";
-import { CONNECTORS, type OAuthConnector } from "./lib/googleConnectors";
+import { CONNECTORS, DESTRUCTIVE_GOOGLE_TOOLS, type OAuthConnector } from "./lib/googleConnectors";
 import "./App.css";
 
 function newId(): string {
@@ -392,6 +392,13 @@ export default function App() {
     for (const result of results) {
       const target = connector.targets.find((t) => t.serverId === result.serverId);
       if (!target) continue;
+      // Seed "ask" for any destructive tool this connection actually exposes, so send/delete calls
+      // block on the approval modal until the user relaxes them. Existing installs keep their own
+      // permissions (only fresh rows get seeded).
+      const seededPermissions: Record<string, "ask"> = {};
+      for (const tool of result.tools) {
+        if (DESTRUCTIVE_GOOGLE_TOOLS.includes(tool.name)) seededPermissions[tool.name] = "ask";
+      }
       const existing = mcpServers.find((s) => s.id === result.serverId);
       if (existing) {
         await updateMcpServer(result.serverId, {
@@ -412,7 +419,7 @@ export default function App() {
           url: null,
           env_refs_json: "{}",
           trust_tier: "official",
-          tool_permissions_json: "{}",
+          tool_permissions_json: JSON.stringify(seededPermissions),
           autostart: 1,
           cached_tools_json: JSON.stringify(result.tools),
           oauth_provider: connector.id,

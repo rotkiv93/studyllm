@@ -2,7 +2,15 @@ import { useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { McpServerRow } from "../lib/db";
 import type { CatalogEntry } from "../lib/mcp";
-import { clearCatalogCache, computeTrustTier, searchCatalog, trustTierLabel, type TrustTier } from "../lib/mcpCatalog";
+import { CURATED_ENTRIES } from "../lib/curatedMcp";
+import {
+  clearCatalogCache,
+  computeTrustTier,
+  getCachedCatalog,
+  searchCatalog,
+  trustTierLabel,
+  type TrustTier,
+} from "../lib/mcpCatalog";
 import { IconCheck } from "./icons";
 
 export interface ResolvedInstall {
@@ -31,10 +39,6 @@ function avatarClass(name: string): string {
   let hash = 0;
   for (let i = 0; i < name.length; i++) hash = (hash + name.charCodeAt(i)) % AVATAR_CLASSES.length;
   return AVATAR_CLASSES[hash];
-}
-
-function isPopular(entry: CatalogEntry): boolean {
-  return /filesystem|gmail|google[- ]?drive|google/i.test(entry.name);
 }
 
 function looksLikePath(description: string | null): boolean {
@@ -105,6 +109,11 @@ export function McpMarketplace({ servers, onInstall }: Props) {
   async function runSearch(q: string) {
     setLoading(true);
     setSearchError(null);
+    // Instant paint: show whatever's cached for this query right away, then revalidate live and
+    // swap in the fresh results when they land (stale-while-revalidate). The Popular section
+    // (curated) renders independently and doesn't wait on either.
+    const cached = await getCachedCatalog(q);
+    setEntries(cached);
     const result = await searchCatalog(q);
     setEntries(result.entries);
     setSource(result.source);
@@ -178,9 +187,13 @@ export function McpMarketplace({ servers, onInstall }: Props) {
   }
 
   const query_ = query.trim();
-  const popular = query_ ? [] : entries.filter(isPopular);
-  const popularIds = new Set(popular.map((e) => e.id));
-  const rest = entries.filter((e) => !popularIds.has(e.id));
+  // Popular = the curated catalog, shown only on the empty-query landing view and de-duped against
+  // anything already installed. It's a static import, so it paints instantly — no network wait.
+  const popular = query_
+    ? []
+    : CURATED_ENTRIES.filter((e) => !installedNames.has(e.name.toLowerCase()));
+  const popularNames = new Set(popular.map((e) => e.name.toLowerCase()));
+  const rest = entries.filter((e) => !popularNames.has(e.name.toLowerCase()));
 
   return (
     <>
@@ -279,11 +292,16 @@ export function McpMarketplace({ servers, onInstall }: Props) {
                     <div className="marketplace-path-row">
                       <input
                         value={positionalInputs[i] ?? ""}
-                        onChange={(e) =>
+                        onChange={(e) => {
+                          // Read the value *before* the updater runs: React resets
+                          // `e.currentTarget` to null after event dispatch, but a functional
+                          // state updater runs later (render phase), so reading it in there
+                          // throws and unmounts the whole app.
+                          const value = e.currentTarget.value;
                           setPositionalInputs((prev) =>
-                            prev.map((v, idx) => (idx === i ? e.currentTarget.value : v)),
-                          )
-                        }
+                            prev.map((v, idx) => (idx === i ? value : v)),
+                          );
+                        }}
                       />
                       {looksLikePath(arg.description) && (
                         <button type="button" className="btn btn-secondary btn-sm" onClick={() => pickFolder(i)}>
@@ -302,9 +320,12 @@ export function McpMarketplace({ servers, onInstall }: Props) {
                     type={v.isSecret ? "password" : "text"}
                     placeholder={v.name}
                     value={envInputs[v.name] ?? ""}
-                    onChange={(e) =>
-                      setEnvInputs((prev) => ({ ...prev, [v.name]: e.currentTarget.value }))
-                    }
+                    onChange={(e) => {
+                      // See note above: capture the value before the functional updater, or
+                      // React's nulled-out `e.currentTarget` throws during render.
+                      const value = e.currentTarget.value;
+                      setEnvInputs((prev) => ({ ...prev, [v.name]: value }));
+                    }}
                   />
                 </label>
               ))}
