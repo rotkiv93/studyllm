@@ -7,6 +7,19 @@ export interface ChatMessage {
   content: string;
 }
 
+/**
+ * Per-turn options that don't belong in the persisted conversation. `system` carries transient
+ * instructions/context (a Deep Research directive, a RAG grounding block) that steer this one reply
+ * without polluting saved history or the conversation title. `maxSteps` raises the agentic
+ * tool-loop budget for multi-step research (default 8).
+ */
+export interface StreamOptions {
+  system?: string;
+  maxSteps?: number;
+}
+
+const DEFAULT_MAX_STEPS = 8;
+
 export interface ConfiguredProvider {
   id: string;
   type: ProviderType;
@@ -144,11 +157,18 @@ export class ProviderRouter {
     history: ChatMessage[],
     tools?: ToolSet,
     abortSignal?: AbortSignal,
+    options?: StreamOptions,
   ): AsyncGenerator<StreamEvent> {
     const messages: ModelMessage[] = history.map((m) => ({
       role: m.role,
       content: m.content,
     }));
+    // Transient per-turn steering (research directive / RAG context) leads as a system message but
+    // is never persisted to the conversation — the caller passes `history` without it.
+    if (options?.system) {
+      messages.unshift({ role: "system", content: options.system });
+    }
+    const maxSteps = Math.max(1, options?.maxSteps ?? DEFAULT_MAX_STEPS);
 
     const toolsAttached = !!tools && Object.keys(tools).length > 0;
     let attempted = 0;
@@ -184,7 +204,7 @@ export class ProviderRouter {
             model: client(candidate.model),
             messages,
             abortSignal,
-            ...(toolsAttached ? { tools, stopWhen: isStepCount(8) } : {}),
+            ...(toolsAttached ? { tools, stopWhen: isStepCount(maxSteps) } : {}),
           });
 
           let estimatedTokens = 0;
