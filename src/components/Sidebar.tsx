@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { ConversationRow } from "../lib/db";
-import { IconBook, IconEdit, IconKey, IconMenu, IconMessage, IconPlug, IconPlus, IconSettings, IconTool, IconTrash } from "./icons";
+import { IconBook, IconCompass, IconEdit, IconKey, IconMenu, IconMessage, IconPlug, IconPlus, IconSettings, IconTool, IconTrash } from "./icons";
 
 interface Props {
   conversations: ConversationRow[];
@@ -17,6 +17,7 @@ interface Props {
   onOpenProviders: () => void;
   onOpenMcp: () => void;
   onOpenLibrary: () => void;
+  onOpenExplore: () => void;
   onOpenPlugins: () => void;
   onOpenAppSettings: () => void;
   /** Number of documents in the RAG library — shown as a badge on the Library button. */
@@ -38,6 +39,7 @@ export function Sidebar({
   onOpenProviders,
   onOpenMcp,
   onOpenLibrary,
+  onOpenExplore,
   onOpenPlugins,
   onOpenAppSettings,
   libraryDocCount,
@@ -172,6 +174,15 @@ export function Sidebar({
           <IconBook size={17} />
           {!collapsed && <span>Library</span>}
           {libraryDocCount > 0 && <span className="sidebar-footer-badge">{libraryDocCount}</span>}
+        </button>
+        <button
+          type="button"
+          className="sidebar-footer-btn"
+          onClick={onOpenExplore}
+          title="Explore how it works"
+        >
+          <IconCompass size={17} />
+          {!collapsed && <span>Explore</span>}
         </button>
         <button
           type="button"

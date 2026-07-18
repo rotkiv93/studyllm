@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { dynamicTool, jsonSchema, type ToolSet } from "ai";
-import { ProviderRouter, type ChatMessage, type ConfiguredProvider } from "./lib/providerRouter";
+import { ProviderRouter, type ChatMessage, type ConfiguredProvider, type StreamEvent } from "./lib/providerRouter";
 import { PROVIDER_MANIFEST } from "./lib/providers";
 import { setCredential, getCredential, deleteCredential } from "./lib/credentials";
 import {
@@ -41,12 +41,14 @@ import { Sidebar } from "./components/Sidebar";
 import { StudyModes } from "./components/StudyModes";
 import { FeatureExplainer } from "./components/FeatureExplainer";
 import { LibraryPanel } from "./components/LibraryPanel";
+import { ExplorePanel } from "./components/ExplorePanel";
 import { RetrievedSources } from "./components/RetrievedSources";
 import { ToolCallBlock } from "./components/ToolCallBlock";
 import { Markdown } from "./components/Markdown";
 import {
   IconBook,
   IconCheck,
+  IconCompass,
   IconCopy,
   IconDownload,
   IconEdit,
@@ -178,6 +180,7 @@ export default function App() {
   const [showProviders, setShowProviders] = useState(false);
   const [showMcp, setShowMcp] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
+  const [showExplore, setShowExplore] = useState(false);
   const [showPlugins, setShowPlugins] = useState(false);
   const [showAppSettings, setShowAppSettings] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -506,6 +509,27 @@ export default function App() {
       setError(err instanceof Error ? err.message : "Couldn't install research tools.");
     } finally {
       setInstallingResearchTools(false);
+    }
+  }
+
+  /**
+   * Drive a standalone Deep Research run for the Explore panel's process trace — reuses the exact
+   * chat machinery (the provider router + MCP tools + the mode's system prompt & step budget), but
+   * forwards raw stream events to a callback instead of the transcript. Persists nothing.
+   */
+  async function runResearchTrace(
+    question: string,
+    mode: ResearchMode,
+    onEvent: (e: StreamEvent) => void,
+    signal: AbortSignal,
+  ): Promise<void> {
+    const tools = buildMcpTools();
+    const history: ChatMessage[] = [{ role: "user", content: question }];
+    for await (const event of routerRef.current.streamReply(history, tools, signal, {
+      system: mode.systemPrompt,
+      maxSteps: mode.maxSteps,
+    })) {
+      onEvent(event);
     }
   }
 
@@ -1204,6 +1228,7 @@ export default function App() {
         onOpenProviders={() => setShowProviders(true)}
         onOpenMcp={() => setShowMcp(true)}
         onOpenLibrary={() => setShowLibrary(true)}
+        onOpenExplore={() => setShowExplore(true)}
         onOpenPlugins={() => setShowPlugins(true)}
         onOpenAppSettings={() => setShowAppSettings(true)}
         libraryDocCount={ragDocuments.length}
@@ -1256,6 +1281,13 @@ export default function App() {
                 onTryLibrary={() => setShowLibrary(true)}
                 libraryDocCount={ragDocuments.length}
               />
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm empty-state-explore"
+                onClick={() => setShowExplore(true)}
+              >
+                <IconCompass size={14} /> See how retrieval works — try the playground
+              </button>
               <StudyModes onPick={handlePickStudyMode} />
             </div>
           )}
@@ -1510,6 +1542,22 @@ export default function App() {
           busy={libraryBusy}
           error={libraryError}
           onClose={() => setShowLibrary(false)}
+        />
+      )}
+
+      {showExplore && (
+        <ExplorePanel
+          providers={providers}
+          documents={ragDocuments}
+          onOpenLibrary={() => {
+            setShowExplore(false);
+            setShowLibrary(true);
+          }}
+          onClose={() => setShowExplore(false)}
+          hasResearchTools={hasResearchTools()}
+          installingResearchTools={installingResearchTools}
+          onInstallResearchTools={handleInstallResearchTools}
+          onRunResearch={runResearchTrace}
         />
       )}
 

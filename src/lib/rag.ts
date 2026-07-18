@@ -132,6 +132,53 @@ export async function retrieve(
   return scored.slice(0, k);
 }
 
+/** A scored chunk that also carries its embedding vector — for the retrieval-explorer visuals. */
+export interface ExplainedChunk extends RetrievedChunk {
+  /** The chunk's stored embedding vector (used to plot it in the 2D embedding map). */
+  vector: number[];
+}
+
+/** The full, teachable picture of one retrieval run — every chunk scored, nothing discarded. */
+export interface RetrievalExplanation {
+  /** The embedded query vector (dimension = the embedding model's size). */
+  queryVector: number[];
+  /** How many top chunks a real turn would keep (the cutoff shown in the ranking). */
+  k: number;
+  /** Every stored chunk, scored against the query, sorted best-first. Retrieved = first `k`. */
+  scored: ExplainedChunk[];
+}
+
+/**
+ * Like {@link retrieve}, but keeps *everything* the chat path throws away — the query vector, every
+ * chunk's score, and every chunk's vector — so the retrieval playground can visualize the whole
+ * ranking and the embedding space. Does not touch the chat retrieval path.
+ */
+export async function retrieveExplained(
+  query: string,
+  embedder: ResolvedEmbedder,
+  k: number = DEFAULT_RETRIEVE_K,
+): Promise<RetrievalExplanation> {
+  const rows = await listAllRagChunks();
+  const queryVec = await embedQuery(query, embedder);
+  const scored: ExplainedChunk[] = rows.map((row) => {
+    let vec: number[];
+    try {
+      vec = JSON.parse(row.embedding) as number[];
+    } catch {
+      vec = [];
+    }
+    return {
+      documentName: row.document_name,
+      seq: row.seq,
+      text: row.text,
+      score: cosineSimilarity(queryVec, vec),
+      vector: vec,
+    };
+  });
+  scored.sort((a, b) => b.score - a.score);
+  return { queryVector: queryVec, k, scored };
+}
+
 /**
  * Build the grounding system block fed to the model. It instructs the model to answer only from the
  * retrieved passages and to cite them as `[DocName #seq]`, so the answer is traceable to the

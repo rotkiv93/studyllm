@@ -724,6 +724,53 @@ architecture as chat; CSP `connect-src https:` already permits it):
 - Verified: `npx tsc --noEmit` clean, `npm run lint` 0 errors, `npm test` 49/49 (new suites
   `chunking.test.ts`, `embeddings.test.ts`, `rag.test.ts`), `cargo check` clean (v7 migration).
 
+### "Explore how it works" — retrieval + research playground ✅ (student-facing, this session)
+
+A hands-on **visualization playground** so students can *see* the RAG and Deep Research machinery
+instead of only its output — turning two black boxes into something they can poke at. Opened from a
+new **Explore** sidebar footer button (`IconCompass`) and an empty-state CTA; a **two-tab overlay**
+(`src/components/ExplorePanel.tsx`, reusing the shared `.settings-overlay`/`.settings-panel-wide`/
+`.mcp-tabs` chrome). **Frontend-only — no Rust, no schema change.**
+- **Tab 1 — Retrieval (RAG)**: `src/components/RetrievalExplorer.tsx`. The student types a query,
+  hits Run, and watches the *real* pipeline run against their own library: a **live pipeline
+  stepper** (embed → score every passage → rank → keep top-k, with real counts, staged-revealed for
+  legibility) plus two cross-highlighting visuals — a **similarity ranking** (`viz/SimilarityRanking.tsx`:
+  every chunk as a bar, sorted, with a dashed top-k cutoff line) and a **2D embedding map**
+  (`viz/EmbeddingMap.tsx`: query ★ + all chunk dots, retrieved ones highlighted). Hovering a bar
+  lights its dot and vice-versa; a detail strip shows the hovered passage's text + exact score.
+  - **Data/support**: `src/lib/rag.ts` gained `retrieveExplained()` (keeps the full scored list +
+    query vector + per-chunk vectors that the chat path's `retrieve()` discards — `retrieve()` is
+    untouched). New pure, unit-tested `src/lib/projection.ts` — `projectTo2D()` PCA-to-2D via
+    dependency-free power iteration (never materializes the d×d covariance, hardened against ragged
+    vectors). No charting lib added; visuals are hand-rolled inline SVG/CSS on the `--color-*` tokens.
+- **Tab 2 — Research process (Deep Research trace)**: `src/components/ResearchTrace.tsx`. The student
+  asks a big question + picks a `ResearchMode` and watches a **live** run: a **6-stage pipeline
+  stepper** (question → sub-questions → search → read → synthesize → cited report, advancing
+  heuristically off the streamed events), a **step-budget progress bar** (tool-steps vs. the mode's
+  `maxSteps`), a **"sources consulted" list** (built from each `tool-call` input — the query/URL — and
+  its result status + size), and the **cited report** rendered live via `Markdown`. Gated on
+  `hasResearchTools()` with the existing one-click keyless installer; Stop button aborts.
+  - **No new engine**: `App.tsx`'s `runResearchTrace()` reuses `routerRef.streamReply(...)` +
+    `buildMcpTools()` + the mode's `systemPrompt`/`maxSteps`, forwarding raw `StreamEvent`s to the
+    trace instead of the transcript. Persists nothing. Handles the provider-failover reset (wipes +
+    shows "switched, restarting") and exhausted/auth errors.
+- **Known limitations**: the visualizations are **live-only / not persisted** (a run isn't saved). The
+  2D map is a **PCA approximation** of high-dimensional space (a teaching lens, not a precise metric).
+  Retrieval is still **O(n)** cosine over every chunk and still **requires a Gemini/Mistral key**; the
+  research trace needs a running research tool + a tool-capable provider.
+- Verified: `npx tsc --noEmit` clean, `npm run lint` 0 errors (5 pre-existing warnings only),
+  `npm test` 56/56 (new `projection.test.ts` incl. a ragged-input case + a `retrieveExplained` test
+  with mocked db/embeddings), `npm run build` (strict tsc + vite) clean. **Driven end-to-end in a real
+  browser via Playwright** against the running dev server: the real app shell (sidebar Explore button,
+  empty-state CTA, both Explore tabs with correct empty/guard states) plus a synthetic-data harness
+  that exercised the **real** `SimilarityRanking`/`EmbeddingMap` (verified 5-of-9 retrieved
+  highlighting, one cutoff line, one query marker) and the **real** `ResearchTrace` (a scripted run
+  drove all 6 stages to done, 3 sources, a rendered cited report) — screenshotted in light + dark, no
+  console errors. Real topical PDFs (EU AI Act / US AI policy / treaty law) were generated and
+  confirmed extractable by the app's own `pdfjs-dist` + chunking (the ingest parse step); the one path
+  needing the maintainer's live embedding key — an actual in-app embed→index→retrieve — is left for a
+  live click-test with the generated PDFs.
+
 ### Chat file attachments ✅ (Priority 4 — phases 1–3: text + PDF + Word)
 
 Students can now **drop or pick a file in the composer** and its extracted text rides along with the
