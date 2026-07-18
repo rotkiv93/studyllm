@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { ConversationRow } from "../lib/db";
-import { IconEdit, IconKey, IconMenu, IconMessage, IconPlug, IconPlus, IconSettings, IconTool, IconTrash } from "./icons";
+import { IconBook, IconEdit, IconKey, IconMenu, IconMessage, IconPlug, IconPlus, IconSettings, IconTool, IconTrash } from "./icons";
 
 interface Props {
   conversations: ConversationRow[];
@@ -16,8 +16,11 @@ interface Props {
   onRenameConversation: (id: string, title: string) => void;
   onOpenProviders: () => void;
   onOpenMcp: () => void;
+  onOpenLibrary: () => void;
   onOpenPlugins: () => void;
   onOpenAppSettings: () => void;
+  /** Number of documents in the RAG library — shown as a badge on the Library button. */
+  libraryDocCount: number;
 }
 
 export function Sidebar({
@@ -34,8 +37,10 @@ export function Sidebar({
   onRenameConversation,
   onOpenProviders,
   onOpenMcp,
+  onOpenLibrary,
   onOpenPlugins,
   onOpenAppSettings,
+  libraryDocCount,
 }: Props) {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
@@ -157,6 +162,16 @@ export function Sidebar({
           <IconTool size={17} />
           {!collapsed && <span>MCP servers</span>}
           {mcpRunningCount > 0 && <span className="sidebar-footer-badge">{mcpRunningCount}</span>}
+        </button>
+        <button
+          type="button"
+          className="sidebar-footer-btn"
+          onClick={onOpenLibrary}
+          title="Document library"
+        >
+          <IconBook size={17} />
+          {!collapsed && <span>Library</span>}
+          {libraryDocCount > 0 && <span className="sidebar-footer-badge">{libraryDocCount}</span>}
         </button>
         <button
           type="button"

@@ -23,10 +23,13 @@ import {
   listToolCallsForConversation,
   renameConversation,
   deleteMessagesFrom,
+  listRagDocuments,
+  deleteRagDocument,
   type ConversationRow,
   type ProviderRow,
   type McpServerRow,
   type ToolCallRow,
+  type RagDocumentRow,
 } from "./lib/db";
 import { ProvidersPanel, type ProviderDraft, type ProviderEditDraft } from "./components/ProvidersPanel";
 import { AppSettingsPanel } from "./components/AppSettingsPanel";
@@ -36,9 +39,13 @@ import { PluginsPanel } from "./components/PluginsPanel";
 import { OnboardingWizard } from "./components/OnboardingWizard";
 import { Sidebar } from "./components/Sidebar";
 import { StudyModes } from "./components/StudyModes";
+import { FeatureExplainer } from "./components/FeatureExplainer";
+import { LibraryPanel } from "./components/LibraryPanel";
+import { RetrievedSources } from "./components/RetrievedSources";
 import { ToolCallBlock } from "./components/ToolCallBlock";
 import { Markdown } from "./components/Markdown";
 import {
+  IconBook,
   IconCheck,
   IconCopy,
   IconDownload,
@@ -46,10 +53,32 @@ import {
   IconLoader,
   IconPaperclip,
   IconRefresh,
+  IconSearch,
   IconSend,
   IconStop,
   IconX,
 } from "./components/icons";
+import {
+  RESEARCH_MODES,
+  DEFAULT_RESEARCH_MODE,
+  RESEARCH_TOOL_CATALOG_IDS,
+  isResearchTool,
+  type ResearchMode,
+} from "./lib/researchModes";
+import { CURATED_ENTRIES } from "./lib/curatedMcp";
+import { computeTrustTier } from "./lib/mcpCatalog";
+import {
+  ingestDocument,
+  retrieve,
+  resolveEmbedder,
+  buildRagSystemBlock,
+  type RetrievedChunk,
+} from "./lib/rag";
+import {
+  loadEmbeddingConfig,
+  saveEmbeddingConfig,
+  type EmbeddingConfig,
+} from "./lib/embeddings";
 import {
   buildTranscriptMarkdown,
   buildTranscriptPlainText,
@@ -98,7 +127,10 @@ type DisplayMessage =
       output: string;
       isError: boolean;
       pending: boolean;
-    };
+    }
+  // Ephemeral (not persisted): the library passages retrieved for a RAG-grounded turn, shown above
+  // the answer so the student sees what the assistant was given to work from.
+  | { role: "sources"; sources: RetrievedChunk[] };
 
 /** Some providers (e.g. Gemini, reached via OpenRouter) reject function/tool names that don't
  * start with a letter or underscore — MCP server ids are UUIDs, which often start with a digit.
@@ -145,9 +177,21 @@ export default function App() {
   const [providers, setProviders] = useState<ProviderRow[]>([]);
   const [showProviders, setShowProviders] = useState(false);
   const [showMcp, setShowMcp] = useState(false);
+  const [showLibrary, setShowLibrary] = useState(false);
   const [showPlugins, setShowPlugins] = useState(false);
   const [showAppSettings, setShowAppSettings] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
+  // Deep Research: active mode (null = off) + whether any research-capable tool is running.
+  const [researchMode, setResearchMode] = useState<ResearchMode | null>(null);
+  // RAG: whether this turn should retrieve from the document library.
+  const [useLibrary, setUseLibrary] = useState(false);
+  const [ragDocuments, setRagDocuments] = useState<RagDocumentRow[]>([]);
+  const [embeddingConfig, setEmbeddingConfig] = useState<EmbeddingConfig | null>(() =>
+    loadEmbeddingConfig(),
+  );
+  const [libraryBusy, setLibraryBusy] = useState(false);
+  const [libraryError, setLibraryError] = useState<string | null>(null);
+  const [installingResearchTools, setInstallingResearchTools] = useState(false);
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
   const [input, setInput] = useState("");
   const composerInputRef = useRef<HTMLTextAreaElement>(null);
@@ -196,6 +240,7 @@ export default function App() {
       await refreshProviders();
     })();
     refreshConversations();
+    refreshRagDocuments();
     (async () => {
       const rows = await listMcpServers();
       setMcpServers(rows);
@@ -423,6 +468,87 @@ export default function App() {
     await insertMcpServer(row);
     await refreshMcpServers();
     await handleStartMcpServer(row);
+  }
+
+  // ── Deep Research + RAG ──────────────────────────────────────────────────────
+
+  async function refreshRagDocuments() {
+    setRagDocuments(await listRagDocuments());
+  }
+
+  /** True when at least one running MCP tool looks like a web-search / page-reader / reference tool. */
+  function hasResearchTools(): boolean {
+    return Object.values(mcpToolsByServer).some((tools) => tools.some((t) => isResearchTool(t.name)));
+  }
+
+  /** Install the keyless curated research servers that aren't already present (by name). */
+  async function handleInstallResearchTools() {
+    setInstallingResearchTools(true);
+    setError(null);
+    try {
+      const installedNames = new Set(mcpServers.map((s) => s.name));
+      const toInstall = CURATED_ENTRIES.filter(
+        (e) => RESEARCH_TOOL_CATALOG_IDS.includes(e.id) && !installedNames.has(e.name),
+      );
+      for (const entry of toInstall) {
+        await handleInstallFromCatalog({
+          entry,
+          finalArgs:
+            entry.install.kind === "npx" || entry.install.kind === "uvx" ? entry.install.args : [],
+          envValues: [],
+          trustTier: computeTrustTier(entry),
+        });
+      }
+      if (toInstall.length > 0) {
+        setNotice("Research tools are starting up — give them a few seconds on first run.");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Couldn't install research tools.");
+    } finally {
+      setInstallingResearchTools(false);
+    }
+  }
+
+  /** "Try Deep Research" CTA: install tools if needed, turn the mode on, focus the composer. */
+  async function handleTryDeepResearch() {
+    if (!hasResearchTools()) {
+      await handleInstallResearchTools();
+    }
+    setResearchMode(DEFAULT_RESEARCH_MODE);
+    composerInputRef.current?.focus();
+  }
+
+  async function handleAddLibraryFiles(files: File[]) {
+    setLibraryError(null);
+    const resolved = await resolveEmbedder(providers);
+    if ("error" in resolved) {
+      setLibraryError(resolved.error);
+      return;
+    }
+    setLibraryBusy(true);
+    try {
+      for (const file of files) {
+        await ingestDocument(file, resolved.embedder);
+      }
+      await refreshRagDocuments();
+    } catch (err) {
+      setLibraryError(err instanceof Error ? err.message : "Couldn't index that document.");
+    } finally {
+      setLibraryBusy(false);
+    }
+  }
+
+  async function handleDeleteRagDocument(id: string) {
+    await deleteRagDocument(id);
+    await refreshRagDocuments();
+    const remaining = await listRagDocuments();
+    if (remaining.length === 0) setUseLibrary(false);
+  }
+
+  function handleSaveEmbeddingConfig(config: EmbeddingConfig) {
+    saveEmbeddingConfig(config);
+    setEmbeddingConfig(config);
+    setNotice("Embedding model saved.");
   }
 
   async function handleConnectGoogle(connector: OAuthConnector) {
@@ -701,7 +827,9 @@ export default function App() {
     const userCreatedAt = Date.now();
     const userDisplay: DisplayMessage = { role: "user", content: userMessage.content, id: userMessageId };
     const priorHistory: ChatMessage[] = messages
-      .filter((m): m is Extract<DisplayMessage, { role: "user" | "assistant" }> => m.role !== "tool")
+      .filter((m): m is Extract<DisplayMessage, { role: "user" | "assistant" }> =>
+        m.role === "user" || m.role === "assistant",
+      )
       .map((m) => ({ role: m.role, content: m.content }));
     const nextHistory = [...priorHistory, userMessage];
     const baseMessages = messages;
@@ -718,8 +846,39 @@ export default function App() {
       created_at: userCreatedAt,
     });
 
+    // Compose transient per-turn steering: a Deep Research directive and/or a RAG grounding block.
+    // Neither is persisted to the conversation — they ride the router's `system` param.
+    const systemParts: string[] = [];
+    let maxSteps: number | undefined;
+    let ragSources: RetrievedChunk[] = [];
+
+    if (researchMode) {
+      systemParts.push(researchMode.systemPrompt);
+      maxSteps = researchMode.maxSteps;
+    }
+
+    if (useLibrary && ragDocuments.length > 0) {
+      const resolved = await resolveEmbedder(providers);
+      if ("error" in resolved) {
+        setNotice(`Library search skipped: ${resolved.error}`);
+      } else {
+        try {
+          ragSources = await retrieve(userMessage.content, resolved.embedder);
+          if (ragSources.length > 0) systemParts.push(buildRagSystemBlock(ragSources));
+        } catch (err) {
+          setNotice(
+            `Library search failed: ${err instanceof Error ? err.message : "embedding error"}`,
+          );
+        }
+      }
+    }
+
+    const system = systemParts.length > 0 ? systemParts.join("\n\n") : undefined;
+    // The retrieved-sources card leads the answer and persists across `commitTail` re-renders.
+    const prefix: DisplayMessage[] = ragSources.length > 0 ? [{ role: "sources", sources: ragSources }] : [];
+
     let tail: DisplayMessage[] = [{ role: "assistant", content: "" }];
-    const commitTail = () => setMessages([...baseMessages, userDisplay, ...tail]);
+    const commitTail = () => setMessages([...baseMessages, userDisplay, ...prefix, ...tail]);
     commitTail();
 
     let finalProviderId: string | null = null;
@@ -734,7 +893,10 @@ export default function App() {
     abortControllerRef.current = abortController;
 
     try {
-      for await (const event of routerRef.current.streamReply(nextHistory, tools, abortController.signal)) {
+      for await (const event of routerRef.current.streamReply(nextHistory, tools, abortController.signal, {
+        system,
+        maxSteps,
+      })) {
         if (event.type === "chunk") {
           assistantText += event.text;
           const last = tail[tail.length - 1];
@@ -926,7 +1088,10 @@ export default function App() {
   /** Copy the whole conversation to the clipboard as Markdown. */
   async function handleCopyTranscript() {
     setExportMenuOpen(false);
-    const md = buildTranscriptMarkdown(activeTitle || "Conversation", messages);
+    const md = buildTranscriptMarkdown(
+      activeTitle || "Conversation",
+      messages.filter((m) => m.role !== "sources"),
+    );
     try {
       await navigator.clipboard.writeText(md);
       setError(null);
@@ -960,7 +1125,7 @@ export default function App() {
         setError("Created a Google Doc but couldn't read its id back.");
         return;
       }
-      const text = buildTranscriptPlainText(title, messages);
+      const text = buildTranscriptPlainText(title, messages.filter((m) => m.role !== "sources"));
       const appended = await callMcpTool(docsServerId, "docs_append_text", {
         document_id: docId,
         text,
@@ -981,7 +1146,9 @@ export default function App() {
   /** Drops this message and everything after it from both UI state and SQLite. Returns the
    * truncated list so callers can chain further action (e.g. resending) off it. */
   async function truncateFrom(id: string): Promise<DisplayMessage[]> {
-    const idx = messages.findIndex((m) => m.role !== "tool" && m.id === id);
+    const idx = messages.findIndex(
+      (m) => (m.role === "user" || m.role === "assistant") && m.id === id,
+    );
     if (idx === -1) return messages;
     const truncated = messages.slice(0, idx);
     setMessages(truncated);
@@ -999,7 +1166,9 @@ export default function App() {
 
   async function handleRetryMessage(assistantId: string) {
     if (isStreaming) return;
-    const idx = messages.findIndex((m) => m.role !== "tool" && m.id === assistantId);
+    const idx = messages.findIndex(
+      (m) => (m.role === "user" || m.role === "assistant") && m.id === assistantId,
+    );
     if (idx <= 0) return;
     let userIdx = idx - 1;
     while (userIdx >= 0 && messages[userIdx].role !== "user") userIdx--;
@@ -1034,8 +1203,10 @@ export default function App() {
         onRenameConversation={handleRenameConversation}
         onOpenProviders={() => setShowProviders(true)}
         onOpenMcp={() => setShowMcp(true)}
+        onOpenLibrary={() => setShowLibrary(true)}
         onOpenPlugins={() => setShowPlugins(true)}
         onOpenAppSettings={() => setShowAppSettings(true)}
+        libraryDocCount={ragDocuments.length}
       />
 
       <main className="main-panel">
@@ -1080,6 +1251,11 @@ export default function App() {
           {messages.length === 0 && (
             <div className="empty-state">
               <p className="empty-state-text">Ask anything to get started — or pick a study mode.</p>
+              <FeatureExplainer
+                onTryDeepResearch={handleTryDeepResearch}
+                onTryLibrary={() => setShowLibrary(true)}
+                libraryDocCount={ragDocuments.length}
+              />
               <StudyModes onPick={handlePickStudyMode} />
             </div>
           )}
@@ -1087,6 +1263,9 @@ export default function App() {
             const isTrailingEmptyAssistant =
               m.role === "assistant" && !m.content && !(isStreaming && i === messages.length - 1);
             if (isTrailingEmptyAssistant) return null;
+            if (m.role === "sources") {
+              return <RetrievedSources key={i} sources={m.sources} />;
+            }
             return m.role === "tool" ? (
               <ToolCallBlock
                 key={i}
@@ -1163,6 +1342,65 @@ export default function App() {
             void addFiles(Array.from(e.dataTransfer.files));
           }}
         >
+          <div className="composer-modes">
+            <button
+              type="button"
+              className={`composer-mode-toggle${researchMode ? " composer-mode-toggle-on" : ""}`}
+              onClick={() => setResearchMode((m) => (m ? null : DEFAULT_RESEARCH_MODE))}
+              disabled={isStreaming}
+              title="Deep Research: multi-step web research with a cited report"
+              aria-pressed={!!researchMode}
+            >
+              <IconSearch size={13} />
+              Deep Research
+            </button>
+            {researchMode && (
+              <>
+                <select
+                  className="composer-mode-select"
+                  value={researchMode.id}
+                  onChange={(e) =>
+                    setResearchMode(RESEARCH_MODES.find((r) => r.id === e.currentTarget.value) ?? null)
+                  }
+                  disabled={isStreaming}
+                  title={researchMode.description}
+                >
+                  {RESEARCH_MODES.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.label}
+                    </option>
+                  ))}
+                </select>
+                {!hasResearchTools() && (
+                  <button
+                    type="button"
+                    className="composer-mode-install"
+                    onClick={() => void handleInstallResearchTools()}
+                    disabled={installingResearchTools}
+                  >
+                    {installingResearchTools ? <IconLoader size={12} /> : null}
+                    Set up research tools
+                  </button>
+                )}
+              </>
+            )}
+            <button
+              type="button"
+              className={`composer-mode-toggle${useLibrary ? " composer-mode-toggle-on" : ""}`}
+              onClick={() => (ragDocuments.length > 0 ? setUseLibrary((v) => !v) : setShowLibrary(true))}
+              disabled={isStreaming}
+              title={
+                ragDocuments.length > 0
+                  ? "Answer from your document library (RAG)"
+                  : "Add documents to your library first"
+              }
+              aria-pressed={useLibrary}
+            >
+              <IconBook size={13} />
+              Use my library
+              {ragDocuments.length > 0 && <span className="composer-mode-count">{ragDocuments.length}</span>}
+            </button>
+          </div>
           {attachments.length > 0 && (
             <div className="attachment-chips">
               {attachments.map((a, i) => (
@@ -1260,6 +1498,20 @@ export default function App() {
       )}
 
       {showAppSettings && <AppSettingsPanel onClose={() => setShowAppSettings(false)} />}
+
+      {showLibrary && (
+        <LibraryPanel
+          documents={ragDocuments}
+          providers={providers}
+          embeddingConfig={embeddingConfig}
+          onSaveEmbeddingConfig={handleSaveEmbeddingConfig}
+          onAddFiles={handleAddLibraryFiles}
+          onDeleteDocument={handleDeleteRagDocument}
+          busy={libraryBusy}
+          error={libraryError}
+          onClose={() => setShowLibrary(false)}
+        />
+      )}
 
       {showOnboarding && (
         <OnboardingWizard
