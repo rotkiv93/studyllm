@@ -94,4 +94,37 @@ export const CURATED_ENTRIES: CatalogEntry[] = [
       },
     ],
   },
+  {
+    id: "curated:fetch",
+    name: "Web Reader",
+    description:
+      "Give the assistant a web link and it reads the page for you — a news article, a treaty " +
+      "text, a UN report. No account or key needed.",
+    version: null,
+    repositoryUrl: "https://github.com/modelcontextprotocol/servers/tree/main/src/fetch",
+    install: { kind: "uvx", args: ["mcp-server-fetch"], positionalArgs: [] },
+    requiredEnv: [],
+  },
+  {
+    id: "curated:wikipedia",
+    name: "Wikipedia",
+    description:
+      "Look up and read Wikipedia articles for quick background on people, places, events, and " +
+      "topics. No account or key needed.",
+    version: null,
+    repositoryUrl: "https://github.com/rudra-ravi/wikipedia-mcp",
+    install: { kind: "uvx", args: ["wikipedia-mcp"], positionalArgs: [] },
+    requiredEnv: [],
+  },
+  {
+    id: "curated:openalex",
+    name: "OpenAlex — academic search",
+    description:
+      "Search hundreds of millions of scholarly papers, authors, and journals across every field — " +
+      "handy for literature reviews. No account or key needed.",
+    version: null,
+    repositoryUrl: "https://github.com/reetp14/openalex-mcp",
+    install: { kind: "npx", args: ["-y", "openalex-mcp"], positionalArgs: [] },
+    requiredEnv: [],
+  },
 ];

@@ -35,9 +35,37 @@ import { type ResolvedInstall } from "./components/McpMarketplace";
 import { PluginsPanel } from "./components/PluginsPanel";
 import { OnboardingWizard } from "./components/OnboardingWizard";
 import { Sidebar } from "./components/Sidebar";
+import { StudyModes } from "./components/StudyModes";
 import { ToolCallBlock } from "./components/ToolCallBlock";
 import { Markdown } from "./components/Markdown";
-import { IconCheck, IconCopy, IconEdit, IconRefresh, IconSend, IconStop } from "./components/icons";
+import {
+  IconCheck,
+  IconCopy,
+  IconDownload,
+  IconEdit,
+  IconLoader,
+  IconPaperclip,
+  IconRefresh,
+  IconSend,
+  IconStop,
+  IconX,
+} from "./components/icons";
+import {
+  buildTranscriptMarkdown,
+  buildTranscriptPlainText,
+  findDocsServerId,
+  extractDocId,
+  extractDocUrl,
+} from "./lib/exportChat";
+import {
+  parseAttachment,
+  buildOutgoingContent,
+  isSupportedAttachment,
+  MAX_ATTACHMENTS,
+  SUPPORTED_ATTACHMENT_HINT,
+  type ParsedAttachment,
+} from "./lib/attachments";
+import { UserMessageContent } from "./components/MessageAttachments";
 import {
   callMcpTool,
   filesystemServerArgs,
@@ -122,9 +150,23 @@ export default function App() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
   const [input, setInput] = useState("");
+  const composerInputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [attachments, setAttachments] = useState<ParsedAttachment[]>([]);
+  const [attachBusy, setAttachBusy] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  // Auto-grow the composer textarea to fit its content (capped by max-height in CSS).
+  useEffect(() => {
+    const el = composerInputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [input]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [mcpServers, setMcpServers] = useState<McpServerRow[]>([]);
   const [mcpToolsByServer, setMcpToolsByServer] = useState<Record<string, McpToolInfo[]>>({});
   const [conversations, setConversations] = useState<ConversationRow[]>([]);
@@ -828,7 +870,112 @@ export default function App() {
 
   async function sendMessage(e: React.FormEvent) {
     e.preventDefault();
-    await runSend(input);
+    await submitComposer();
+  }
+
+  /** Seed the composer from a study-mode chip and focus it so the student can fill in placeholders. */
+  function handlePickStudyMode(seed: string) {
+    setInput(seed);
+    composerInputRef.current?.focus();
+  }
+
+  /** Parse dropped/picked files into text attachments that ride along with the next message. */
+  async function addFiles(files: File[]) {
+    if (files.length === 0) return;
+    setError(null);
+    const room = MAX_ATTACHMENTS - attachments.length;
+    if (room <= 0) {
+      setError(`You can attach up to ${MAX_ATTACHMENTS} files per message.`);
+      return;
+    }
+    setAttachBusy(true);
+    try {
+      for (const file of files.slice(0, room)) {
+        if (!isSupportedAttachment(file.name)) {
+          setError(`Can't read "${file.name}" — supported: ${SUPPORTED_ATTACHMENT_HINT}.`);
+          continue;
+        }
+        try {
+          const parsed = await parseAttachment(file);
+          setAttachments((prev) => [...prev, parsed]);
+        } catch (e) {
+          setError(e instanceof Error ? e.message : `Couldn't read "${file.name}".`);
+        }
+      }
+      if (files.length > room) {
+        setError(`Only ${room} more file(s) fit — max ${MAX_ATTACHMENTS} per message.`);
+      }
+    } finally {
+      setAttachBusy(false);
+    }
+  }
+
+  function removeAttachment(index: number) {
+    setAttachments((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  /** Build the outgoing message (typed text + any attachment text) and send it. */
+  async function submitComposer() {
+    if (isStreaming || attachBusy) return;
+    const combined = buildOutgoingContent(input, attachments);
+    if (!combined.trim()) return;
+    setAttachments([]);
+    await runSend(combined);
+  }
+
+  /** Copy the whole conversation to the clipboard as Markdown. */
+  async function handleCopyTranscript() {
+    setExportMenuOpen(false);
+    const md = buildTranscriptMarkdown(activeTitle || "Conversation", messages);
+    try {
+      await navigator.clipboard.writeText(md);
+      setError(null);
+      setNotice("Conversation copied as Markdown.");
+    } catch {
+      setError("Couldn't copy to the clipboard.");
+    }
+  }
+
+  /** Create a Google Doc from the conversation via the connected Google account's Docs tools. */
+  async function handleExportToGoogleDoc() {
+    setExportMenuOpen(false);
+    const docsServerId = findDocsServerId(mcpToolsByServer);
+    if (!docsServerId) {
+      setNotice(null);
+      setError("Connect your Google account in Plugins first to save to Google Docs.");
+      return;
+    }
+    setExporting(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const title = activeTitle || "StudyLLM conversation";
+      const created = await callMcpTool(docsServerId, "docs_create_document", { title });
+      if (created.isError) {
+        setError(`Couldn't create the Google Doc: ${created.text}`);
+        return;
+      }
+      const docId = extractDocId(created.text);
+      if (!docId) {
+        setError("Created a Google Doc but couldn't read its id back.");
+        return;
+      }
+      const text = buildTranscriptPlainText(title, messages);
+      const appended = await callMcpTool(docsServerId, "docs_append_text", {
+        document_id: docId,
+        text,
+      });
+      if (appended.isError) {
+        setError(`Created the doc, but couldn't add the text: ${appended.text}`);
+        return;
+      }
+      const url = extractDocUrl(created.text);
+      setNotice(url ? `Saved to Google Docs — ${url}` : "Saved to Google Docs.");
+    } catch (e) {
+      setError(`Export failed: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setExporting(false);
+    }
   }
 
   /** Drops this message and everything after it from both UI state and SQLite. Returns the
@@ -894,10 +1041,48 @@ export default function App() {
       <main className="main-panel">
         <header className="app-header">
           <h1>{activeTitle || "New chat"}</h1>
+          {messages.length > 0 && (
+            <div className="export-wrap">
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm export-btn"
+                onClick={() => setExportMenuOpen((v) => !v)}
+                disabled={exporting || isStreaming}
+                title="Export this conversation"
+              >
+                {exporting ? <IconLoader size={14} /> : <IconDownload size={14} />}
+                <span>Export</span>
+              </button>
+              {exportMenuOpen && (
+                <>
+                  <div className="export-backdrop" onClick={() => setExportMenuOpen(false)} />
+                  <div className="export-menu" role="menu">
+                    <button type="button" className="export-menu-item" onClick={handleCopyTranscript}>
+                      <IconCopy size={14} />
+                      <span>Copy as Markdown</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="export-menu-item"
+                      onClick={handleExportToGoogleDoc}
+                    >
+                      <IconDownload size={14} />
+                      <span>Save to Google Docs</span>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </header>
 
         <div className="messages" ref={scrollRef}>
-          {messages.length === 0 && <p className="empty-state">Ask anything to get started.</p>}
+          {messages.length === 0 && (
+            <div className="empty-state">
+              <p className="empty-state-text">Ask anything to get started — or pick a study mode.</p>
+              <StudyModes onPick={handlePickStudyMode} />
+            </div>
+          )}
           {messages.map((m, i) => {
             const isTrailingEmptyAssistant =
               m.role === "assistant" && !m.content && !(isStreaming && i === messages.length - 1);
@@ -951,7 +1136,7 @@ export default function App() {
                     <p>{isStreaming && i === messages.length - 1 ? "…" : ""}</p>
                   )
                 ) : (
-                  <p>{m.content}</p>
+                  <UserMessageContent content={m.content} />
                 )}
               </div>
             );
@@ -961,34 +1146,104 @@ export default function App() {
         {notice && <p className="notice">{notice}</p>}
         {error && <p className="error">{error}</p>}
 
-        <form className="composer" onSubmit={sendMessage}>
-          <input
-            className="composer-input"
-            placeholder="Type a message…"
-            value={input}
-            onChange={(e) => setInput(e.currentTarget.value)}
-            disabled={isStreaming}
-          />
-          {isStreaming ? (
+        <div
+          className={`composer-wrap${isDragging ? " composer-dragging" : ""}`}
+          onDragOver={(e) => {
+            e.preventDefault();
+            if (!isStreaming) setIsDragging(true);
+          }}
+          onDragLeave={(e) => {
+            e.preventDefault();
+            setIsDragging(false);
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            setIsDragging(false);
+            if (isStreaming) return;
+            void addFiles(Array.from(e.dataTransfer.files));
+          }}
+        >
+          {attachments.length > 0 && (
+            <div className="attachment-chips">
+              {attachments.map((a, i) => (
+                <span
+                  key={i}
+                  className="attachment-chip"
+                  title={a.truncated ? `${a.name} (trimmed to fit)` : a.name}
+                >
+                  <IconPaperclip size={12} />
+                  <span className="attachment-chip-name">{a.name}</span>
+                  {a.truncated && <span className="attachment-chip-trim">trimmed</span>}
+                  <button
+                    type="button"
+                    className="attachment-chip-remove"
+                    onClick={() => removeAttachment(i)}
+                    title="Remove"
+                    aria-label={`Remove ${a.name}`}
+                  >
+                    <IconX size={12} />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+          <form className="composer" onSubmit={sendMessage}>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept=".pdf,.docx,.txt,.md,.markdown,.csv,.tsv,.json,.log,.rtf"
+              className="composer-file-input"
+              onChange={(e) => {
+                void addFiles(Array.from(e.currentTarget.files ?? []));
+                e.currentTarget.value = "";
+              }}
+            />
             <button
               type="button"
-              className="btn btn-danger btn-icon composer-send"
-              onClick={handleStopStreaming}
-              title="Stop generating"
+              className="btn btn-ghost btn-icon composer-attach"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isStreaming || attachBusy}
+              title={`Attach a file (${SUPPORTED_ATTACHMENT_HINT})`}
             >
-              <IconStop size={16} />
+              {attachBusy ? <IconLoader size={16} /> : <IconPaperclip size={16} />}
             </button>
-          ) : (
-            <button
-              type="submit"
-              className="btn btn-primary btn-icon composer-send"
-              disabled={!input.trim()}
-              title="Send"
-            >
-              <IconSend size={16} />
-            </button>
-          )}
-        </form>
+            <textarea
+              ref={composerInputRef}
+              className="composer-input"
+              placeholder="Type a message…  (Enter to send, Shift+Enter for a new line)"
+              value={input}
+              onChange={(e) => setInput(e.currentTarget.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  void submitComposer();
+                }
+              }}
+              disabled={isStreaming}
+              rows={1}
+            />
+            {isStreaming ? (
+              <button
+                type="button"
+                className="btn btn-danger btn-icon composer-send"
+                onClick={handleStopStreaming}
+                title="Stop generating"
+              >
+                <IconStop size={16} />
+              </button>
+            ) : (
+              <button
+                type="submit"
+                className="btn btn-primary btn-icon composer-send"
+                disabled={(!input.trim() && attachments.length === 0) || attachBusy}
+                title="Send"
+              >
+                <IconSend size={16} />
+              </button>
+            )}
+          </form>
+        </div>
       </main>
 
       {showProviders && (

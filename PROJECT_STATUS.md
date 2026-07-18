@@ -651,6 +651,118 @@ tools, a forced-fast-refresh test (shrink a stored `oauth_expires_at` to observe
 `update_native_token`), and a revoke-then-use test (confirm a clean `PERMISSION_DENIED`-style error
 surfaces as a tool `isError`, not a hang) — see `TODO.md`.
 
+## Student feature roadmap (in progress)
+
+A prioritized roadmap of student-facing features (targeting non-technical International Relations and
+documentary/archival students) lives at
+`C:\Users\47852\.claude\plans\lets-think-what-are-effervescent-whistle.md`: (1) in-app study
+modes ✅, (2) curate more field-relevant MCPs ✅ (first batch), (3) export a chat → document ✅
+(first slice), (4) chat file attachments ✅ (phases 1–3: text + PDF + Word/docx). Remaining P4
+phases 4–5 (images for vision models; OCR for scanned docs) are **not started** — see the note at
+the end of this section for why they're a separate, larger effort.
+
+### Chat file attachments ✅ (Priority 4 — phases 1–3: text + PDF + Word)
+
+Students can now **drop or pick a file in the composer** and its extracted text rides along with the
+message so the model can read it (a treaty PDF, a reading, notes). All parsing is **frontend-only**.
+- `src/lib/attachments.ts` — `parseAttachment(file)` extracts text: plain text (`.txt/.md/.csv/…`)
+  via `File.text()`, PDFs via **`pdfjs-dist`**, and Word **`.docx`** via **`mammoth`** (its `browser`
+  package field makes Vite swap mammoth's node-only unzip/fs internals for browser ones, so the
+  frontend `{arrayBuffer}` path works; legacy `.doc` is rejected with a "re-save as .docx/PDF"
+  message). Both `pdfjs-dist` and `mammoth` are **dynamically imported** (they need browser globals
+  and the Vitest suite runs in node); pdf.js's worker is a same-origin `?url` asset, allowed by the
+  app's `default-src 'self'` CSP with no policy change. Per-file cap `MAX_ATTACHMENT_CHARS` (20k,
+  with a "trimmed" flag) and `MAX_ATTACHMENTS` (5) guard the model's context.
+  `buildOutgoingContent(typed, attachments)` composes the outgoing message: typed text first (so it
+  still drives the conversation title), then one `--- Attached file: NAME ---` block per file.
+- `src/App.tsx` — attachment state + `addFiles`/`removeAttachment`/`submitComposer`; the composer is
+  now wrapped in a drag-and-drop zone (`.composer-wrap`, highlights while dragging), with a
+  paperclip **attach button** (hidden `<input type="file">`), attachment **chips** (removable, show
+  a "trimmed" marker), and Enter-to-send routed through `submitComposer`. Send is enabled when
+  there's typed text **or** an attachment.
+- `src/components/MessageAttachments.tsx` (`UserMessageContent`) — renders a user message by peeling
+  the `--- Attached file: ---` blocks back out: the student's own text shows normally, each file
+  becomes a collapsed, expandable `<details>` card (so a PDF dump doesn't flood the transcript). The
+  full text still lives in the message content, so multi-turn follow-ups keep the file context.
+- New deps: `pdfjs-dist` (^4) and `mammoth` (^1) — both code-split into their own chunks (loaded
+  only when a PDF/docx is actually parsed, so the main bundle is essentially unchanged). New icons
+  `IconPaperclip`/`IconX` usage in the composer.
+- Attachments are session-only in the composer (cleared on send); the extracted text persists as
+  part of the sent message.
+- Verified: `npm run build` (strict tsc + vite) clean, `npm run lint` 0 errors, `npm test` 33/33
+  (`attachments.test.ts` covers the pure logic). PDF **and** docx extraction each validated against
+  a real generated file via a Node harness (pdf.js pulled the expected text; mammoth pulled the
+  expected docx text). Live drag-drop in the running app still to be click-confirmed.
+- **Phases 4–5 deliberately deferred as a separate, larger effort — not a quick add-on:**
+  - **Phase 4 (images for vision models)** changes the message *pipeline*, not just parsing:
+    `ChatMessage.content` is a plain `string` today (built in `runSend`, mapped in `priorHistory`,
+    passed to `providerRouter.streamReply`, persisted as SQLite TEXT). Vision means multimodal
+    content parts (`[{type:"text"}, {type:"image"}]`), a per-model vision-capability gate (mirroring
+    the existing tools-capability handling), and a persistence/replay story for image data. Most of
+    this app's free-tier target models are text/tool-only, so it needs its own design pass.
+  - **Phase 5 (OCR for scanned docs)** needs a native OCR engine (e.g. Tesseract) with a
+    cross-platform binary bootstrap mirroring the Node/uv one in `runtime.rs` — a heavy, mostly
+    Rust-side effort. Its own project.
+
+### Export a chat → document ✅ (Priority 3 — first slice)
+
+An **"Export"** button in the chat header (`.app-header`, shown only once a conversation has
+messages) opens a small dropdown with two options:
+- **Copy as Markdown** — always available; copies the whole conversation (a `# title` + `## You` /
+  `## Assistant` sections) to the clipboard via `navigator.clipboard`.
+- **Save to Google Docs** — reuses the existing native Google Docs tools: finds the connected
+  Google server that exposes `docs_create_document` + `docs_append_text`, creates a doc titled
+  after the conversation, parses the returned doc id/URL, and appends a plain-text transcript. If no
+  Google account is connected it shows "Connect your Google account in Plugins first."
+- `src/lib/exportChat.ts` — transcript builders (`buildTranscriptMarkdown` /
+  `buildTranscriptPlainText`, both skip tool-call blocks and empty turns), `findDocsServerId`, and
+  `extractDocId`/`extractDocUrl` (parse `docs_create_document`'s text result, which embeds the doc
+  URL — the tool returns text, not structured fields).
+- `src/App.tsx` — `handleCopyTranscript` / `handleExportToGoogleDoc`, `exportMenuOpen`/`exporting`
+  state, and the header dropdown (a `.export-backdrop` click-catcher closes it). New `IconDownload`
+  in `icons.tsx`; `.export-*` styles in `App.css` (token-driven).
+- Deferred to a follow-up: export to a Notion page and to a local `.md` file.
+- Verified: `npm run build` (strict tsc) clean, lint 0 errors, `npm test` 27/27. Copy-as-Markdown
+  is provider-independent; the Google Docs path needs a live connected account to click-test in-app.
+
+### Curated MCP additions ✅ (Priority 2 — first batch)
+
+Three **keyless, zero-setup** servers appended to `CURATED_ENTRIES` (`src/lib/curatedMcp.ts`) — they
+install through the unchanged `handleInstallFromCatalog` flow (no Rust, no new deps), chosen for the
+target students and for requiring no account/API key at all (lowest friction):
+- **Web Reader** — official `mcp-server-fetch` (uvx). Reads a web link the student gives (news
+  article, treaty text, UN report).
+- **Wikipedia** — `wikipedia-mcp` (uvx). Article lookups for quick background.
+- **OpenAlex — academic search** — `openalex-mcp` (npx). Cross-disciplinary scholarly search
+  (works/authors/journals) for literature reviews — a better fit than arXiv (STEM-only) for these
+  audiences.
+- Each verified to exist on its registry with the exact run command + a real console/bin entry
+  point, and confirmed to launch over stdio and speak MCP via a direct `initialize` + `tools/list`
+  handshake: Web Reader → 1 tool (`fetch`); Wikipedia → 22 tools (`search_wikipedia`, `get_article`,
+  `get_summary`, `extract_key_facts`, …); OpenAlex → 11 tools (`search_works`, `search_authors`,
+  `search_sources`, `autocomplete`, …).
+- **Deferred:** Zotero (`zotero-mcp`, verified real) — needs a Zotero API key + library ID (or a
+  running local Zotero), so it's higher-friction than this all-keyless batch; add once its env-var
+  install flow is verified in-app.
+
+### Study modes ✅ (Priority 1 — done)
+
+One-click prompt templates that seed the composer so students don't face a blank box.
+- `src/lib/studyTemplates.ts` — static, typed `StudyTemplate[]` (`{ id, label, topic, description,
+  promptSeed }`), grouped by `topic` (`reading`/`writing`/`research`/`study`). Same shape-first
+  pattern as `curatedMcp.ts`. Add a mode by appending an entry — no backend, no network.
+- `src/components/StudyModes.tsx` — the chip palette shown on the empty chat screen, grouped by
+  topic (Reading & analysis / Writing & drafting / Research & citations / Study & revision).
+  Clicking a chip calls `onPick(seed)`.
+- `src/App.tsx` — `handlePickStudyMode(seed)` sets the composer input and focuses it
+  (`composerInputRef`); rendered inside the `messages.length === 0` empty state.
+- **Composer is now a `<textarea>`** (was a single-line `<input>`), since seeds are multiline:
+  Enter sends, Shift+Enter inserts a newline, and a small effect auto-grows it to fit content
+  (capped at `max-height: 40vh` in CSS). `.study-modes`/`.study-chip`/`.empty-state*` styles added
+  to `App.css`, all token-driven.
+- Verified: `npm run build` (strict tsc + vite) clean, `npm run lint` (0 errors, pre-existing
+  warnings only), `npm test` (27/27). Live-in-app confirmation via `npm run tauri dev` pending.
+
 ## Key files (orientation)
 
 - `src/App.tsx` — top-level UI state, chat send/receive loop (`runSend`, with `sendMessage` as its
@@ -680,6 +792,13 @@ surfaces as a tool `isError`, not a hang) — see `TODO.md`.
 - `src/lib/curatedMcp.ts` — the hand-curated `CatalogEntry[]` (Notion + Filesystem/GitHub/Brave
   Search) that backs the Discover "Popular" section for instant paint; installs through the existing
   marketplace flow. See "Discover performance" above.
+- `src/lib/studyTemplates.ts` / `src/components/StudyModes.tsx` — the "study modes" prompt-template
+  palette on the empty chat screen (see "Study modes" above).
+- `src/lib/exportChat.ts` — transcript builders + Google-Docs helpers for the header "Export" menu
+  (see "Export a chat → document" above).
+- `src/lib/attachments.ts` / `src/components/MessageAttachments.tsx` — composer file attachments:
+  text/PDF parsing (`pdfjs-dist`) and the collapsed per-file display in user messages (see "Chat
+  file attachments" above).
 - `src/lib/providerRouter.ts` — client-side multi-provider failover + streaming + tool-call events,
   including session-scoped tools-unsupported detection (skip a tool-incapable model on tool turns,
   fail over with reason "model can't use tools").
