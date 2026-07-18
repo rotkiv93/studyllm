@@ -411,3 +411,73 @@ export async function clearCatalogCache(): Promise<void> {
   const db = await getDb();
   await db.execute("DELETE FROM mcp_catalog_cache", []);
 }
+
+// ── RAG document library ───────────────────────────────────────────────────────
+
+export interface RagDocumentRow {
+  id: string;
+  name: string;
+  char_count: number;
+  chunk_count: number;
+  /** The embedding model the chunks were embedded with (for display + mismatch warnings). */
+  embed_model: string;
+  created_at: number;
+}
+
+export interface RagChunkRow {
+  id: string;
+  document_id: string;
+  seq: number;
+  text: string;
+  /** JSON-encoded `number[]` — the chunk's embedding vector (SQLite has no native vector type). */
+  embedding: string;
+  created_at: number;
+}
+
+export async function insertRagDocument(row: RagDocumentRow): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    `INSERT INTO rag_documents (id, name, char_count, chunk_count, embed_model, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [row.id, row.name, row.char_count, row.chunk_count, row.embed_model, row.created_at],
+  );
+}
+
+export async function insertRagChunks(rows: RagChunkRow[]): Promise<void> {
+  const db = await getDb();
+  for (const row of rows) {
+    await db.execute(
+      `INSERT INTO rag_chunks (id, document_id, seq, text, embedding, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [row.id, row.document_id, row.seq, row.text, row.embedding, row.created_at],
+    );
+  }
+}
+
+export async function listRagDocuments(): Promise<RagDocumentRow[]> {
+  const db = await getDb();
+  return db.select<RagDocumentRow[]>("SELECT * FROM rag_documents ORDER BY created_at DESC");
+}
+
+export async function countRagDocuments(): Promise<number> {
+  const db = await getDb();
+  const rows = await db.select<{ n: number }[]>("SELECT COUNT(*) AS n FROM rag_documents");
+  return rows[0]?.n ?? 0;
+}
+
+/** Every chunk across all documents, joined with its document's name for citation display. */
+export async function listAllRagChunks(): Promise<(RagChunkRow & { document_name: string })[]> {
+  const db = await getDb();
+  return db.select<(RagChunkRow & { document_name: string })[]>(
+    `SELECT c.*, d.name AS document_name
+     FROM rag_chunks c JOIN rag_documents d ON d.id = c.document_id
+     ORDER BY c.document_id, c.seq ASC`,
+  );
+}
+
+/** Delete a document and its chunks (FKs aren't enforced, so remove chunks explicitly). */
+export async function deleteRagDocument(id: string): Promise<void> {
+  const db = await getDb();
+  await db.execute("DELETE FROM rag_chunks WHERE document_id = $1", [id]);
+  await db.execute("DELETE FROM rag_documents WHERE id = $1", [id]);
+}

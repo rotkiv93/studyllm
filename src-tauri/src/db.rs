@@ -127,5 +127,30 @@ pub fn migrations() -> Vec<Migration> {
             "#,
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 7,
+            description: "RAG document library: documents + embedded chunks",
+            sql: r#"
+                CREATE TABLE rag_documents (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    char_count INTEGER NOT NULL,
+                    chunk_count INTEGER NOT NULL,
+                    embed_model TEXT NOT NULL,
+                    created_at INTEGER NOT NULL
+                );
+
+                CREATE TABLE rag_chunks (
+                    id TEXT PRIMARY KEY,
+                    document_id TEXT NOT NULL REFERENCES rag_documents(id) ON DELETE CASCADE,
+                    seq INTEGER NOT NULL,
+                    text TEXT NOT NULL,
+                    embedding TEXT NOT NULL,
+                    created_at INTEGER NOT NULL
+                );
+                CREATE INDEX idx_rag_chunks_document ON rag_chunks(document_id);
+            "#,
+            kind: MigrationKind::Up,
+        },
     ]
 }
