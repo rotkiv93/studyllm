@@ -21,6 +21,8 @@ export interface StudyTemplate {
   description: string;
   /** Text dropped into the composer input when the chip is clicked. */
   promptSeed: string;
+  /** Shown in the compact starter row on the empty screen; the rest live behind "Browse all". */
+  featured?: boolean;
 }
 
 /** Group headings shown above each topic's chips. */
@@ -37,6 +39,7 @@ export const STUDY_TEMPLATES: StudyTemplate[] = [
     id: "summarize",
     label: "Summarize a document",
     topic: "reading",
+    featured: true,
     description: "Condense a long report, treaty, or reading into structured key points.",
     promptSeed:
       "Summarize the following text. Give me:\n" +
@@ -82,6 +85,7 @@ export const STUDY_TEMPLATES: StudyTemplate[] = [
     id: "policy-brief",
     label: "Draft a policy brief",
     topic: "writing",
+    featured: true,
     description: "Turn your notes into a structured policy brief / position paper.",
     promptSeed:
       "Draft a concise policy brief from my notes below. Use this structure: Issue, Background, " +
@@ -104,6 +108,7 @@ export const STUDY_TEMPLATES: StudyTemplate[] = [
     id: "lit-review-outline",
     label: "Literature-review outline",
     topic: "research",
+    featured: true,
     description: "Turn a topic and a few sources into a structured literature-review outline.",
     promptSeed:
       "Help me outline a literature review on the topic below. Organize it into themes, note where " +
@@ -139,6 +144,7 @@ export const STUDY_TEMPLATES: StudyTemplate[] = [
     id: "flashcards",
     label: "Make flashcards / quiz",
     topic: "study",
+    featured: true,
     description: "Generate study flashcards or a short quiz from a document or topic.",
     promptSeed:
       "Create [10] study flashcards from the material below, formatted as 'Q: … / A: …'. Then give " +

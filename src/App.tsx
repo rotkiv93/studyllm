@@ -39,7 +39,6 @@ import { PluginsPanel } from "./components/PluginsPanel";
 import { OnboardingWizard } from "./components/OnboardingWizard";
 import { Sidebar } from "./components/Sidebar";
 import { StudyModes } from "./components/StudyModes";
-import { FeatureExplainer } from "./components/FeatureExplainer";
 import { LibraryPanel } from "./components/LibraryPanel";
 import { ExplorePanel } from "./components/ExplorePanel";
 import { RetrievedSources } from "./components/RetrievedSources";
@@ -48,7 +47,6 @@ import { Markdown } from "./components/Markdown";
 import {
   IconBook,
   IconCheck,
-  IconCompass,
   IconCopy,
   IconDownload,
   IconEdit,
@@ -531,15 +529,6 @@ export default function App() {
     })) {
       onEvent(event);
     }
-  }
-
-  /** "Try Deep Research" CTA: install tools if needed, turn the mode on, focus the composer. */
-  async function handleTryDeepResearch() {
-    if (!hasResearchTools()) {
-      await handleInstallResearchTools();
-    }
-    setResearchMode(DEFAULT_RESEARCH_MODE);
-    composerInputRef.current?.focus();
   }
 
   async function handleAddLibraryFiles(files: File[]) {
@@ -1275,19 +1264,7 @@ export default function App() {
         <div className="messages" ref={scrollRef}>
           {messages.length === 0 && (
             <div className="empty-state">
-              <p className="empty-state-text">Ask anything to get started — or pick a study mode.</p>
-              <FeatureExplainer
-                onTryDeepResearch={handleTryDeepResearch}
-                onTryLibrary={() => setShowLibrary(true)}
-                libraryDocCount={ragDocuments.length}
-              />
-              <button
-                type="button"
-                className="btn btn-ghost btn-sm empty-state-explore"
-                onClick={() => setShowExplore(true)}
-              >
-                <IconCompass size={14} /> See how retrieval works — try the playground
-              </button>
+              <h2 className="empty-state-title">What can I help you study?</h2>
               <StudyModes onPick={handlePickStudyMode} />
             </div>
           )}

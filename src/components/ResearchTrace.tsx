@@ -12,9 +12,9 @@ import type { StreamEvent } from "../lib/providerRouter";
  * The Research-process tab of the Explore panel — a live trace of a Deep Research run. The student
  * asks a big question and *watches* the assistant work: break it into parts, search, read sources,
  * and synthesize a cited answer. It reuses the exact `streamReply` machinery chat uses (via the
- * `onRun` prop) — no separate engine — and maps the streamed events onto the six-stage pipeline the
- * FeatureExplainer card promises, plus a step-budget progress bar and a live "sources consulted"
- * list (the structured source view the chat transcript lacks).
+ * `onRun` prop) — no separate engine — and maps the streamed events onto a six-stage research
+ * pipeline (sub-questions → search → read → synthesize → cited report), plus a step-budget progress
+ * bar and a live "sources consulted" list (the structured source view the chat transcript lacks).
  */
 
 interface ResearchTraceProps {

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { ConversationRow } from "../lib/db";
-import { IconBook, IconCompass, IconEdit, IconKey, IconMenu, IconMessage, IconPlug, IconPlus, IconSettings, IconTool, IconTrash } from "./icons";
+import { IconBook, IconChevronDown, IconCompass, IconEdit, IconKey, IconMenu, IconMessage, IconPlug, IconPlus, IconSettings, IconTool, IconTrash } from "./icons";
 
 interface Props {
   conversations: ConversationRow[];
@@ -46,6 +46,19 @@ export function Sidebar({
 }: Props) {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  // Config destinations tucked under the "Settings" group (expanded sidebar) or laid out flat on the
+  // collapsed icon rail. Providers carries a warning dot when none are active; MCP a running-count badge.
+  const configItems = [
+    { key: "providers", icon: IconKey, label: "Providers", onClick: onOpenProviders, dot: activeProviderCount === 0, badge: 0 },
+    { key: "mcp", icon: IconTool, label: "MCP servers", onClick: onOpenMcp, dot: false, badge: mcpRunningCount },
+    { key: "plugins", icon: IconPlug, label: "Plugins", onClick: onOpenPlugins, dot: false, badge: 0 },
+    { key: "explore", icon: IconCompass, label: "Explore", onClick: onOpenExplore, dot: false, badge: 0 },
+    { key: "diagnostics", icon: IconSettings, label: "Diagnostics", onClick: onOpenAppSettings, dot: false, badge: 0 },
+  ];
+  // Surface the most important config status on the collapsed group gear so nothing hides.
+  const settingsNeedsAttention = activeProviderCount === 0;
 
   function startRename(c: ConversationRow) {
     setRenamingId(c.id);
@@ -86,6 +99,7 @@ export function Sidebar({
 
       {!collapsed && (
         <nav className="conversation-list" aria-label="Conversation history">
+          <span className="sidebar-section-label">Conversations</span>
           {conversations.length === 0 && (
             <p className="conversation-empty">Your conversations will show up here.</p>
           )}
@@ -145,26 +159,7 @@ export function Sidebar({
       )}
 
       <div className="sidebar-footer">
-        <button
-          type="button"
-          className="sidebar-footer-btn"
-          onClick={onOpenProviders}
-          title="Providers"
-        >
-          <IconKey size={17} />
-          {!collapsed && <span>Providers</span>}
-          {activeProviderCount === 0 && <span className="sidebar-footer-dot" title="No active providers" />}
-        </button>
-        <button
-          type="button"
-          className="sidebar-footer-btn"
-          onClick={onOpenMcp}
-          title="MCP servers"
-        >
-          <IconTool size={17} />
-          {!collapsed && <span>MCP servers</span>}
-          {mcpRunningCount > 0 && <span className="sidebar-footer-badge">{mcpRunningCount}</span>}
-        </button>
+        {/* Library is a workspace surface (your documents), kept prominent above the config group. */}
         <button
           type="button"
           className="sidebar-footer-btn"
@@ -175,33 +170,56 @@ export function Sidebar({
           {!collapsed && <span>Library</span>}
           {libraryDocCount > 0 && <span className="sidebar-footer-badge">{libraryDocCount}</span>}
         </button>
-        <button
-          type="button"
-          className="sidebar-footer-btn"
-          onClick={onOpenExplore}
-          title="Explore how it works"
-        >
-          <IconCompass size={17} />
-          {!collapsed && <span>Explore</span>}
-        </button>
-        <button
-          type="button"
-          className="sidebar-footer-btn"
-          onClick={onOpenPlugins}
-          title="Plugins"
-        >
-          <IconPlug size={17} />
-          {!collapsed && <span>Plugins</span>}
-        </button>
-        <button
-          type="button"
-          className="sidebar-footer-btn"
-          onClick={onOpenAppSettings}
-          title="Settings"
-        >
-          <IconSettings size={17} />
-          {!collapsed && <span>Settings</span>}
-        </button>
+
+        {collapsed ? (
+          // Collapsed icon rail: lay the config destinations out flat — a disclosure is hard to
+          // hit on a narrow rail, so every panel stays one click away.
+          configItems.map(({ key, icon: Icon, label, onClick, dot, badge }) => (
+            <button key={key} type="button" className="sidebar-footer-btn" onClick={onClick} title={label}>
+              <Icon size={17} />
+              {dot && <span className="sidebar-footer-dot" title="Needs attention" />}
+              {badge > 0 && <span className="sidebar-footer-badge">{badge}</span>}
+            </button>
+          ))
+        ) : (
+          <div className="sidebar-settings-group">
+            <button
+              type="button"
+              className="sidebar-footer-btn sidebar-settings-toggle"
+              onClick={() => setSettingsOpen((v) => !v)}
+              aria-expanded={settingsOpen}
+              title="Settings & setup"
+            >
+              <IconSettings size={17} />
+              <span>Settings</span>
+              {!settingsOpen && settingsNeedsAttention && (
+                <span className="sidebar-footer-dot" title="No active providers" />
+              )}
+              <IconChevronDown
+                size={14}
+                className={`sidebar-settings-chevron${settingsOpen ? " sidebar-settings-chevron-open" : ""}`}
+              />
+            </button>
+            {settingsOpen && (
+              <div className="sidebar-settings-items">
+                {configItems.map(({ key, icon: Icon, label, onClick, dot, badge }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    className="sidebar-footer-btn sidebar-settings-item"
+                    onClick={onClick}
+                    title={label}
+                  >
+                    <Icon size={16} />
+                    <span>{label}</span>
+                    {dot && <span className="sidebar-footer-dot" title="No active providers" />}
+                    {badge > 0 && <span className="sidebar-footer-badge">{badge}</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </aside>
   );

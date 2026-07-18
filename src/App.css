@@ -461,6 +461,52 @@ body {
   right: 0.15em;
 }
 
+/* Small uppercase section heading (e.g. "Conversations") for scannable sidebar structure. */
+.sidebar-section-label {
+  display: block;
+  padding: 0 0.4em var(--space-1);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Grouped "Settings" disclosure in the expanded footer — collects the config destinations. */
+.sidebar-settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.sidebar-settings-toggle .sidebar-settings-chevron {
+  margin-left: auto;
+  transition: transform var(--transition-fast);
+}
+
+.sidebar-settings-toggle .sidebar-settings-chevron-open {
+  transform: rotate(180deg);
+}
+
+/* Dot on the closed group gear sits inline before the chevron (not the absolute corner variant). */
+.sidebar-settings-toggle .sidebar-footer-dot {
+  position: static;
+  margin-left: auto;
+}
+
+.sidebar-settings-items {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding-left: var(--space-3);
+  border-left: 1px solid var(--color-border);
+  margin-left: 0.6em;
+}
+
+.sidebar-settings-item {
+  font-size: var(--font-size-sm);
+}
+
 /* ==========================================================================
    Main chat panel
    ========================================================================== */
@@ -575,10 +621,11 @@ body {
   gap: var(--space-5);
 }
 
-.empty-state-text {
-  color: var(--color-text-muted);
+.empty-state-title {
+  color: var(--color-text-primary);
   text-align: center;
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
   margin: 0;
 }
 
@@ -587,16 +634,47 @@ body {
   max-width: var(--layout-max-width);
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  align-items: center;
+  gap: var(--space-3);
 }
 
-.study-modes-title {
-  color: var(--color-text-muted);
-  text-align: center;
+/* A single compact row of featured starter prompts, centered under the greeting. */
+.study-modes-featured {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
+}
+
+/* "Browse all" disclosure that expands the full topic-grouped library below. */
+.study-modes-browse {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: var(--space-1) var(--space-2);
+  color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  margin: 0;
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+}
+
+.study-modes-browse:hover {
+  color: var(--color-text-primary);
+}
+
+.study-modes-browse .study-browse-chevron-open {
+  transform: rotate(180deg);
+  transition: transform var(--transition-fast);
+}
+
+.study-modes-groups {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
 }
 
 .study-modes-group {
@@ -2194,152 +2272,9 @@ li.marketplace-card:hover {
 }
 
 /* ==========================================================================
-   Deep Research + RAG: feature explainer cards, composer mode toggles,
-   retrieved-source cards, and the Library panel
+   Deep Research + RAG: composer mode toggles, retrieved-source cards,
+   and the Library panel
    ========================================================================== */
-
-.feature-explainer {
-  width: 100%;
-  max-width: var(--layout-max-width);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.feature-explainer-title {
-  color: var(--color-text-muted);
-  text-align: center;
-  font-size: var(--font-size-sm);
-  margin: 0;
-}
-
-.feature-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: var(--space-4);
-}
-
-.feature-card {
-  border: 1px solid var(--color-border);
-  background: var(--color-surface);
-  border-radius: var(--radius-lg);
-  padding: var(--space-4);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  box-shadow: var(--shadow-xs);
-}
-
-.feature-card-head {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.feature-card-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2rem;
-  height: 2rem;
-  border-radius: var(--radius-md);
-  background: var(--color-accent-soft);
-  color: var(--color-accent);
-  border: 1px solid var(--color-accent-soft-border);
-}
-
-.feature-card-title {
-  margin: 0;
-  font-size: var(--font-size-md);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-primary);
-}
-
-.feature-card-what {
-  margin: 0;
-  font-size: var(--font-size-sm);
-  color: var(--color-text-primary);
-  line-height: var(--line-height-normal);
-}
-
-.feature-card-why {
-  margin: 0;
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
-  line-height: var(--line-height-normal);
-}
-
-.feature-card-how-toggle {
-  align-self: flex-start;
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  background: transparent;
-  border: none;
-  box-shadow: none;
-  padding: var(--space-1) 0;
-  color: var(--color-accent);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  cursor: pointer;
-}
-
-.feature-card-how-toggle .feature-chevron-open {
-  transform: rotate(180deg);
-  transition: transform var(--transition-fast);
-}
-
-.feature-pipeline {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.feature-pipeline-step {
-  display: flex;
-  gap: var(--space-3);
-  align-items: flex-start;
-}
-
-.feature-pipeline-num {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.4rem;
-  height: 1.4rem;
-  border-radius: var(--radius-full);
-  background: var(--color-accent-soft);
-  color: var(--color-accent);
-  border: 1px solid var(--color-accent-soft-border);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semibold);
-}
-
-.feature-pipeline-body {
-  display: flex;
-  flex-direction: column;
-}
-
-.feature-pipeline-label {
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  color: var(--color-text-primary);
-}
-
-.feature-pipeline-detail {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
-  line-height: var(--line-height-normal);
-}
-
-.feature-card-cta {
-  align-self: flex-start;
-  margin-top: var(--space-1);
-}
 
 /* ── Composer mode toggles (Deep Research / Use my library) ─────────────────── */
 
@@ -2543,12 +2478,6 @@ li.marketplace-card:hover {
    Explore panel: RAG retrieval playground (similarity ranking + embedding map)
    ========================================================================== */
 
-.empty-state-explore {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  color: var(--color-accent);
-}
 
 /* A text-style button that reads like an inline link (used inside notices). */
 .link-btn {

@@ -403,6 +403,35 @@ Full original architecture/phase plan: `C:\Users\47852\.claude\plans\i-want-to-c
     instead of awaiting them before returning results.
   - `registry.rs` uses a process-wide `OnceLock<reqwest::Client>` so searches reuse pooled/keep-alive
     connections instead of a fresh TLS handshake per keystroke.
+- **Main-chat + sidebar simplification, this session** (user-requested "the main chat options are
+  chaotic" pass): trimmed the three surfaces that competed for attention.
+  - **Empty new-chat screen** (`App.tsx`): was a tagline + two large `FeatureExplainer` cards (Deep
+    Research + RAG, each with an expandable "how it works" pipeline and CTA) + a standalone Explore
+    button + four labelled groups of study-mode chips. Now just a greeting ("What can I help you
+    study?") and a compact single row of *featured* starter prompts. `FeatureExplainer.tsx` was
+    **deleted** (the Explore panel already *demonstrates* retrieval/research live, so the static
+    cards were redundant — nothing educational lost); its `.feature-*` CSS and the
+    `.empty-state-explore` rule were removed too.
+  - **Starter prompts** (`StudyModes.tsx` + `studyTemplates.ts`): `StudyTemplate` gained an optional
+    `featured?` flag (set on `summarize`/`policy-brief`/`lit-review-outline`/`flashcards`). The
+    component shows only those as a centered row by default, with a **"Browse all ▾ / Show fewer ▴"**
+    disclosure that expands the full topic-grouped library inline. Chip click still seeds the composer
+    via `onPick` — no data removed.
+  - **Deep Research + Library** stay exactly as the two composer toggle chips (they're per-message
+    modes) — no logic touched; the duplicate big cards are what went away.
+  - **Sidebar** (`Sidebar.tsx`): added a "Conversations" section label; **Library** kept as its own
+    prominent workspace button (doc-count badge); the other five destinations (Providers, MCP
+    servers, Plugins, Explore, Diagnostics) now live under one collapsible **"Settings"** disclosure
+    (`settingsOpen` local state) instead of a flat six-button footer. Status bubbles up to the closed
+    gear (the no-active-providers dot). The **collapsed icon rail** keeps every destination as a flat
+    icon (a disclosure is hard to hit on a narrow rail) via a shared `configItems` array. New CSS:
+    `.sidebar-section-label`, `.sidebar-settings-group/-toggle/-chevron/-items/-item`.
+  - **`AppSettingsPanel`** header relabeled "Settings" → **"Diagnostics"** (it's just the crash-log
+    viewer) to avoid a name clash with the new sidebar Settings group.
+  - Verified: `npx tsc --noEmit` clean, `npm run build` (tsc strict + vite) clean, `npm run lint`
+    (0 errors; 5 pre-existing unrelated warnings), `npm test` (56/56). All changes are frontend, so
+    the maintainer's already-running `npm run tauri dev` hot-reloads them via Vite HMR (a fresh
+    launch just errors with "Port 1420 already in use", expected).
 
 ## Visual design system (Phase 5 slice)
 
@@ -514,6 +543,14 @@ Full original architecture/phase plan: `C:\Users\47852\.claude\plans\i-want-to-c
   static fallback content written directly into the markup, so it renders correctly even with JS
   disabled); the choice persists in `localStorage["studyllm-lang"]`. No build step, no external
   fonts/scripts — still a single self-contained file suitable for GitHub Pages.
+- **Hero screenshots refreshed for the simplified UI (this session)**: `docs/screenshots/hero.png`
+  (dark) and `hero-light.png` (light) were regenerated to show the new clean empty screen ("What can
+  I help you study?" + the compact featured-prompt row + "Browse all", composer Deep Research / Use
+  my library toggles) and the restructured sidebar (Conversations label, prominent Library, grouped
+  Settings). Only the two images changed — the landing-page copy and alt text still hold. Captured
+  with a throwaway Playwright script against the running `npm run dev` server (viewport 1280×820,
+  `deviceScaleFactor: 2`, `colorScheme` dark/light); the other screenshots (Providers, MCP, Explore,
+  attachments, plugins) show unchanged surfaces and were left as-is.
 
 ## Google Workspace access — "Plugins" OAuth flow, native REST tools (not managed MCP)
 

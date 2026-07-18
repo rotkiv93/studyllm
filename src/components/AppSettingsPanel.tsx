@@ -28,7 +28,7 @@ export function AppSettingsPanel({ onClose }: Props) {
     <div className="settings-overlay">
       <div className="settings-panel">
         <div className="settings-header">
-          <h2>Settings</h2>
+          <h2>Diagnostics</h2>
           <button type="button" className="btn btn-ghost btn-sm" onClick={onClose}>
             Close
           </button>
