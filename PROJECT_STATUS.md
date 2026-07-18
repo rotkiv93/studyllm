@@ -503,6 +503,17 @@ Full original architecture/phase plan: `C:\Users\47852\.claude\plans\i-want-to-c
   (Settings → Pages → Deploy from branch → `main` / `/docs`), documented in README "Marketing
   website (maintainers)". README's hero section links to it pre-emptively
   (`https://rotkiv93.github.io/studyllm/`).
+- **Reframed + bilingual (this session)**: copy was rewritten from a product-pitch tone to a plain
+  "student tool" tone — dropped lines like "Everything a paid AI subscription gives you, minus the
+  bill" and "Ready to try it?"; headings are now task-focused ("What you can do with it", "Made for
+  how you actually study", "How to get started", "Download it and get studying"). Added a
+  **dependency-free inline i18n layer**: every visible string carries a `data-i18n` key (image alts
+  use `data-i18n-alt`), an `I18N = { es, en }` dict holds both languages, and a small vanilla-JS
+  `applyLang()` swaps `textContent`/`innerHTML`, the `<title>`, the meta description, `<html lang>`,
+  and the active state of the **ES/EN toggle** in the nav. **Spanish is the default** (and is the
+  static fallback content written directly into the markup, so it renders correctly even with JS
+  disabled); the choice persists in `localStorage["studyllm-lang"]`. No build step, no external
+  fonts/scripts — still a single self-contained file suitable for GitHub Pages.
 
 ## Google Workspace access — "Plugins" OAuth flow, native REST tools (not managed MCP)
 
@@ -659,7 +670,59 @@ documentary/archival students) lives at
 modes ✅, (2) curate more field-relevant MCPs ✅ (first batch), (3) export a chat → document ✅
 (first slice), (4) chat file attachments ✅ (phases 1–3: text + PDF + Word/docx). Remaining P4
 phases 4–5 (images for vision models; OCR for scanned docs) are **not started** — see the note at
-the end of this section for why they're a separate, larger effort.
+the end of this section for why they're a separate, larger effort. (5) **Deep Research + RAG** ✅
+(this session) — see immediately below.
+
+### Deep Research + RAG ✅ (student-facing, this session)
+
+Two capabilities, framed around **teaching students what they do** (per
+`C:\Users\47852\.claude\plans\i-want-for-the-cozy-wozniak.md`). The empty chat screen leads with an
+**explainer card grid** (`src/components/FeatureExplainer.tsx`): each card gives a plain-language
+what/why, an expandable "How it works" step pipeline, and a **Try it** CTA. The card language
+mirrors the steps the student then sees happen live, so the card teaches the transcript.
+
+**Deep Research** — a system-prompt + step-budget layer over the *existing* agentic tool loop, no
+new Rust and no new execution engine:
+- `src/lib/researchModes.ts` — static `ResearchMode[]` (`Auto`/`Compare`/`How-to`/`Fact-check`/
+  `Literature review`), each = a `systemPrompt` (decompose → search → read → cross-check →
+  synthesize → cite, ending with a `## Sources` list) + a `maxSteps` budget (14–18).
+- `src/lib/providerRouter.ts` — `streamReply` gained an optional 4th arg `options: { system?,
+  maxSteps? }`. `system` is prepended as a `role:"system"` message (never persisted to the
+  conversation, so titles/history stay clean); `maxSteps` drives `stopWhen: isStepCount(...)`
+  (default still 8). Fully backward-compatible.
+- The searches/reads ride the connected MCP tools (Web Reader / Wikipedia / OpenAlex / Brave) and
+  render live as `ToolCallBlock`s — that transparency *is* the learning surface. A composer
+  **Deep Research toggle + sub-mode `<select>`** turns it on; if no research-capable tool is
+  running (`isResearchTool` heuristic over running tools), a **"Set up research tools"** action
+  one-click-installs the keyless curated set (`curated:fetch`/`wikipedia`/`openalex`) via the
+  unchanged `handleInstallFromCatalog`.
+
+**RAG ("chat with your documents")** — greenfield data path, frontend-only embedding calls (same
+architecture as chat; CSP `connect-src https:` already permits it):
+- **Storage**: migration **v7** (`src-tauri/src/db.rs`) adds `rag_documents` + `rag_chunks`
+  (embedding stored as JSON `TEXT` — SQLite has no vector type). CRUD in `src/lib/db.ts`
+  (`insertRagDocument`/`insertRagChunks`/`listRagDocuments`/`listAllRagChunks`/`deleteRagDocument`).
+- `src/lib/chunking.ts` — `chunkText` (paragraph/sentence-aware, ~1000 chars, ~150 overlap), pure +
+  unit-tested.
+- `src/lib/embeddings.ts` — `embedTexts`/`embedQuery` via `createOpenAICompatible().textEmbeddingModel`
+  + the AI SDK's `embedMany`/`embed`; `cosineSimilarity` (pure + tested); `EMBEDDING_CAPABLE`
+  (`gemini → text-embedding-004`, `mistral → mistral-embed`); config persisted in `localStorage`
+  (the keychain key is resolved at call time, never stored).
+- `src/lib/rag.ts` — `resolveEmbedder` (config + providers + keychain → callable),
+  `ingestDocument` (reuses `parseAttachment` → chunk → embed → store), `retrieve` (embed query →
+  in-TS cosine rank → top-k), `buildRagSystemBlock` (grounding directive: answer only from the
+  passages, cite `[DocName #seq]`, admit gaps).
+- **UI**: `src/components/LibraryPanel.tsx` — a new **Library** overlay (sidebar footer button, doc
+  count badge) with Documents / Embedding-model tabs. Composer **"Use my library" toggle**;
+  `runSend` retrieves for the turn, injects the grounding block via the router's `system` param, and
+  renders a `src/components/RetrievedSources.tsx` **"Sources from your library"** card above the
+  answer showing each passage + % match.
+- **Known limitations**: retrieval ranks in TypeScript (cosine over every stored chunk) — fine at
+  student scale (tens of docs), not thousands. Embeddings **require a Gemini or Mistral key**. The
+  retrieved-sources card is **session-ephemeral** (not persisted, so it's absent after reload) —
+  persisting citation records is a noted follow-up. Scanned-image PDFs still need OCR (unchanged).
+- Verified: `npx tsc --noEmit` clean, `npm run lint` 0 errors, `npm test` 49/49 (new suites
+  `chunking.test.ts`, `embeddings.test.ts`, `rag.test.ts`), `cargo check` clean (v7 migration).
 
 ### Chat file attachments ✅ (Priority 4 — phases 1–3: text + PDF + Word)
 
