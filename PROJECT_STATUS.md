@@ -477,6 +477,57 @@ Full original architecture/phase plan: `C:\Users\47852\.claude\plans\i-want-to-c
     dev`. Live in-app click-test of the passage dialog / composer captions / onboarding features step
     still to be confirmed by the maintainer.
 
+- **Deep Research "process" fixed end-to-end, this session** (user report: "the research process is
+  not working — press start and it stops immediately"). Driven and confirmed by actually running the
+  real app over WebView2 CDP (Playwright `connectOverCDP` against
+  `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222`) with the maintainer's real
+  providers + MCP servers — **four real bugs**, all frontend-only:
+  - **The universal blocker — a system message in `messages` (`AI_InvalidPromptError`).** Every
+    research run (and every composer Deep-Research turn, and every RAG-grounded answer) died instantly
+    because `streamReply` unshifted `options.system` as a `role:"system"` entry into `messages`, which
+    **AI SDK v7's `standardizePrompt` rejects** ("System messages are not allowed in the prompt or
+    messages fields. Use the instructions option instead."). The catch classified it as a generic
+    request failure → cooled down every provider → "All providers are rate-limited or failing," i.e.
+    the "stops immediately." Fixed in `providerRouter.ts`: pass the directive as `streamText`'s
+    dedicated top-level `system` param (v7 destructures both `system` and `instructions`; `system`
+    maps to `instructions`) instead of a message. `streamText` reapplies it on every agentic step.
+  - **`hasResearchTools()` false positive.** The old `isResearchTool` regex
+    (`/search|fetch|wiki|…|web|url|http/i`) matched personal-connector tools like Google Drive's
+    `drive_search_files`, Gmail's `gmail_search_messages`, Notion's `API-post-search` — so with only
+    Drive autostarted, Deep Research thought it had web tools, ran, and the model apologized ("I can
+    only search and read files from your Google Drive"). Replaced with `isResearchServer(serverName,
+    toolNames)` in `researchModes.ts`, keyed on **server identity** (a `NON_WEB_SERVER_NAME_RE`
+    exclusion for gmail/google/drive/notion/github/… beats a `RESEARCH_SERVER_NAME_RE` allow-list for
+    brave/web-reader/wikipedia/openalex/… plus a strict web-tool-name fallback); `App.tsx`'s
+    `hasResearchTools()` now looks up each running server's name. Result: with no real web tool the UI
+    correctly shows "Set up the free research tools (Web Reader, Wikipedia, OpenAlex)" and disables
+    Run, instead of silently failing. Unit-tested (`researchModes.test.ts`).
+  - **Malformed MCP tool schema → provider 400.** OpenAlex's `autocomplete` tool ships a draft-4
+    `"required": true` *inside* a property (`properties.search.required`), invalid under JSON Schema
+    draft 2020-12, so a strict provider 400s the whole tool-enabled request
+    (`'/properties/search/required' does not validate`). New `src/lib/toolSchema.ts`
+    `sanitizeToolSchema()` recursively drops any non-array `required`; applied in `buildMcpTools`
+    before `jsonSchema(...)`. Unit-tested (`toolSchema.test.ts`).
+  - **Router misclassified that schema 400 as "model can't use tools."** `messageIndicatesToolIssue`
+    matched `/tool|function.?call/i`, and the schema error text contains both — so one bad tool got
+    every provider blacklisted as tool-incompatible ("None of your models can use tools"). Refined to
+    exclude schema/parameter-validation phrasing so a bad *tool* is treated as a generic request
+    failure (cooldown + failover), not an incapable *model*.
+  - **"Set up research tools" now also starts already-installed-but-stopped research servers**
+    (`handleInstallResearchTools` in `App.tsx`) — previously it only installed *missing* ones, so
+    after an app restart (curated installs don't autostart) the button silently did nothing and the
+    gate stayed off. It now starts any installed research server not currently reporting tools.
+  - **Verified end-to-end on a clean rebuild**: fresh launch → servers stopped → "Set up" prompt +
+    Run disabled → clicked Set up → Web Reader/Wikipedia/OpenAlex started → Run enabled → run failed
+    over Gemini (`429`, the maintainer's Gemini free tier is **20 req/day**, exhausted by this
+    session's testing) → Mistral (a `ministral-14b` streaming-format quirk: it returns
+    `content:[{type:"reference"}]` which trips the AI SDK's `AI_TypeValidationError`, handled by
+    failover) → **Groq (llama-3.3-70b) produced a real cited report** with a live
+    `wikipedia_search_wikipedia` hit (2028 chars, green check) and a `## Sources` list of Wikipedia
+    URLs. `npx tsc --noEmit` clean, `npm run lint` 0 errors, `npm test` 64/64 (4 new). The Mistral
+    `reference`-content quirk and the tiny Gemini free-tier daily cap are **provider-side**, not app
+    bugs — the router degrades around both.
+
 ## Visual design system (Phase 5 slice)
 
 - `src/App.css` is now a token-driven design system: every color, spacing value, radius,

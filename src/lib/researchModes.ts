@@ -93,10 +93,45 @@ export const DEFAULT_RESEARCH_MODE = RESEARCH_MODES[0];
 export const RESEARCH_TOOL_CATALOG_IDS = ["curated:fetch", "curated:wikipedia", "curated:openalex"];
 
 /**
- * Heuristic: does a running tool look like a research capability (search / fetch / reference)?
- * Used to decide whether Deep Research has anything to work with, or the student should install the
- * keyless research toolset first.
+ * Personal / workspace connectors that expose "search"-shaped tools (drive_search_files,
+ * gmail_search_messages, API-post-search, …) but **cannot research the open web**. Matched by server
+ * name so a loose tool-name check can't mistake them for a web-research capability.
  */
-export function isResearchTool(toolName: string): boolean {
-  return /search|fetch|wiki|scholar|openalex|browse|web|url|http/i.test(toolName);
+const NON_WEB_SERVER_NAME_RE =
+  /gmail|google|drive|calendar|task|\bdoc|sheet|slide|filesystem|file ?system|notion|github|gitlab|slack|jira|confluence|outlook|onedrive|dropbox|obsidian/i;
+
+/**
+ * Servers whose whole purpose is open-web / academic research — the keyless curated set (Web Reader,
+ * Wikipedia, OpenAlex) plus Brave Search and common third-party equivalents.
+ */
+const RESEARCH_SERVER_NAME_RE =
+  /brave|web ?reader|web ?search|wikipedia|openalex|tavily|duckduckgo|\bexa\b|serper|serpapi|arxiv|semantic ?scholar|google ?scholar|pubmed|perplexity|kagi/i;
+
+/**
+ * A tool name that clearly reads or searches the *open web* / an academic corpus — used as a
+ * secondary signal for research servers whose name we don't recognize. Deliberately excludes
+ * file/mail/calendar/repo tools whose names merely contain "search".
+ */
+function isWebResearchToolName(toolName: string): boolean {
+  const n = toolName.toLowerCase();
+  if (/file|directory|drive|gmail|mail|inbox|thread|label|calendar|event|task|sheet|slide|\bdoc|repo|issue|pull|commit|page|block|database/.test(n)) {
+    return false;
+  }
+  return (
+    /(^|[_-])(fetch|wiki|wikipedia|openalex|arxiv|scholar|pubmed|tavily|duckduckgo|browse|crawl)/.test(n) ||
+    /web[_-]?search|read[_-]?url|open[_-]?url|brave[_-]?web/.test(n)
+  );
+}
+
+/**
+ * Does a *running* MCP server give Deep Research a real web/academic capability? Used to decide
+ * whether research can run, or the student should install the keyless research toolset first.
+ * Keyed on the server's identity (name), not a loose per-tool substring — a personal connector like
+ * Google Drive (`drive_search_files`) or Gmail (`gmail_search_messages`) must NOT count, or research
+ * runs with no way to actually reach the web and the model just apologizes.
+ */
+export function isResearchServer(serverName: string | null | undefined, toolNames: string[]): boolean {
+  if (serverName && NON_WEB_SERVER_NAME_RE.test(serverName)) return false;
+  if (serverName && RESEARCH_SERVER_NAME_RE.test(serverName)) return true;
+  return toolNames.some(isWebResearchToolName);
 }

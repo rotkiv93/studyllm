@@ -67,7 +67,16 @@ function isToolsUnsupportedError(error: unknown, toolsAttached: boolean): boolea
 }
 
 function messageIndicatesToolIssue(text: string): boolean {
-  return /tool|function.?call/i.test(text);
+  // A capability gap: the model/endpoint doesn't do tool/function calling at all.
+  if (!/tool|function.?call/i.test(text)) return false;
+  // …but a 400 about a *specific* tool's JSON Schema (malformed parameters from some MCP server) is
+  // a bad-tool problem, not a model-capability one — don't let it blacklist every provider as
+  // "can't use tools" (which surfaces the misleading "None of your models can use tools"). Let it
+  // fall through to a generic request failure instead.
+  if (/schema|parameters|does not validate|jsonschema|not valid|invalid.*(schema|parameter)|properties\//i.test(text)) {
+    return false;
+  }
+  return true;
 }
 
 const MAX_MALFORMED_TOOL_CALL_RETRIES = 2;
@@ -163,11 +172,11 @@ export class ProviderRouter {
       role: m.role,
       content: m.content,
     }));
-    // Transient per-turn steering (research directive / RAG context) leads as a system message but
-    // is never persisted to the conversation — the caller passes `history` without it.
-    if (options?.system) {
-      messages.unshift({ role: "system", content: options.system });
-    }
+    // Transient per-turn steering (research directive / RAG context) is passed to `streamText` as
+    // its dedicated `system` instruction below — never as a `role:"system"` entry in `messages`
+    // (the AI SDK v5+ rejects that) and never persisted to the conversation (the caller passes
+    // `history` without it). `streamText` reapplies it on every step of the agentic loop.
+    const systemInstruction = options?.system;
     const maxSteps = Math.max(1, options?.maxSteps ?? DEFAULT_MAX_STEPS);
 
     const toolsAttached = !!tools && Object.keys(tools).length > 0;
@@ -203,6 +212,7 @@ export class ProviderRouter {
           const result = streamText({
             model: client(candidate.model),
             messages,
+            ...(systemInstruction ? { system: systemInstruction } : {}),
             abortSignal,
             ...(toolsAttached ? { tools, stopWhen: isStepCount(maxSteps) } : {}),
           });

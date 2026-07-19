@@ -62,10 +62,11 @@ import {
   RESEARCH_MODES,
   DEFAULT_RESEARCH_MODE,
   RESEARCH_TOOL_CATALOG_IDS,
-  isResearchTool,
+  isResearchServer,
   type ResearchMode,
 } from "./lib/researchModes";
 import { CURATED_ENTRIES } from "./lib/curatedMcp";
+import { sanitizeToolSchema } from "./lib/toolSchema";
 import { computeTrustTier } from "./lib/mcpCatalog";
 import {
   ingestDocument,
@@ -477,16 +478,29 @@ export default function App() {
     setRagDocuments(await listRagDocuments());
   }
 
-  /** True when at least one running MCP tool looks like a web-search / page-reader / reference tool. */
+  /** True when at least one *running* MCP server is a real web-search / page-reader / academic tool. */
   function hasResearchTools(): boolean {
-    return Object.values(mcpToolsByServer).some((tools) => tools.some((t) => isResearchTool(t.name)));
+    return Object.entries(mcpToolsByServer).some(([serverId, tools]) => {
+      if (tools.length === 0) return false;
+      const server = mcpServers.find((s) => s.id === serverId);
+      return isResearchServer(server?.name, tools.map((t) => t.name));
+    });
   }
 
-  /** Install the keyless curated research servers that aren't already present (by name). */
+  /**
+   * Make sure the keyless curated research servers (Web Reader / Wikipedia / OpenAlex) are both
+   * *installed* and *running*: install any that are missing, and — crucially — start any that are
+   * already installed but currently stopped (e.g. after an app restart with autostart off).
+   * Without the second step, clicking "Set up research tools" once a server exists but is stopped
+   * would silently do nothing and Deep Research would stay ungated-off.
+   */
   async function handleInstallResearchTools() {
     setInstallingResearchTools(true);
     setError(null);
     try {
+      const researchNames = new Set(
+        CURATED_ENTRIES.filter((e) => RESEARCH_TOOL_CATALOG_IDS.includes(e.id)).map((e) => e.name),
+      );
       const installedNames = new Set(mcpServers.map((s) => s.name));
       const toInstall = CURATED_ENTRIES.filter(
         (e) => RESEARCH_TOOL_CATALOG_IDS.includes(e.id) && !installedNames.has(e.name),
@@ -500,11 +514,19 @@ export default function App() {
           trustTier: computeTrustTier(entry),
         });
       }
-      if (toInstall.length > 0) {
+      // Start already-installed research servers that aren't currently reporting tools (i.e. stopped).
+      const running = new Set(
+        Object.keys(mcpToolsByServer).filter((id) => (mcpToolsByServer[id]?.length ?? 0) > 0),
+      );
+      const toStart = mcpServers.filter((s) => researchNames.has(s.name) && !running.has(s.id));
+      for (const server of toStart) {
+        await handleStartMcpServer(server);
+      }
+      if (toInstall.length > 0 || toStart.length > 0) {
         setNotice("Research tools are starting up — give them a few seconds on first run.");
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't install research tools.");
+      setError(err instanceof Error ? err.message : "Couldn't set up research tools.");
     } finally {
       setInstallingResearchTools(false);
     }
@@ -726,7 +748,7 @@ export default function App() {
             key,
             dynamicTool({
               description: t.description ?? undefined,
-              inputSchema: jsonSchema(t.inputSchema as Record<string, unknown>),
+              inputSchema: jsonSchema(sanitizeToolSchema(t.inputSchema as Record<string, unknown>)),
               execute: async (input) => {
                 if (permission === "ask") {
                   const approved = await requestToolApproval(server?.name ?? "MCP server", t.name, input);
