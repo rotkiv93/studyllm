@@ -17,15 +17,16 @@ interface Props {
   onAddProvider: (draft: ProviderDraft) => Promise<void>;
   onAddFilesystem: (scopedPath: string) => Promise<void>;
   onClose: () => void;
+  onOpenExplore: () => void;
 }
 
-type Step = "provider" | "key" | "mcp" | "done";
+type Step = "provider" | "key" | "mcp" | "features" | "done";
 
 function describeError(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-export function OnboardingWizard({ onAddProvider, onAddFilesystem, onClose }: Props) {
+export function OnboardingWizard({ onAddProvider, onAddFilesystem, onClose, onOpenExplore }: Props) {
   const [step, setStep] = useState<Step>("provider");
   const [type, setType] = useState<ProviderType>("gemini");
   const [apiKey, setApiKey] = useState("");
@@ -89,7 +90,7 @@ export function OnboardingWizard({ onAddProvider, onAddFilesystem, onClose }: Pr
     setError(null);
     try {
       await onAddFilesystem(picked);
-      setStep("done");
+      setStep("features");
     } catch (err) {
       setError(`Couldn't add filesystem access: ${describeError(err)}`);
     } finally {
@@ -194,11 +195,38 @@ export function OnboardingWizard({ onAddProvider, onAddFilesystem, onClose }: Pr
             </p>
             {error && <p className="error">{error}</p>}
             <div className="provider-edit-actions">
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setStep("done")} disabled={mcpBusy}>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setStep("features")} disabled={mcpBusy}>
                 Skip
               </button>
               <button type="button" className="btn btn-primary btn-sm" onClick={handlePickFolder} disabled={mcpBusy}>
                 {mcpBusy ? "Adding…" : "Choose folder…"}
+              </button>
+            </div>
+          </>
+        )}
+
+        {step === "features" && (
+          <>
+            <p className="settings-hint">
+              Two things StudyLLM can do beyond a normal chat — you can turn each on from the boxes
+              just above the message field, whenever you need them:
+            </p>
+            <ul className="onboarding-features">
+              <li>
+                <strong>Deep Research</strong> — ask a big question and the assistant searches the web
+                across several steps, reads sources, and writes an answer with citations.
+              </li>
+              <li>
+                <strong>Chat with your documents</strong> — add your own notes, PDFs, or papers, and
+                the assistant answers using only those, pointing to the exact passages it used.
+              </li>
+            </ul>
+            <div className="provider-edit-actions">
+              <button type="button" className="btn btn-ghost btn-sm" onClick={onOpenExplore}>
+                See how it works
+              </button>
+              <button type="button" className="btn btn-primary btn-sm" onClick={() => setStep("done")}>
+                Continue
               </button>
             </div>
           </>

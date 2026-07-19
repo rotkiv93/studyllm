@@ -1701,6 +1701,29 @@ li.provider-edit-row {
   max-width: 480px;
 }
 
+.onboarding-features {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.onboarding-features li {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-subtle);
+  padding: var(--space-3);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-normal);
+  color: var(--color-text-secondary);
+}
+
+.onboarding-features strong {
+  color: var(--color-text-primary);
+}
+
 .onboarding-provider-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -2063,6 +2086,38 @@ li.tool-perm-row {
   border-color: var(--color-danger-soft-border);
 }
 
+/* Always-visible plain-language legend of what the trust badges mean. */
+.mcp-trust-legend {
+  list-style: none;
+  margin: calc(-1 * var(--space-1)) 0 0;
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-subtle);
+}
+
+.mcp-trust-legend li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.mcp-trust-legend .trust-badge {
+  flex: 0 0 auto;
+}
+
+/* Secondary "(MCP)"/"(Plugins)" hint in a panel heading — the real term, kept subtle. */
+.settings-header-term {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-normal);
+  color: var(--color-text-muted);
+}
+
 /* ==========================================================================
    Marketplace
    ========================================================================== */
@@ -2351,6 +2406,53 @@ li.marketplace-card:hover {
 .composer-mode-install:disabled {
   opacity: 0.6;
   cursor: default;
+}
+
+/* Secondary "(RAG)" hint inside the library toggle — the real term, kept subtle. */
+.composer-mode-term {
+  font-weight: var(--font-weight-normal);
+  opacity: 0.7;
+}
+
+/* Text-only "How does this work?" link that opens the Explore playground. */
+.composer-mode-help {
+  margin-left: auto;
+  border: none;
+  background: none;
+  box-shadow: none;
+  padding: 0.3em 0.2em;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.composer-mode-help:hover:not(:disabled) {
+  color: var(--color-accent);
+}
+
+.composer-mode-help:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* Always-visible plain-language explanation of the active composer modes. */
+.composer-mode-caption {
+  margin: calc(-1 * var(--space-1)) 0 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  line-height: var(--line-height-normal);
+}
+
+.composer-mode-caption strong {
+  color: var(--color-text-secondary);
+  font-weight: var(--font-weight-medium);
+}
+
+.composer-mode-caption-sep {
+  margin: 0 var(--space-2);
+  opacity: 0.5;
 }
 
 /* ── Retrieved-source cards (RAG citations above an answer) ─────────────────── */
@@ -2789,51 +2891,98 @@ li.marketplace-card:hover {
   border-color: var(--color-accent);
 }
 
-/* ── Passage detail strip ──────────────────────────────────────────────────── */
-
-.explore-detail {
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  padding: var(--space-3);
-  min-height: 3rem;
-}
-
-.explore-detail-head {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  margin-bottom: var(--space-2);
-}
-
-.explore-detail-tag {
-  font-family: var(--font-family-mono);
-  font-size: var(--font-size-xs);
-  color: var(--color-text-primary);
-}
-
-.explore-detail-score {
-  margin-left: auto;
-  font-size: var(--font-size-xs);
-  color: var(--color-accent);
-  font-weight: var(--font-weight-medium);
-}
-
-.explore-detail-text {
-  margin: 0;
-  max-height: 180px;
-  overflow-y: auto;
-  white-space: pre-wrap;
-  word-break: break-word;
-  font-family: var(--font-family);
-  font-size: var(--font-size-sm);
-  line-height: var(--line-height-normal);
-  color: var(--color-text-secondary);
-}
+/* ── Passage detail: persistent hint + click-to-open dialog ────────────────── */
 
 .explore-detail-hint {
   margin: 0;
+  padding: var(--space-3);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-subtle);
   font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.explore-detail-hint strong {
+  color: var(--color-text-secondary);
+}
+
+/* The passage dialog reuses the shared modal chrome (.settings-overlay/.settings-panel);
+   these rules only tune the passage-specific header/body/nav for comfortable reading. */
+.passage-dialog {
+  gap: var(--space-3);
+}
+
+.passage-dialog-header {
+  align-items: flex-start;
+}
+
+.passage-dialog-title {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.passage-dialog-tag {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+  word-break: break-word;
+}
+
+.passage-dialog-score {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-muted);
+}
+
+.passage-dialog-score-kept {
+  color: var(--color-accent);
+}
+
+.passage-dialog-score-note {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-normal);
+  color: var(--color-text-muted);
+}
+
+.passage-dialog-caption {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  line-height: var(--line-height-normal);
+}
+
+.passage-dialog-body {
+  max-height: 46vh;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-subtle);
+  padding: var(--space-4);
+  font-family: var(--font-family);
+  font-size: var(--font-size-md);
+  line-height: var(--line-height-normal);
+  color: var(--color-text-primary);
+}
+
+.passage-dialog-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.passage-dialog-nav-pos {
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
   color: var(--color-text-muted);
 }
 

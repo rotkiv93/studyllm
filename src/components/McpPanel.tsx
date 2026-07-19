@@ -538,7 +538,7 @@ export function McpPanel({
     <div className="settings-overlay">
       <div className="settings-panel settings-panel-wide settings-panel-tall">
         <div className="settings-header">
-          <h2>MCP Servers</h2>
+          <h2>Tools &amp; Connections <span className="settings-header-term">(MCP)</span></h2>
           <button type="button" className="btn btn-ghost btn-sm" onClick={onClose}>
             Close
           </button>
@@ -568,11 +568,26 @@ export function McpPanel({
         {tab === "installed" ? (
           <>
             <p className="settings-hint">
-              MCP servers give the assistant extra tools, like reading and writing files on this
-              computer. Only add servers you trust. Set a tool to "Ask every time" to approve each
-              call, or "Deny" to hide it from the assistant entirely. Every allowed tool call is
-              shown in the chat.
+              These give the assistant extra tools — like reading and writing files on this computer,
+              or searching the web. (The technical name for them is “MCP servers.”) Only add ones you
+              trust. Set a tool to "Ask every time" to approve each call, or "Deny" to hide it from
+              the assistant entirely. Every allowed tool call is shown in the chat.
             </p>
+
+            <ul className="mcp-trust-legend">
+              <li>
+                <span className="trust-badge trust-official">Official</span>
+                Published by the tool's own makers.
+              </li>
+              <li>
+                <span className="trust-badge trust-verified">Verified</span>
+                From a known public code repository.
+              </li>
+              <li>
+                <span className="trust-badge trust-community">Community</span>
+                From an independent developer — runs with your permissions, so add with care.
+              </li>
+            </ul>
 
             {formError && <p className="error">{formError}</p>}
             {runtimeLog && <p className="notice">{runtimeLog}</p>}

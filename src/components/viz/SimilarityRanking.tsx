@@ -11,11 +11,13 @@ export function SimilarityRanking({
   k,
   hoveredIndex,
   onHover,
+  onSelect,
 }: {
   scored: ExplainedChunk[];
   k: number;
   hoveredIndex: number | null;
   onHover: (index: number | null) => void;
+  onSelect: (index: number) => void;
 }) {
   if (scored.length === 0) return null;
   const maxScore = Math.max(...scored.map((s) => Math.max(0, s.score)), 0.0001);
@@ -26,7 +28,7 @@ export function SimilarityRanking({
       <div className="viz-title">Similarity ranking</div>
       <p className="viz-caption">
         Every passage in your library, scored against your question. The {cutoff} above the line are
-        the ones the assistant would answer from.
+        the ones the assistant would answer from. Click any bar to read the full passage.
       </p>
       <ul className="rank-list">
         {scored.map((s, i) => {
@@ -49,6 +51,8 @@ export function SimilarityRanking({
                 onFocus={() => onHover(i)}
                 onMouseLeave={() => onHover(null)}
                 onBlur={() => onHover(null)}
+                onClick={() => onSelect(i)}
+                title="Click to read the full passage"
               >
                 <span className="rank-tag">
                   {s.documentName} #{s.seq}

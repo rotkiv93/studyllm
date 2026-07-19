@@ -433,6 +433,50 @@ Full original architecture/phase plan: `C:\Users\47852\.claude\plans\i-want-to-c
     the maintainer's already-running `npm run tauri dev` hot-reloads them via Vite HMR (a fresh
     launch just errors with "Port 1420 already in use", expected).
 
+- **Student-facing UI/UX overhaul — RAG / MCP / Deep Research made legible, this session**
+  (user-requested "the final users are non-technical students; simplify RAG, MCP, and Deep Research").
+  Four coordinated changes; **frontend-only, no Rust/schema change.** User-confirmed scope: full
+  student overhaul, click-to-open passage dialog, "plain label first, real term in parentheses"
+  terminology, and **keep the empty chat screen minimal** (no explainer cards re-added there).
+  - **RAG explorer passage detail is now click-to-open in a big dialog** (`RetrievalExplorer.tsx`,
+    `viz/SimilarityRanking.tsx`, `viz/EmbeddingMap.tsx`) — the specific complaint was that the
+    hovered passage showed in a cramped strip pinned at the bottom that vanished on mouse-out and
+    "cannot be seen easily." Hover still cross-highlights the bar↔dot; **clicking** a bar or a dot
+    now sets a new `selectedIndex` and opens a large centered modal (reuses the shared
+    `.settings-overlay`/`.settings-panel settings-panel-wide` chrome + the `.settings-overlay
+    .settings-overlay` nested-backdrop rule) showing the full passage at `--font-size-md` in a
+    scrollable body, the document/#seq, a big % match with a "retrieved / not retrieved" note, and
+    **Prev/Next** to step through the ranked list. Backdrop-click, a Close button, and **Escape** all
+    dismiss it. The old bottom `.explore-detail*` strip rules were replaced by a single persistent
+    `.explore-detail-hint` ("Hover to compare — click any one to read the full passage") plus new
+    `.passage-dialog*` rules (all on `--*` tokens). Both viz components gained an `onSelect(index)`
+    prop and an `onClick`; the `<circle>` dots carry an SVG `<title>` cue.
+  - **Plain-language labels (plain first, real term in parentheses)**: composer library toggle
+    "Use my library" → **"Chat with your documents (RAG)"**; the composer now shows an
+    **always-visible caption** describing the active Deep-Research sub-mode (`researchMode.description`,
+    previously only in a `title=`) and the library mode, plus a **"How does this work?"** text link
+    that opens the Explore playground (`.composer-mode-help/-term/-caption*` CSS). Panel headings:
+    `McpPanel` "MCP Servers" → **"Tools & Connections (MCP)"** with a new **always-visible trust
+    legend** (`.mcp-trust-legend`, Official/Verified/Community one-liners) instead of badge-only
+    tooltips; `PluginsPanel` "Plugins" → **"Accounts (Plugins)"**; `LibraryPanel` "Document library"
+    → **"Your documents (library)"**. Sidebar `configItems` labels: "MCP servers" → **"Tools &
+    Connections"**, "Plugins" → **"Accounts (Plugins)"**, "Explore" → **"Explore how it works"**.
+    The parenthetical term uses a shared `.settings-header-term` style. Explorer/`STAGES` copy
+    softened ("Turn your question into numbers … a list of N numbers (a 'vector')"; "Rank by
+    closeness in meaning ('cosine similarity'), not keyword overlap").
+  - **Onboarding now teaches Research + documents** (`OnboardingWizard.tsx`): a new **`features`**
+    step sits between `mcp` and `done` (both the folder-add success and the mcp-step "Skip" route to
+    it) with a one-sentence plain-language intro to **Deep Research** and **Chat with your documents**
+    (`.onboarding-features` cards) and a **"See how it works"** button that closes onboarding and opens
+    the Explore playground via a new `onOpenExplore` prop (wired in `App.tsx`).
+  - **Explicitly out of scope**: the empty chat screen stays minimal (no `FeatureExplainer`-style
+    cards re-added), and the MCP install/edit power-user forms (env vars, npx args, secrets, logs)
+    were left untouched.
+  - Verified: `npx tsc --noEmit` clean, `npm run lint` (0 errors; same 5 pre-existing warnings),
+    `npm test` (56/56). Frontend-only → Vite HMR hot-reloads into an already-running `npm run tauri
+    dev`. Live in-app click-test of the passage dialog / composer captions / onboarding features step
+    still to be confirmed by the maintainer.
+
 ## Visual design system (Phase 5 slice)
 
 - `src/App.css` is now a token-driven design system: every color, spacing value, radius,

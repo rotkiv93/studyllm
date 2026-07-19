@@ -1400,16 +1400,41 @@ export default function App() {
               disabled={isStreaming}
               title={
                 ragDocuments.length > 0
-                  ? "Answer from your document library (RAG)"
-                  : "Add documents to your library first"
+                  ? "Answer using only your own documents (RAG)"
+                  : "Add documents first, then answer from them"
               }
               aria-pressed={useLibrary}
             >
               <IconBook size={13} />
-              Use my library
+              Chat with your documents
+              <span className="composer-mode-term">(RAG)</span>
               {ragDocuments.length > 0 && <span className="composer-mode-count">{ragDocuments.length}</span>}
             </button>
+            <button
+              type="button"
+              className="composer-mode-help"
+              onClick={() => setShowExplore(true)}
+              disabled={isStreaming}
+            >
+              How does this work?
+            </button>
           </div>
+          {(researchMode || useLibrary) && (
+            <p className="composer-mode-caption">
+              {researchMode && (
+                <span>
+                  <strong>Deep Research</strong> — {researchMode.description}
+                </span>
+              )}
+              {researchMode && useLibrary && <span className="composer-mode-caption-sep">·</span>}
+              {useLibrary && (
+                <span>
+                  <strong>Your documents</strong> — the assistant answers only from the files in your
+                  library and cites the passages it used.
+                </span>
+              )}
+            </p>
+          )}
           {attachments.length > 0 && (
             <div className="attachment-chips">
               {attachments.map((a, i) => (
@@ -1545,6 +1570,11 @@ export default function App() {
           onClose={() => {
             localStorage.setItem("onboardingDismissed", "1");
             setShowOnboarding(false);
+          }}
+          onOpenExplore={() => {
+            localStorage.setItem("onboardingDismissed", "1");
+            setShowOnboarding(false);
+            setShowExplore(true);
           }}
         />
       )}

@@ -52,7 +52,7 @@ export function LibraryPanel({
       <div className="settings-panel settings-panel-wide settings-panel-tall">
         <div className="settings-header">
           <h2>
-            <IconBook size={18} /> Document library
+            <IconBook size={18} /> Your documents <span className="settings-header-term">(library)</span>
           </h2>
           <button type="button" className="btn btn-ghost btn-sm" onClick={onClose}>
             Close
@@ -83,9 +83,9 @@ export function LibraryPanel({
         {tab === "documents" ? (
           <>
             <p className="settings-hint">
-              Add your notes, PDFs, or papers. Each document is split into passages and embedded so
-              the assistant can retrieve the most relevant parts when you turn on “Use my library”
-              in the composer. Answers cite the passages they used.
+              Add your notes, PDFs, or papers. Each document is split into passages and turned into
+              searchable “meaning” data so the assistant can pull the most relevant parts when you
+              turn on “Chat with your documents” in the composer. Answers cite the passages they used.
             </p>
 
             {!configured && (

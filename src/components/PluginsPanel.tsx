@@ -113,7 +113,7 @@ export function PluginsPanel({ connectors, servers, onConnect, onDisconnect, onC
     <div className="settings-overlay">
       <div className="settings-panel settings-panel-wide">
         <div className="settings-header">
-          <h2>Plugins</h2>
+          <h2>Accounts <span className="settings-header-term">(Plugins)</span></h2>
           <button type="button" className="btn btn-ghost btn-sm" onClick={onClose}>
             Close
           </button>

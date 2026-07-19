@@ -21,12 +21,14 @@ export function EmbeddingMap({
   k,
   hoveredIndex,
   onHover,
+  onSelect,
 }: {
   queryVector: number[];
   scored: ExplainedChunk[];
   k: number;
   hoveredIndex: number | null;
   onHover: (index: number | null) => void;
+  onSelect: (index: number) => void;
 }) {
   // Project the query (index 0) together with all chunks so they share one coordinate frame.
   const points = useMemo(
@@ -64,7 +66,7 @@ export function EmbeddingMap({
       <div className="viz-title">Embedding space</div>
       <p className="viz-caption">
         Your question (★) and every passage, mapped by meaning. Closer means more similar — the
-        filled dots are the ones retrieved.
+        filled dots are the ones retrieved. Click any dot to read the full passage.
       </p>
       <svg className="embed-map" viewBox={`0 0 ${VIEW} ${VIEW}`} role="img" aria-label="Embedding space map">
         {chunkPts.map((p, i) => {
@@ -81,7 +83,10 @@ export function EmbeddingMap({
               }`}
               onMouseEnter={() => onHover(i)}
               onMouseLeave={() => onHover(null)}
-            />
+              onClick={() => onSelect(i)}
+            >
+              <title>Click to read the full passage</title>
+            </circle>
           );
         })}
         {/* Query marker (a small 4-point star) drawn last so it sits on top. */}

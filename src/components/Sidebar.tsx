@@ -52,9 +52,9 @@ export function Sidebar({
   // collapsed icon rail. Providers carries a warning dot when none are active; MCP a running-count badge.
   const configItems = [
     { key: "providers", icon: IconKey, label: "Providers", onClick: onOpenProviders, dot: activeProviderCount === 0, badge: 0 },
-    { key: "mcp", icon: IconTool, label: "MCP servers", onClick: onOpenMcp, dot: false, badge: mcpRunningCount },
-    { key: "plugins", icon: IconPlug, label: "Plugins", onClick: onOpenPlugins, dot: false, badge: 0 },
-    { key: "explore", icon: IconCompass, label: "Explore", onClick: onOpenExplore, dot: false, badge: 0 },
+    { key: "mcp", icon: IconTool, label: "Tools & Connections", onClick: onOpenMcp, dot: false, badge: mcpRunningCount },
+    { key: "plugins", icon: IconPlug, label: "Accounts (Plugins)", onClick: onOpenPlugins, dot: false, badge: 0 },
+    { key: "explore", icon: IconCompass, label: "Explore how it works", onClick: onOpenExplore, dot: false, badge: 0 },
     { key: "diagnostics", icon: IconSettings, label: "Diagnostics", onClick: onOpenAppSettings, dot: false, badge: 0 },
   ];
   // Surface the most important config status on the collapsed group gear so nothing hides.
