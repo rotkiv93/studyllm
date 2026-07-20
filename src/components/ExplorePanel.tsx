@@ -1,30 +1,64 @@
 import { useState } from "react";
 import { IconCompass } from "./icons";
+import { LessonsPanel } from "./LessonsPanel";
+import { TokenExplorer } from "./TokenExplorer";
+import { PromptPlayground } from "./PromptPlayground";
 import { RetrievalExplorer } from "./RetrievalExplorer";
+import { GroundingContrast } from "./GroundingContrast";
+import { McpToolExplorer, type ExplorerServer } from "./McpToolExplorer";
 import { ResearchTrace } from "./ResearchTrace";
 import type { ResearchMode } from "../lib/researchModes";
 import type { StreamEvent } from "../lib/providerRouter";
 import type { ProviderRow, RagDocumentRow } from "../lib/db";
 
 /**
- * "Explore how it works" — a hands-on playground for the app's research features, so students can
- * see the machinery instead of just its output. Follows the shared panel convention
- * (`settings-overlay` > `settings-panel`, `.settings-header`, `.mcp-tabs`).
- *
- *   • Retrieval — run a query against your library and watch RAG rank + map the passages.
- *   • Research process — (coming soon) watch a live Deep Research run unfold step by step.
+ * "Explore how it works" — a hands-on playground for the concepts a non-technical student keeps
+ * hearing about (tokens, RAG, tools, research), so they can see the machinery instead of just its
+ * output. The "Lessons" tab is a guided tour that drops into each playground; the rest run the app's
+ * *real* pipelines (same embeddings / same provider router / same MCP tools the chat uses).
  */
 
-type Tab = "retrieval" | "research";
+export type ExploreTab =
+  | "lessons"
+  | "tokens"
+  | "system"
+  | "retrieval"
+  | "grounding"
+  | "tools"
+  | "research";
+
+const TABS: { id: ExploreTab; label: string }[] = [
+  { id: "lessons", label: "Lessons" },
+  { id: "tokens", label: "Tokens" },
+  { id: "system", label: "System prompt" },
+  { id: "retrieval", label: "Your documents (RAG)" },
+  { id: "grounding", label: "Guessing vs. grounded" },
+  { id: "tools", label: "Tools (MCP)" },
+  { id: "research", label: "Research process" },
+];
 
 interface ExplorePanelProps {
   providers: ProviderRow[];
   documents: RagDocumentRow[];
   onOpenLibrary: () => void;
   onClose: () => void;
+  hasProviders: boolean;
   hasResearchTools: boolean;
   installingResearchTools: boolean;
   onInstallResearchTools: () => Promise<void>;
+  toolServers: ExplorerServer[];
+  onRunToolProbe: (
+    question: string,
+    serverId: string,
+    onEvent: (e: StreamEvent) => void,
+    signal: AbortSignal,
+  ) => Promise<void>;
+  onRunAnswer: (
+    question: string,
+    system: string | undefined,
+    onEvent: (e: StreamEvent) => void,
+    signal: AbortSignal,
+  ) => Promise<void>;
   onRunResearch: (
     question: string,
     mode: ResearchMode,
@@ -38,12 +72,16 @@ export function ExplorePanel({
   documents,
   onOpenLibrary,
   onClose,
+  hasProviders,
   hasResearchTools,
   installingResearchTools,
   onInstallResearchTools,
+  toolServers,
+  onRunToolProbe,
+  onRunAnswer,
   onRunResearch,
 }: ExplorePanelProps) {
-  const [tab, setTab] = useState<Tab>("retrieval");
+  const [tab, setTab] = useState<ExploreTab>("lessons");
 
   return (
     <div className="settings-overlay">
@@ -57,30 +95,41 @@ export function ExplorePanel({
           </button>
         </div>
 
-        <div className="mcp-tabs" role="tablist">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === "retrieval"}
-            className={`mcp-tab-btn${tab === "retrieval" ? " mcp-tab-btn-active" : ""}`}
-            onClick={() => setTab("retrieval")}
-          >
-            Retrieval (your documents)
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === "research"}
-            className={`mcp-tab-btn${tab === "research" ? " mcp-tab-btn-active" : ""}`}
-            onClick={() => setTab("research")}
-          >
-            Research process
-          </button>
+        <div className="mcp-tabs explore-tabs" role="tablist">
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={tab === t.id}
+              className={`mcp-tab-btn${tab === t.id ? " mcp-tab-btn-active" : ""}`}
+              onClick={() => setTab(t.id)}
+            >
+              {t.label}
+            </button>
+          ))}
         </div>
 
-        {tab === "retrieval" ? (
+        {tab === "lessons" && <LessonsPanel onGoTo={setTab} />}
+        {tab === "tokens" && <TokenExplorer />}
+        {tab === "system" && (
+          <PromptPlayground hasProviders={hasProviders} onRunAnswer={onRunAnswer} />
+        )}
+        {tab === "retrieval" && (
           <RetrievalExplorer providers={providers} documents={documents} onOpenLibrary={onOpenLibrary} />
-        ) : (
+        )}
+        {tab === "grounding" && (
+          <GroundingContrast
+            providers={providers}
+            documents={documents}
+            onOpenLibrary={onOpenLibrary}
+            onRunAnswer={onRunAnswer}
+          />
+        )}
+        {tab === "tools" && (
+          <McpToolExplorer servers={toolServers} hasProviders={hasProviders} onRunToolProbe={onRunToolProbe} />
+        )}
+        {tab === "research" && (
           <ResearchTrace
             hasResearchTools={hasResearchTools}
             installingTools={installingResearchTools}

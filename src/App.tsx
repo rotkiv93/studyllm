@@ -10,6 +10,8 @@ import {
   deleteProvider,
   recordProviderUsage,
   createConversation,
+  updateConversationSettings,
+  getConversation,
   deleteConversation,
   insertMessage,
   listConversations,
@@ -55,9 +57,16 @@ import {
   IconRefresh,
   IconSearch,
   IconSend,
+  IconSettings,
   IconStop,
   IconX,
 } from "./components/icons";
+import {
+  ChatLab,
+  DEFAULT_CHAT_SETTINGS,
+  isChatSettingsActive,
+  type ChatSettings,
+} from "./components/ChatLab";
 import {
   RESEARCH_MODES,
   DEFAULT_RESEARCH_MODE,
@@ -116,6 +125,26 @@ import "./App.css";
 
 function newId(): string {
   return crypto.randomUUID();
+}
+
+/** Map the UI chat-lab settings to the nullable DB column shape (empty prompt → null). */
+function chatSettingsToRow(s: ChatSettings) {
+  return {
+    system_prompt: s.systemPrompt.trim() ? s.systemPrompt : null,
+    temperature: s.temperature,
+    top_p: s.topP,
+    max_tokens: s.maxTokens,
+  };
+}
+
+/** Rebuild UI chat-lab settings from a persisted conversation row. */
+function chatSettingsFromRow(row: ConversationRow): ChatSettings {
+  return {
+    systemPrompt: row.system_prompt ?? "",
+    temperature: row.temperature,
+    topP: row.top_p,
+    maxTokens: row.max_tokens,
+  };
 }
 
 type DisplayMessage =
@@ -187,6 +216,10 @@ export default function App() {
   const [researchMode, setResearchMode] = useState<ResearchMode | null>(null);
   // RAG: whether this turn should retrieve from the document library.
   const [useLibrary, setUseLibrary] = useState(false);
+  // Chat lab: per-conversation system prompt + decoding knobs the student controls, plus whether
+  // the control panel is open. Hydrated from the conversation row on select, reset on new chat.
+  const [chatSettings, setChatSettings] = useState<ChatSettings>(DEFAULT_CHAT_SETTINGS);
+  const [showChatLab, setShowChatLab] = useState(false);
   const [ragDocuments, setRagDocuments] = useState<RagDocumentRow[]>([]);
   const [embeddingConfig, setEmbeddingConfig] = useState<EmbeddingConfig | null>(() =>
     loadEmbeddingConfig(),
@@ -297,13 +330,26 @@ export default function App() {
     conversationIdRef.current = null;
     setActiveConversationId(null);
     setMessages([]);
+    setChatSettings(DEFAULT_CHAT_SETTINGS);
     setError(null);
     setNotice(null);
   }
 
+  /** Edit the chat-lab settings and, if the conversation already exists, persist them immediately.
+   * When no conversation exists yet (fresh chat), they ride along at first-send creation instead. */
+  function handleChatSettingsChange(next: ChatSettings) {
+    setChatSettings(next);
+    const id = conversationIdRef.current;
+    if (id) void updateConversationSettings(id, chatSettingsToRow(next));
+  }
+
   async function handleSelectConversation(id: string) {
     if (isStreaming || id === activeConversationId) return;
-    const [rows, toolRows] = await Promise.all([listMessages(id), listToolCallsForConversation(id)]);
+    const [rows, toolRows, conversation] = await Promise.all([
+      listMessages(id),
+      listToolCallsForConversation(id),
+      getConversation(id),
+    ]);
     const toolsByMessage = new Map<string, ToolCallRow[]>();
     for (const t of toolRows) {
       const arr = toolsByMessage.get(t.message_id);
@@ -352,6 +398,7 @@ export default function App() {
     setMessages(display);
     conversationIdRef.current = id;
     setActiveConversationId(id);
+    setChatSettings(conversation ? chatSettingsFromRow(conversation) : DEFAULT_CHAT_SETTINGS);
     setError(null);
     setNotice(null);
   }
@@ -553,6 +600,45 @@ export default function App() {
     }
   }
 
+  /**
+   * Explore → "Tools (MCP)": run one model turn with ONLY the chosen server's tools attached, and
+   * forward raw stream events so the playground can show the model choosing a tool and the
+   * request/result loop. Reuses the exact chat machinery; persists nothing.
+   */
+  async function runToolProbe(
+    question: string,
+    serverId: string,
+    onEvent: (e: StreamEvent) => void,
+    signal: AbortSignal,
+  ): Promise<void> {
+    const tools = buildMcpTools(serverId);
+    const history: ChatMessage[] = [{ role: "user", content: question }];
+    for await (const event of routerRef.current.streamReply(history, tools, signal, {
+      system:
+        "You have tools available. When the user's request can be answered with a tool, call it. " +
+        "Keep your reply brief.",
+    })) {
+      onEvent(event);
+    }
+  }
+
+  /**
+   * Explore → "Guessing vs. grounded": answer one question with NO tools, optionally under a RAG
+   * grounding system block. The grounding playground calls this twice (plain, then grounded) to show
+   * the contrast. Persists nothing.
+   */
+  async function runExploreAnswer(
+    question: string,
+    system: string | undefined,
+    onEvent: (e: StreamEvent) => void,
+    signal: AbortSignal,
+  ): Promise<void> {
+    const history: ChatMessage[] = [{ role: "user", content: question }];
+    for await (const event of routerRef.current.streamReply(history, undefined, signal, { system })) {
+      onEvent(event);
+    }
+  }
+
   async function handleAddLibraryFiles(files: File[]) {
     setLibraryError(null);
     const resolved = await resolveEmbedder(providers);
@@ -735,8 +821,9 @@ export default function App() {
     });
   }
 
-  function buildMcpTools(): ToolSet | undefined {
+  function buildMcpTools(serverIdFilter?: string): ToolSet | undefined {
     const entries = Object.entries(mcpToolsByServer).flatMap(([serverId, tools]) => {
+      if (serverIdFilter && serverId !== serverIdFilter) return [];
       const server = mcpServers.find((s) => s.id === serverId);
       const permissions = parseToolPermissions(server?.tool_permissions_json ?? "{}");
       return tools.flatMap((t) => {
@@ -852,6 +939,10 @@ export default function App() {
     if (!conversationIdRef.current) {
       conversationIdRef.current = newId();
       await createConversation(conversationIdRef.current, text.trim().slice(0, 60));
+      // Persist any chat-lab settings the student set before the first message existed to save to.
+      if (isChatSettingsActive(chatSettings)) {
+        await updateConversationSettings(conversationIdRef.current, chatSettingsToRow(chatSettings));
+      }
       setActiveConversationId(conversationIdRef.current);
       await refreshConversations();
     }
@@ -886,6 +977,12 @@ export default function App() {
     const systemParts: string[] = [];
     let maxSteps: number | undefined;
     let ragSources: RetrievedChunk[] = [];
+
+    // The student's standing instruction (chat lab) leads, so their persona/rules frame everything
+    // the transient research/RAG steering adds below.
+    if (chatSettings.systemPrompt.trim()) {
+      systemParts.push(chatSettings.systemPrompt.trim());
+    }
 
     if (researchMode) {
       systemParts.push(researchMode.systemPrompt);
@@ -931,6 +1028,9 @@ export default function App() {
       for await (const event of routerRef.current.streamReply(nextHistory, tools, abortController.signal, {
         system,
         maxSteps,
+        temperature: chatSettings.temperature ?? undefined,
+        topP: chatSettings.topP ?? undefined,
+        maxOutputTokens: chatSettings.maxTokens ?? undefined,
       })) {
         if (event.type === "chunk") {
           assistantText += event.text;
@@ -1434,6 +1534,18 @@ export default function App() {
             </button>
             <button
               type="button"
+              className={`composer-mode-toggle${showChatLab || isChatSettingsActive(chatSettings) ? " composer-mode-toggle-on" : ""}`}
+              onClick={() => setShowChatLab((v) => !v)}
+              disabled={isStreaming}
+              title="Set a system prompt and the model's dials (temperature, top-p, max tokens) for this chat"
+              aria-pressed={showChatLab}
+            >
+              <IconSettings size={13} />
+              Chat lab
+              {isChatSettingsActive(chatSettings) && <span className="composer-mode-dot" aria-hidden="true" />}
+            </button>
+            <button
+              type="button"
               className="composer-mode-help"
               onClick={() => setShowExplore(true)}
               disabled={isStreaming}
@@ -1441,6 +1553,13 @@ export default function App() {
               How does this work?
             </button>
           </div>
+          {showChatLab && (
+            <ChatLab
+              settings={chatSettings}
+              onChange={handleChatSettingsChange}
+              onClose={() => setShowChatLab(false)}
+            />
+          )}
           {(researchMode || useLibrary) && (
             <p className="composer-mode-caption">
               {researchMode && (
@@ -1578,9 +1697,19 @@ export default function App() {
             setShowLibrary(true);
           }}
           onClose={() => setShowExplore(false)}
+          hasProviders={providers.some((p) => p.enabled)}
           hasResearchTools={hasResearchTools()}
           installingResearchTools={installingResearchTools}
           onInstallResearchTools={handleInstallResearchTools}
+          toolServers={Object.entries(mcpToolsByServer)
+            .filter(([, tools]) => tools.length > 0)
+            .map(([id, tools]) => ({
+              id,
+              name: mcpServers.find((s) => s.id === id)?.name ?? "MCP server",
+              tools,
+            }))}
+          onRunToolProbe={runToolProbe}
+          onRunAnswer={runExploreAnswer}
           onRunResearch={runResearchTrace}
         />
       )}

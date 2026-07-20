@@ -16,6 +16,12 @@ export interface ChatMessage {
 export interface StreamOptions {
   system?: string;
   maxSteps?: number;
+  /** Sampling temperature (typically 0–2). Undefined leaves the provider/model default untouched. */
+  temperature?: number;
+  /** Nucleus-sampling top-p (0–1). Undefined leaves the provider/model default untouched. */
+  topP?: number;
+  /** Hard cap on the tokens the model may generate this turn. Undefined = provider/model default. */
+  maxOutputTokens?: number;
 }
 
 const DEFAULT_MAX_STEPS = 8;
@@ -178,6 +184,10 @@ export class ProviderRouter {
     // `history` without it). `streamText` reapplies it on every step of the agentic loop.
     const systemInstruction = options?.system;
     const maxSteps = Math.max(1, options?.maxSteps ?? DEFAULT_MAX_STEPS);
+    // Optional decoding knobs (from the chat "lab" controls). Each is forwarded only when set so an
+    // untouched control never overrides a provider/model default. `streamText` reapplies them on
+    // every step of the agentic loop, same as the system instruction.
+    const { temperature, topP, maxOutputTokens } = options ?? {};
 
     const toolsAttached = !!tools && Object.keys(tools).length > 0;
     let attempted = 0;
@@ -213,6 +223,9 @@ export class ProviderRouter {
             model: client(candidate.model),
             messages,
             ...(systemInstruction ? { system: systemInstruction } : {}),
+            ...(temperature != null ? { temperature } : {}),
+            ...(topP != null ? { topP } : {}),
+            ...(maxOutputTokens != null ? { maxOutputTokens } : {}),
             abortSignal,
             ...(toolsAttached ? { tools, stopWhen: isStepCount(maxSteps) } : {}),
           });

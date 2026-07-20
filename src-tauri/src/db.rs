@@ -152,5 +152,16 @@ pub fn migrations() -> Vec<Migration> {
             "#,
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 8,
+            description: "per-conversation chat lab: custom system prompt + decoding hyperparameters",
+            sql: r#"
+                ALTER TABLE conversations ADD COLUMN system_prompt TEXT;
+                ALTER TABLE conversations ADD COLUMN temperature REAL;
+                ALTER TABLE conversations ADD COLUMN top_p REAL;
+                ALTER TABLE conversations ADD COLUMN max_tokens INTEGER;
+            "#,
+            kind: MigrationKind::Up,
+        },
     ]
 }

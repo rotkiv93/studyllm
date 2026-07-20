@@ -28,6 +28,13 @@ export interface ConversationRow {
   created_at: number;
   updated_at: number;
   pinned: number;
+  /** Chat "lab" overrides for this conversation. null = use the model/provider default.
+   * `system_prompt` is a persisted standing instruction the student authored (distinct from the
+   * transient per-turn research/RAG steering, which is never saved). */
+  system_prompt: string | null;
+  temperature: number | null;
+  top_p: number | null;
+  max_tokens: number | null;
 }
 
 export interface MessageRow {
@@ -182,6 +189,33 @@ export async function createConversation(id: string, title: string): Promise<voi
     "INSERT INTO conversations (id, title, created_at, updated_at, pinned) VALUES ($1, $2, $3, $4, 0)",
     [id, title, now, now],
   );
+}
+
+/** Persist the chat-lab overrides for a conversation. Any field left null falls back to the
+ * model/provider default at send time. Kept separate from `touchConversation` so editing the lab
+ * controls doesn't reorder the conversation list. */
+export async function updateConversationSettings(
+  id: string,
+  settings: {
+    system_prompt: string | null;
+    temperature: number | null;
+    top_p: number | null;
+    max_tokens: number | null;
+  },
+): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    `UPDATE conversations
+        SET system_prompt = $1, temperature = $2, top_p = $3, max_tokens = $4
+      WHERE id = $5`,
+    [settings.system_prompt, settings.temperature, settings.top_p, settings.max_tokens, id],
+  );
+}
+
+export async function getConversation(id: string): Promise<ConversationRow | null> {
+  const db = await getDb();
+  const rows = await db.select<ConversationRow[]>("SELECT * FROM conversations WHERE id = $1", [id]);
+  return rows[0] ?? null;
 }
 
 export async function touchConversation(id: string): Promise<void> {
