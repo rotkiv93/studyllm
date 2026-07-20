@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { dynamicTool, jsonSchema, type ToolSet } from "ai";
-import { ProviderRouter, type ChatMessage, type ConfiguredProvider, type StreamEvent } from "./lib/providerRouter";
+import {
+  ProviderRouter,
+  routerReasonKey,
+  type ChatMessage,
+  type ConfiguredProvider,
+  type StreamEvent,
+} from "./lib/providerRouter";
 import { PROVIDER_MANIFEST } from "./lib/providers";
 import { setCredential, getCredential, deleteCredential } from "./lib/credentials";
 import {
@@ -72,6 +78,7 @@ import {
   DEFAULT_RESEARCH_MODE,
   RESEARCH_TOOL_CATALOG_IDS,
   isResearchServer,
+  researchModeKeys,
   type ResearchMode,
 } from "./lib/researchModes";
 import { CURATED_ENTRIES } from "./lib/curatedMcp";
@@ -121,6 +128,7 @@ import {
 import { oauthConnect, oauthReconnect } from "./lib/oauth";
 import { appendCrashLog } from "./lib/crashlog";
 import { CONNECTORS, DESTRUCTIVE_GOOGLE_TOOLS, type OAuthConnector } from "./lib/googleConnectors";
+import { useT } from "./lib/i18n";
 import "./App.css";
 
 function newId(): string {
@@ -186,12 +194,13 @@ function formatApprovalInput(input: unknown): string {
 }
 
 function CopyButton({ text }: { text: string }) {
+  const t = useT();
   const [copied, setCopied] = useState(false);
   return (
     <button
       type="button"
       className="message-copy"
-      title="Copy message"
+      title={t("chat.copyMessage")}
       onClick={async () => {
         await navigator.clipboard.writeText(text);
         setCopied(true);
@@ -204,6 +213,7 @@ function CopyButton({ text }: { text: string }) {
 }
 
 export default function App() {
+  const t = useT();
   const [providers, setProviders] = useState<ProviderRow[]>([]);
   const [showProviders, setShowProviders] = useState(false);
   const [showMcp, setShowMcp] = useState(false);
@@ -570,10 +580,10 @@ export default function App() {
         await handleStartMcpServer(server);
       }
       if (toInstall.length > 0 || toStart.length > 0) {
-        setNotice("Research tools are starting up — give them a few seconds on first run.");
+        setNotice(t("notice.researchToolsStarting"));
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't set up research tools.");
+      setError(err instanceof Error ? err.message : t("error.researchToolsSetup"));
     } finally {
       setInstallingResearchTools(false);
     }
@@ -614,6 +624,7 @@ export default function App() {
     const tools = buildMcpTools(serverId);
     const history: ChatMessage[] = [{ role: "user", content: question }];
     for await (const event of routerRef.current.streamReply(history, tools, signal, {
+      // Model-facing text is never localized — the UI language must not steer the LLM.
       system:
         "You have tools available. When the user's request can be answered with a tool, call it. " +
         "Keep your reply brief.",
@@ -653,7 +664,7 @@ export default function App() {
       }
       await refreshRagDocuments();
     } catch (err) {
-      setLibraryError(err instanceof Error ? err.message : "Couldn't index that document.");
+      setLibraryError(err instanceof Error ? err.message : t("error.indexDocument"));
     } finally {
       setLibraryBusy(false);
     }
@@ -669,7 +680,7 @@ export default function App() {
   function handleSaveEmbeddingConfig(config: EmbeddingConfig) {
     saveEmbeddingConfig(config);
     setEmbeddingConfig(config);
-    setNotice("Embedding model saved.");
+    setNotice(t("notice.embeddingModelSaved"));
   }
 
   async function handleConnectGoogle(connector: OAuthConnector) {
@@ -826,23 +837,27 @@ export default function App() {
       if (serverIdFilter && serverId !== serverIdFilter) return [];
       const server = mcpServers.find((s) => s.id === serverId);
       const permissions = parseToolPermissions(server?.tool_permissions_json ?? "{}");
-      return tools.flatMap((t) => {
-        const permission = getToolPermission(permissions, t.name);
+      return tools.flatMap((tool) => {
+        const permission = getToolPermission(permissions, tool.name);
         if (permission === "deny") return [];
-        const key = sanitizeToolKey(`${serverId}_${t.name}`);
+        const key = sanitizeToolKey(`${serverId}_${tool.name}`);
         return [
           [
             key,
             dynamicTool({
-              description: t.description ?? undefined,
-              inputSchema: jsonSchema(sanitizeToolSchema(t.inputSchema as Record<string, unknown>)),
+              description: tool.description ?? undefined,
+              inputSchema: jsonSchema(sanitizeToolSchema(tool.inputSchema as Record<string, unknown>)),
               execute: async (input) => {
                 if (permission === "ask") {
-                  const approved = await requestToolApproval(server?.name ?? "MCP server", t.name, input);
-                  if (!approved) throw new Error("Tool call denied by user.");
+                  const approved = await requestToolApproval(
+                    server?.name ?? t("mcp.defaultServerName"),
+                    tool.name,
+                    input,
+                  );
+                  if (!approved) throw new Error(t("error.toolDenied"));
                 }
-                const outcome = await callMcpTool(serverId, t.name, input);
-                if (outcome.isError) throw new Error(outcome.text || "Tool call failed");
+                const outcome = await callMcpTool(serverId, tool.name, input);
+                if (outcome.isError) throw new Error(outcome.text || t("error.toolFailed"));
                 return outcome.text;
               },
             }),
@@ -929,7 +944,7 @@ export default function App() {
   async function runSend(text: string) {
     if (!text.trim() || isStreaming) return;
     if (providers.filter((p) => p.enabled).length === 0) {
-      setError("Add at least one provider in Settings first.");
+      setError(t("error.addProviderFirst"));
       return;
     }
 
@@ -974,6 +989,8 @@ export default function App() {
 
     // Compose transient per-turn steering: a Deep Research directive and/or a RAG grounding block.
     // Neither is persisted to the conversation — they ride the router's `system` param.
+    // Note: the UI language is deliberately NOT injected here. i18n is interface-level only; the
+    // model answers in whatever language the student writes in.
     const systemParts: string[] = [];
     let maxSteps: number | undefined;
     let ragSources: RetrievedChunk[] = [];
@@ -992,14 +1009,16 @@ export default function App() {
     if (useLibrary && ragDocuments.length > 0) {
       const resolved = await resolveEmbedder(providers);
       if ("error" in resolved) {
-        setNotice(`Library search skipped: ${resolved.error}`);
+        setNotice(t("notice.librarySearchSkipped", { error: resolved.error }));
       } else {
         try {
           ragSources = await retrieve(userMessage.content, resolved.embedder);
           if (ragSources.length > 0) systemParts.push(buildRagSystemBlock(ragSources));
         } catch (err) {
           setNotice(
-            `Library search failed: ${err instanceof Error ? err.message : "embedding error"}`,
+            t("notice.librarySearchFailed", {
+              error: err instanceof Error ? err.message : t("error.embeddingError"),
+            }),
           );
         }
       }
@@ -1078,27 +1097,33 @@ export default function App() {
             ];
           }
         } else if (event.type === "error") {
-          setError(`The model's response failed: ${event.message}`);
+          setError(t("error.responseFailed", { message: event.message }));
           appendCrashLog(`stream error: ${event.message}`).catch(() => {});
         } else if (event.type === "router") {
           const ev = event.event;
           if (ev.kind === "switched") {
-            setNotice(`Switched to ${ev.toLabel} (${ev.fromLabel} ${ev.reason})`);
+            setNotice(
+              t("notice.switchedProvider", {
+                to: ev.toLabel,
+                from: ev.fromLabel,
+                reason: t(routerReasonKey(ev.reason)),
+              }),
+            );
             assistantText = "";
             tail = [{ role: "assistant", content: "" }];
             toolCallsForTurn = [];
             toolCallOffsets.clear();
             commitTail();
           } else if (ev.kind === "auth-error") {
-            setNotice(`${ev.providerLabel} key looks invalid — disabled it. Check Settings.`);
+            setNotice(t("notice.invalidKey", { provider: ev.providerLabel }));
             await refreshProviders();
           } else if (ev.kind === "exhausted") {
             setError(
               ev.toolsUnsupported
-                ? "None of your models support the connected tools. Pick a tool-capable model in Providers, or disable the MCP tools."
+                ? t("error.toolsUnsupported")
                 : ev.retryInSeconds > 0
-                  ? `All your providers are rate-limited. Try again in ~${ev.retryInSeconds}s.`
-                  : "All your providers failed. Check your keys in Settings.",
+                  ? t("error.allProvidersRateLimited", { seconds: ev.retryInSeconds })
+                  : t("error.allProvidersFailed"),
             );
           }
         } else if (event.type === "done") {
@@ -1152,7 +1177,7 @@ export default function App() {
       }
     } catch (err) {
       if (!abortController.signal.aborted) {
-        setError(err instanceof Error ? err.message : "Something went wrong.");
+        setError(err instanceof Error ? err.message : t("error.somethingWentWrong"));
         setMessages([...baseMessages, userDisplay]);
       }
     } finally {
@@ -1182,25 +1207,25 @@ export default function App() {
     setError(null);
     const room = MAX_ATTACHMENTS - attachments.length;
     if (room <= 0) {
-      setError(`You can attach up to ${MAX_ATTACHMENTS} files per message.`);
+      setError(t("error.maxAttachments", { max: MAX_ATTACHMENTS }));
       return;
     }
     setAttachBusy(true);
     try {
       for (const file of files.slice(0, room)) {
         if (!isSupportedAttachment(file.name)) {
-          setError(`Can't read "${file.name}" — supported: ${SUPPORTED_ATTACHMENT_HINT}.`);
+          setError(t("error.unreadableFile", { name: file.name, formats: SUPPORTED_ATTACHMENT_HINT }));
           continue;
         }
         try {
           const parsed = await parseAttachment(file);
           setAttachments((prev) => [...prev, parsed]);
         } catch (e) {
-          setError(e instanceof Error ? e.message : `Couldn't read "${file.name}".`);
+          setError(e instanceof Error ? e.message : t("error.readFileFailed", { name: file.name }));
         }
       }
       if (files.length > room) {
-        setError(`Only ${room} more file(s) fit — max ${MAX_ATTACHMENTS} per message.`);
+        setError(t("error.roomForFiles", { room, max: MAX_ATTACHMENTS }));
       }
     } finally {
       setAttachBusy(false);
@@ -1224,15 +1249,15 @@ export default function App() {
   async function handleCopyTranscript() {
     setExportMenuOpen(false);
     const md = buildTranscriptMarkdown(
-      activeTitle || "Conversation",
+      activeTitle || t("chat.conversation"),
       messages.filter((m) => m.role !== "sources"),
     );
     try {
       await navigator.clipboard.writeText(md);
       setError(null);
-      setNotice("Conversation copied as Markdown.");
+      setNotice(t("notice.transcriptCopied"));
     } catch {
-      setError("Couldn't copy to the clipboard.");
+      setError(t("error.clipboardFailed"));
     }
   }
 
@@ -1242,22 +1267,22 @@ export default function App() {
     const docsServerId = findDocsServerId(mcpToolsByServer);
     if (!docsServerId) {
       setNotice(null);
-      setError("Connect your Google account in Plugins first to save to Google Docs.");
+      setError(t("error.connectGoogleFirst"));
       return;
     }
     setExporting(true);
     setError(null);
     setNotice(null);
     try {
-      const title = activeTitle || "StudyLLM conversation";
+      const title = activeTitle || t("chat.defaultDocTitle");
       const created = await callMcpTool(docsServerId, "docs_create_document", { title });
       if (created.isError) {
-        setError(`Couldn't create the Google Doc: ${created.text}`);
+        setError(t("error.createGoogleDoc", { message: created.text }));
         return;
       }
       const docId = extractDocId(created.text);
       if (!docId) {
-        setError("Created a Google Doc but couldn't read its id back.");
+        setError(t("error.googleDocNoId"));
         return;
       }
       const text = buildTranscriptPlainText(title, messages.filter((m) => m.role !== "sources"));
@@ -1266,13 +1291,15 @@ export default function App() {
         text,
       });
       if (appended.isError) {
-        setError(`Created the doc, but couldn't add the text: ${appended.text}`);
+        setError(t("error.googleDocAppend", { message: appended.text }));
         return;
       }
       const url = extractDocUrl(created.text);
-      setNotice(url ? `Saved to Google Docs — ${url}` : "Saved to Google Docs.");
+      setNotice(
+        url ? t("notice.savedToGoogleDocsUrl", { url }) : t("notice.savedToGoogleDocs"),
+      );
     } catch (e) {
-      setError(`Export failed: ${e instanceof Error ? e.message : String(e)}`);
+      setError(t("error.exportFailed", { message: e instanceof Error ? e.message : String(e) }));
     } finally {
       setExporting(false);
     }
@@ -1347,7 +1374,7 @@ export default function App() {
 
       <main className="main-panel">
         <header className="app-header">
-          <h1>{activeTitle || "New chat"}</h1>
+          <h1>{activeTitle || t("chat.newChat")}</h1>
           {messages.length > 0 && (
             <div className="export-wrap">
               <button
@@ -1355,10 +1382,10 @@ export default function App() {
                 className="btn btn-secondary btn-sm export-btn"
                 onClick={() => setExportMenuOpen((v) => !v)}
                 disabled={exporting || isStreaming}
-                title="Export this conversation"
+                title={t("chat.exportConversation")}
               >
                 {exporting ? <IconLoader size={14} /> : <IconDownload size={14} />}
-                <span>Export</span>
+                <span>{t("chat.export")}</span>
               </button>
               {exportMenuOpen && (
                 <>
@@ -1366,7 +1393,7 @@ export default function App() {
                   <div className="export-menu" role="menu">
                     <button type="button" className="export-menu-item" onClick={handleCopyTranscript}>
                       <IconCopy size={14} />
-                      <span>Copy as Markdown</span>
+                      <span>{t("chat.copyAsMarkdown")}</span>
                     </button>
                     <button
                       type="button"
@@ -1374,7 +1401,7 @@ export default function App() {
                       onClick={handleExportToGoogleDoc}
                     >
                       <IconDownload size={14} />
-                      <span>Save to Google Docs</span>
+                      <span>{t("chat.saveToGoogleDocs")}</span>
                     </button>
                   </div>
                 </>
@@ -1386,7 +1413,7 @@ export default function App() {
         <div className="messages" ref={scrollRef}>
           {messages.length === 0 && (
             <div className="empty-state">
-              <h2 className="empty-state-title">What can I help you study?</h2>
+              <h2 className="empty-state-title">{t("chat.emptyTitle")}</h2>
               <StudyModes onPick={handlePickStudyMode} />
             </div>
           )}
@@ -1410,10 +1437,10 @@ export default function App() {
             ) : (
               <div key={i} className={`message message-${m.role}`}>
                 <div className="message-head">
-                  <span className="message-role">{m.role === "user" ? "You" : "Assistant"}</span>
+                  <span className="message-role">{m.role === "user" ? t("chat.you") : t("chat.assistant")}</span>
                   {m.role === "assistant" && (m.providerLabel || m.model) && (
                     <span className="message-provenance">
-                      via {m.providerLabel ?? "provider"}
+                      {t("chat.via", { provider: m.providerLabel ?? t("chat.provider") })}
                       {m.model ? ` · ${m.model}` : ""}
                     </span>
                   )}
@@ -1422,7 +1449,7 @@ export default function App() {
                     <button
                       type="button"
                       className="message-copy"
-                      title="Edit and resend"
+                      title={t("chat.editAndResend")}
                       onClick={() => handleEditMessage(m.id!, m.content)}
                     >
                       <IconEdit size={13} />
@@ -1432,7 +1459,7 @@ export default function App() {
                     <button
                       type="button"
                       className="message-copy"
-                      title="Retry this reply"
+                      title={t("chat.retryReply")}
                       onClick={() => handleRetryMessage(m.id!)}
                     >
                       <IconRefresh size={13} />
@@ -1479,11 +1506,11 @@ export default function App() {
               className={`composer-mode-toggle${researchMode ? " composer-mode-toggle-on" : ""}`}
               onClick={() => setResearchMode((m) => (m ? null : DEFAULT_RESEARCH_MODE))}
               disabled={isStreaming}
-              title="Deep Research: multi-step web research with a cited report"
+              title={t("composer.deepResearchTitle")}
               aria-pressed={!!researchMode}
             >
               <IconSearch size={13} />
-              Deep Research
+              {t("composer.deepResearch")}
             </button>
             {researchMode && (
               <>
@@ -1494,11 +1521,11 @@ export default function App() {
                     setResearchMode(RESEARCH_MODES.find((r) => r.id === e.currentTarget.value) ?? null)
                   }
                   disabled={isStreaming}
-                  title={researchMode.description}
+                  title={t(researchModeKeys(researchMode.id).description)}
                 >
                   {RESEARCH_MODES.map((r) => (
                     <option key={r.id} value={r.id}>
-                      {r.label}
+                      {t(researchModeKeys(r.id).label)}
                     </option>
                   ))}
                 </select>
@@ -1510,7 +1537,7 @@ export default function App() {
                     disabled={installingResearchTools}
                   >
                     {installingResearchTools ? <IconLoader size={12} /> : null}
-                    Set up research tools
+                    {t("composer.setUpResearchTools")}
                   </button>
                 )}
               </>
@@ -1522,13 +1549,13 @@ export default function App() {
               disabled={isStreaming}
               title={
                 ragDocuments.length > 0
-                  ? "Answer using only your own documents (RAG)"
-                  : "Add documents first, then answer from them"
+                  ? t("composer.chatWithDocsOn")
+                  : t("composer.chatWithDocsOff")
               }
               aria-pressed={useLibrary}
             >
               <IconBook size={13} />
-              Chat with your documents
+              {t("composer.chatWithDocs")}
               <span className="composer-mode-term">(RAG)</span>
               {ragDocuments.length > 0 && <span className="composer-mode-count">{ragDocuments.length}</span>}
             </button>
@@ -1537,11 +1564,11 @@ export default function App() {
               className={`composer-mode-toggle${showChatLab || isChatSettingsActive(chatSettings) ? " composer-mode-toggle-on" : ""}`}
               onClick={() => setShowChatLab((v) => !v)}
               disabled={isStreaming}
-              title="Set a system prompt and the model's dials (temperature, top-p, max tokens) for this chat"
+              title={t("composer.chatLabTitle")}
               aria-pressed={showChatLab}
             >
               <IconSettings size={13} />
-              Chat lab
+              {t("composer.chatLab")}
               {isChatSettingsActive(chatSettings) && <span className="composer-mode-dot" aria-hidden="true" />}
             </button>
             <button
@@ -1550,7 +1577,7 @@ export default function App() {
               onClick={() => setShowExplore(true)}
               disabled={isStreaming}
             >
-              How does this work?
+              {t("composer.howDoesThisWork")}
             </button>
           </div>
           {showChatLab && (
@@ -1564,14 +1591,14 @@ export default function App() {
             <p className="composer-mode-caption">
               {researchMode && (
                 <span>
-                  <strong>Deep Research</strong> — {researchMode.description}
+                  <strong>{t("composer.deepResearch")}</strong> —{" "}
+                  {t(researchModeKeys(researchMode.id).description)}
                 </span>
               )}
               {researchMode && useLibrary && <span className="composer-mode-caption-sep">·</span>}
               {useLibrary && (
                 <span>
-                  <strong>Your documents</strong> — the assistant answers only from the files in your
-                  library and cites the passages it used.
+                  <strong>{t("composer.yourDocuments")}</strong> — {t("composer.yourDocumentsCaption")}
                 </span>
               )}
             </p>
@@ -1582,17 +1609,17 @@ export default function App() {
                 <span
                   key={i}
                   className="attachment-chip"
-                  title={a.truncated ? `${a.name} (trimmed to fit)` : a.name}
+                  title={a.truncated ? t("composer.trimmedTitle", { name: a.name }) : a.name}
                 >
                   <IconPaperclip size={12} />
                   <span className="attachment-chip-name">{a.name}</span>
-                  {a.truncated && <span className="attachment-chip-trim">trimmed</span>}
+                  {a.truncated && <span className="attachment-chip-trim">{t("composer.trimmed")}</span>}
                   <button
                     type="button"
                     className="attachment-chip-remove"
                     onClick={() => removeAttachment(i)}
-                    title="Remove"
-                    aria-label={`Remove ${a.name}`}
+                    title={t("composer.remove")}
+                    aria-label={t("composer.removeNamed", { name: a.name })}
                   >
                     <IconX size={12} />
                   </button>
@@ -1617,14 +1644,14 @@ export default function App() {
               className="btn btn-ghost btn-icon composer-attach"
               onClick={() => fileInputRef.current?.click()}
               disabled={isStreaming || attachBusy}
-              title={`Attach a file (${SUPPORTED_ATTACHMENT_HINT})`}
+              title={t("composer.attach", { formats: SUPPORTED_ATTACHMENT_HINT })}
             >
               {attachBusy ? <IconLoader size={16} /> : <IconPaperclip size={16} />}
             </button>
             <textarea
               ref={composerInputRef}
               className="composer-input"
-              placeholder="Type a message…  (Enter to send, Shift+Enter for a new line)"
+              placeholder={t("composer.placeholder")}
               value={input}
               onChange={(e) => setInput(e.currentTarget.value)}
               onKeyDown={(e) => {
@@ -1641,7 +1668,7 @@ export default function App() {
                 type="button"
                 className="btn btn-danger btn-icon composer-send"
                 onClick={handleStopStreaming}
-                title="Stop generating"
+                title={t("composer.stop")}
               >
                 <IconStop size={16} />
               </button>
@@ -1650,7 +1677,7 @@ export default function App() {
                 type="submit"
                 className="btn btn-primary btn-icon composer-send"
                 disabled={(!input.trim() && attachments.length === 0) || attachBusy}
-                title="Send"
+                title={t("composer.send")}
               >
                 <IconSend size={16} />
               </button>
@@ -1705,7 +1732,7 @@ export default function App() {
             .filter(([, tools]) => tools.length > 0)
             .map(([id, tools]) => ({
               id,
-              name: mcpServers.find((s) => s.id === id)?.name ?? "MCP server",
+              name: mcpServers.find((s) => s.id === id)?.name ?? t("mcp.defaultServerName"),
               tools,
             }))}
           onRunToolProbe={runToolProbe}
@@ -1759,18 +1786,21 @@ export default function App() {
         <div className="settings-overlay">
           <div className="settings-panel approval-panel">
             <div className="settings-header">
-              <h2>Tool call needs approval</h2>
+              <h2>{t("approval.title")}</h2>
             </div>
             <p className="settings-hint">
-              <strong>{pendingApproval.serverName}</strong> wants to run <strong>{pendingApproval.toolName}</strong>.
+              {t("approval.body", {
+                server: pendingApproval.serverName,
+                tool: pendingApproval.toolName,
+              })}
             </p>
             <pre className="tool-block-pre">{formatApprovalInput(pendingApproval.input)}</pre>
             <div className="provider-edit-actions">
               <button type="button" className="btn btn-danger btn-sm" onClick={() => resolveApproval(false)}>
-                Deny
+                {t("approval.deny")}
               </button>
               <button type="button" className="btn btn-primary btn-sm" onClick={() => resolveApproval(true)}>
-                Allow
+                {t("approval.allow")}
               </button>
             </div>
           </div>

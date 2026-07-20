@@ -4,6 +4,7 @@ import { SimilarityRanking } from "./viz/SimilarityRanking";
 import { EmbeddingMap } from "./viz/EmbeddingMap";
 import { resolveEmbedder, retrieveExplained, type RetrievalExplanation } from "../lib/rag";
 import type { ProviderRow, RagDocumentRow } from "../lib/db";
+import { useT, type TranslateFn } from "../lib/i18n";
 
 /**
  * The RAG tab of the Explore panel — a retrieval playground. The student types a question, hits Run,
@@ -14,28 +15,26 @@ import type { ProviderRow, RagDocumentRow } from "../lib/db";
  */
 
 interface Stage {
-  label: string;
-  detail: (e: RetrievalExplanation) => string;
+  labelKey: "retrieval.stage1.label" | "retrieval.stage2.label" | "retrieval.stage3.label" | "retrieval.stage4.label";
+  detail: (t: TranslateFn, e: RetrievalExplanation) => string;
 }
 
 const STAGES: Stage[] = [
   {
-    label: "Turn your question into numbers",
-    detail: (e) =>
-      `Turned into a list of ${e.queryVector.length} numbers (a “vector”) that captures its meaning`,
+    labelKey: "retrieval.stage1.label",
+    detail: (t, e) => t("retrieval.stage1.detail", { count: e.queryVector.length }),
   },
   {
-    label: "Score every passage",
-    detail: (e) => `Compared against ${e.scored.length} passage${e.scored.length === 1 ? "" : "s"}`,
+    labelKey: "retrieval.stage2.label",
+    detail: (t, e) => t("retrieval.stage2.detail", { count: e.scored.length }),
   },
   {
-    label: "Rank by closeness in meaning",
-    detail: () => "Sorted by how close in meaning they are (“cosine similarity”), not keyword overlap",
+    labelKey: "retrieval.stage3.label",
+    detail: (t) => t("retrieval.stage3.detail"),
   },
   {
-    label: "Keep the closest",
-    detail: (e) =>
-      `The top ${Math.min(e.k, e.scored.length)} become the answer's cited sources`,
+    labelKey: "retrieval.stage4.label",
+    detail: (t, e) => t("retrieval.stage4.detail", { count: Math.min(e.k, e.scored.length) }),
   },
 ];
 
@@ -50,6 +49,7 @@ export function RetrievalExplorer({
   documents: RagDocumentRow[];
   onOpenLibrary: () => void;
 }) {
+  const t = useT();
   const [query, setQuery] = useState("");
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -101,7 +101,7 @@ export function RetrievalExplorer({
         timers.current.push(window.setTimeout(() => setRevealed(s), s * REVEAL_MS));
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Retrieval failed. Check your embedding provider.");
+      setError(e instanceof Error ? e.message : t("retrieval.failed"));
     } finally {
       setRunning(false);
     }
@@ -119,25 +119,22 @@ export function RetrievalExplorer({
 
   return (
     <div className="explore-body">
-      <p className="settings-hint">
-        Type a question and watch how “chat with your documents” actually finds the right passages —
-        no chatting needed. It runs the real search over your library.
-      </p>
+      <p className="settings-hint">{t("retrieval.intro")}</p>
 
       {!hasDocs && (
         <p className="notice">
-          Your library is empty.{" "}
+          {t("retrieval.emptyLibrary")}{" "}
           <button type="button" className="link-btn" onClick={onOpenLibrary}>
-            Add some documents
+            {t("retrieval.addDocs")}
           </button>{" "}
-          first, then come back to explore how retrieval picks passages from them.
+          {t("retrieval.emptyLibrarySuffix")}
         </p>
       )}
 
       <div className="explore-query">
         <textarea
           className="explore-query-input"
-          placeholder="e.g. What obligations does the treaty place on member states?"
+          placeholder={t("retrieval.placeholder")}
           value={query}
           onChange={(e) => setQuery(e.currentTarget.value)}
           onKeyDown={(e) => {
@@ -156,17 +153,14 @@ export function RetrievalExplorer({
           disabled={!hasDocs || !query.trim() || running}
         >
           {running ? <IconLoader size={14} /> : <IconSearch size={14} />}
-          {running ? "Running…" : "Run retrieval"}
+          {running ? t("retrieval.running") : t("retrieval.run")}
         </button>
       </div>
 
       {error && <p className="error">{error}</p>}
 
       {result && result.scored.length === 0 && !error && (
-        <p className="notice">
-          No passages were found in your library. If you just added documents, give indexing a moment
-          and try again.
-        </p>
+        <p className="notice">{t("retrieval.noPassages")}</p>
       )}
 
       {result && result.scored.length > 0 && (
@@ -178,8 +172,8 @@ export function RetrievalExplorer({
             >
               <span className="explore-stage-num">{i + 1}</span>
               <span className="explore-stage-body">
-                <span className="explore-stage-label">{stage.label}</span>
-                <span className="explore-stage-detail">{stage.detail(result)}</span>
+                <span className="explore-stage-label">{t(stage.labelKey)}</span>
+                <span className="explore-stage-detail">{stage.detail(t, result)}</span>
               </span>
             </li>
           ))}
@@ -207,7 +201,7 @@ export function RetrievalExplorer({
           </div>
 
           <p className="explore-detail-hint">
-            Hover a bar or dot to compare them — <strong>click any one to read the full passage</strong>.
+            {t("retrieval.vizHint")} <strong>{t("retrieval.vizHintStrong")}</strong>.
           </p>
         </>
       )}
@@ -221,7 +215,10 @@ export function RetrievalExplorer({
             className="settings-panel settings-panel-wide passage-dialog"
             role="dialog"
             aria-modal="true"
-            aria-label={`Passage ${selectedChunk.documentName} #${selectedChunk.seq}`}
+            aria-label={t("retrieval.passageAria", {
+              name: selectedChunk.documentName,
+              seq: selectedChunk.seq,
+            })}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="settings-header passage-dialog-header">
@@ -232,9 +229,11 @@ export function RetrievalExplorer({
                 <span
                   className={`passage-dialog-score${selectedIndex < result.k ? " passage-dialog-score-kept" : ""}`}
                 >
-                  {Math.round(selectedChunk.score * 100)}% match
+                  {t("retrieval.match", { percent: Math.round(selectedChunk.score * 100) })}
                   <span className="passage-dialog-score-note">
-                    {selectedIndex < result.k ? "retrieved for the answer" : "not retrieved"}
+                    {selectedIndex < result.k
+                      ? t("retrieval.retrieved")
+                      : t("retrieval.notRetrieved")}
                   </span>
                 </span>
               </div>
@@ -243,13 +242,15 @@ export function RetrievalExplorer({
                 className="btn btn-ghost btn-sm"
                 onClick={() => setSelectedIndex(null)}
               >
-                Close
+                {t("common.close")}
               </button>
             </div>
 
             <p className="passage-dialog-caption">
-              This is one of the passages from your library, ranked #{selectedIndex + 1} of{" "}
-              {result.scored.length} by how close it is in meaning to your question.
+              {t("retrieval.passageCaption", {
+                rank: selectedIndex + 1,
+                total: result.scored.length,
+              })}
             </p>
 
             <div className="passage-dialog-body">{selectedChunk.text}</div>
@@ -261,7 +262,7 @@ export function RetrievalExplorer({
                 onClick={() => stepSelection(-1)}
                 disabled={selectedIndex === 0}
               >
-                ← Previous
+                {t("retrieval.previous")}
               </button>
               <span className="passage-dialog-nav-pos">
                 {selectedIndex + 1} / {result.scored.length}
@@ -272,7 +273,7 @@ export function RetrievalExplorer({
                 onClick={() => stepSelection(1)}
                 disabled={selectedIndex === result.scored.length - 1}
               >
-                Next →
+                {t("retrieval.next")}
               </button>
             </div>
           </div>

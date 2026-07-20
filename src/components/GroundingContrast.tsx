@@ -9,6 +9,7 @@ import {
 } from "../lib/rag";
 import type { StreamEvent } from "../lib/providerRouter";
 import type { ProviderRow, RagDocumentRow } from "../lib/db";
+import { useT } from "../lib/i18n";
 
 /**
  * The "Why does it make things up?" playground — the strongest single argument for RAG.
@@ -38,6 +39,7 @@ export function GroundingContrast({
     signal: AbortSignal,
   ) => Promise<void>;
 }) {
+  const t = useT();
   const [question, setQuestion] = useState("");
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -98,7 +100,7 @@ export function GroundingContrast({
       setPhase("done");
     } catch (err) {
       if (!controller.signal.aborted) {
-        setError(err instanceof Error ? err.message : "The run failed.");
+        setError(err instanceof Error ? err.message : t("grounding.failed"));
       }
       setPhase("done");
     } finally {
@@ -113,28 +115,22 @@ export function GroundingContrast({
 
   return (
     <div className="explore-body">
-      <p className="settings-hint">
-        Ask one question and see it answered <strong>twice</strong>: on the left, from the model’s own
-        memory alone; on the right, grounded in your own documents. The left answer may sound
-        confident but cites nothing — and can be made up. The right one is tied to real passages with
-        citations. That contrast is the whole reason “chat with your documents” (RAG) exists.
-      </p>
+      <p className="settings-hint">{t("grounding.intro")}</p>
 
       {!hasDocs && (
         <p className="notice">
-          Your library is empty.{" "}
+          {t("grounding.emptyLibrary")}{" "}
           <button type="button" className="link-btn" onClick={onOpenLibrary}>
-            Add a document
+            {t("grounding.addDoc")}
           </button>{" "}
-          first — pick something the model probably doesn’t already know (your lecture notes, a
-          specific PDF) for the sharpest contrast.
+          {t("grounding.emptyLibrarySuffix")}
         </p>
       )}
 
       <div className="explore-query">
         <textarea
           className="explore-query-input"
-          placeholder="Ask something your document answers but a model likely wouldn't know…"
+          placeholder={t("grounding.placeholder")}
           value={question}
           onChange={(e) => setQuestion(e.currentTarget.value)}
           onKeyDown={(e) => {
@@ -148,7 +144,7 @@ export function GroundingContrast({
         />
         {running ? (
           <button type="button" className="btn btn-secondary btn-sm explore-run" onClick={stop}>
-            <IconStop size={14} /> Stop
+            <IconStop size={14} /> {t("grounding.stop")}
           </button>
         ) : (
           <button
@@ -157,7 +153,7 @@ export function GroundingContrast({
             onClick={() => void run()}
             disabled={!hasDocs || !question.trim()}
           >
-            <IconSearch size={14} /> Compare answers
+            <IconSearch size={14} /> {t("grounding.compare")}
           </button>
         )}
       </div>
@@ -168,18 +164,18 @@ export function GroundingContrast({
         <div className="grounding-grid">
           <div className="grounding-col">
             <div className="grounding-col-head grounding-col-head-plain">
-              Model’s memory only
+              {t("grounding.memoryOnly")}
               {phase === "plain" && <IconLoader size={13} />}
             </div>
             <div className="grounding-answer">
               {plainText ? <Markdown text={plainText} /> : <span className="grounding-wait">…</span>}
             </div>
-            <p className="grounding-note grounding-note-warn">No sources — trust with caution.</p>
+            <p className="grounding-note grounding-note-warn">{t("grounding.noSources")}</p>
           </div>
 
           <div className="grounding-col">
             <div className="grounding-col-head grounding-col-head-grounded">
-              Grounded in your documents
+              {t("grounding.groundedIn")}
               {phase === "grounded" && <IconLoader size={13} />}
             </div>
             <div className="grounding-answer">
@@ -188,29 +184,26 @@ export function GroundingContrast({
               ) : phase === "grounded" ? (
                 <span className="grounding-wait">…</span>
               ) : (
-                <span className="grounding-wait">waiting for the first answer…</span>
+                <span className="grounding-wait">{t("grounding.waiting")}</span>
               )}
             </div>
             {sources.length > 0 && (
               <div className="grounding-sources">
-                <span className="grounding-sources-label">Passages it was given:</span>
+                <span className="grounding-sources-label">{t("grounding.passagesGiven")}</span>
                 <ul>
                   {sources.map((s, i) => (
                     <li key={i}>
                       <code>
                         {s.documentName} #{s.seq}
                       </code>{" "}
-                      · {Math.round(s.score * 100)}% match
+                      · {t("grounding.matchPercent", { percent: Math.round(s.score * 100) })}
                     </li>
                   ))}
                 </ul>
               </div>
             )}
             {sources.length === 0 && phase === "done" && (
-              <p className="grounding-note">
-                Nothing in your library matched — a grounded model should say it doesn’t know rather
-                than guess.
-              </p>
+              <p className="grounding-note">{t("grounding.nothingMatched")}</p>
             )}
           </div>
         </div>

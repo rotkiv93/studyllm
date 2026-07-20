@@ -1,4 +1,5 @@
 import { searchMcpRegistry, type CatalogEntry } from "./mcp";
+import type { MessageKey } from "./i18n";
 import {
   upsertCatalogEntries,
   listCachedCatalogEntries,
@@ -30,8 +31,14 @@ export function computeTrustTier(entry: {
   return "community";
 }
 
-export function trustTierLabel(tier: TrustTier): string {
-  return tier === "official" ? "Official" : tier === "verified" ? "Verified" : "Community";
+/** i18n key for a trust tier's badge label — callers render it through `t()`. */
+export function trustTierLabelKey(tier: TrustTier): MessageKey {
+  return `trust.${tier}` as MessageKey;
+}
+
+/** i18n key for the longer "what this tier means" tooltip. */
+export function trustTierTooltipKey(tier: TrustTier): MessageKey {
+  return `trust.tooltip.${tier}` as MessageKey;
 }
 
 const TRUST_RANK: Record<TrustTier, number> = { official: 0, verified: 1, community: 2 };

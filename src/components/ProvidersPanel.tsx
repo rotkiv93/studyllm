@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   PROVIDER_MANIFEST,
   SELECTABLE_PROVIDER_TYPES,
+  freeTierNoteKey,
   type ProviderType,
 } from "../lib/providers";
 import {
@@ -13,6 +14,7 @@ import {
 } from "../lib/providerModels";
 import { fetchModelCatalog, lookupToolSupport, type ModelCatalog } from "../lib/modelCatalog";
 import type { ProviderRow } from "../lib/db";
+import { useT } from "../lib/i18n";
 
 export interface ProviderDraft {
   type: ProviderType;
@@ -62,6 +64,7 @@ function ModelField({
   /** When true, auto-pick a tool-capable model once the live list loads, until the user picks one. */
   autoSelect?: boolean;
 }) {
+  const t = useT();
   const [liveModels, setLiveModels] = useState<ModelInfo[] | null>(null);
   const [modelsStatus, setModelsStatus] = useState<"idle" | "loading" | "loaded" | "unavailable">(
     "idle",
@@ -150,12 +153,12 @@ function ModelField({
   return (
     <div className="model-field">
       <label>
-        Model
+        {t("model.label")}
         <input
           value={model}
           onChange={(e) => handleUserChange(e.currentTarget.value)}
           list={`models-${idPrefix}`}
-          placeholder="Type or pick a model id…"
+          placeholder={t("model.placeholder")}
         />
         <datalist id={`models-${idPrefix}`}>
           {visible.map((m) => (
@@ -171,7 +174,7 @@ function ModelField({
             checked={toolOnly}
             onChange={(e) => setToolOnly(e.currentTarget.checked)}
           />
-          Tool-compatible only
+          {t("model.toolCompatibleOnly")}
         </label>
       )}
 
@@ -186,10 +189,10 @@ function ModelField({
               >
                 <span className="model-option-id">{m.id}</span>
                 {m.supportsTools === true && (
-                  <span className="model-badge model-badge-tools">✓ tools</span>
+                  <span className="model-badge model-badge-tools">{t("model.badgeTools")}</span>
                 )}
                 {m.supportsTools === false && (
-                  <span className="model-badge model-badge-notools">no tools</span>
+                  <span className="model-badge model-badge-notools">{t("model.badgeNoTools")}</span>
                 )}
               </button>
             </li>
@@ -199,16 +202,17 @@ function ModelField({
 
       {providerSupportsLiveModels(type) && (
         <p className="settings-hint">
-          {modelsStatus === "loading" && "Loading live model list…"}
+          {modelsStatus === "loading" && t("model.loading")}
           {modelsStatus === "loaded" &&
-            `Loaded ${liveModels?.length ?? 0} live models from ${PROVIDER_MANIFEST[type].label}.`}
+            t("model.loaded", {
+              count: liveModels?.length ?? 0,
+              provider: PROVIDER_MANIFEST[type].label,
+            })}
           {modelsStatus === "unavailable" &&
             (providerModelsNeedApiKey(type)
-              ? "Couldn't load live models with this key — showing suggestions. You can still type any model id."
-              : "Couldn't reach the live model list — showing suggestions. You can still type any model id.")}
-          {modelsStatus === "idle" &&
-            providerModelsNeedApiKey(type) &&
-            "Enter an API key to load this provider's live model list."}
+              ? t("model.unavailableWithKey")
+              : t("model.unavailable"))}
+          {modelsStatus === "idle" && providerModelsNeedApiKey(type) && t("model.enterKey")}
         </p>
       )}
     </div>
@@ -224,6 +228,7 @@ function EditProviderRow({
   onSave: (draft: ProviderEditDraft) => Promise<void>;
   onCancel: () => void;
 }) {
+  const t = useT();
   const [label, setLabel] = useState(provider.label);
   const [model, setModel] = useState(provider.model);
   const [apiKey, setApiKey] = useState("");
@@ -249,7 +254,7 @@ function EditProviderRow({
       <form onSubmit={handleSave}>
         {editError && <p className="error">{editError}</p>}
         <label>
-          Label
+          {t("providers.label")}
           <input value={label} onChange={(e) => setLabel(e.currentTarget.value)} />
         </label>
         <ModelField
@@ -260,20 +265,20 @@ function EditProviderRow({
           idPrefix={`edit-${provider.id}`}
         />
         <label>
-          API key
+          {t("providers.apiKey")}
           <input
             type="password"
             value={apiKey}
             onChange={(e) => setApiKey(e.currentTarget.value)}
-            placeholder="Leave blank to keep current key"
+            placeholder={t("providers.keepCurrentKey")}
           />
         </label>
         <div className="provider-edit-actions">
           <button type="submit" className="btn btn-primary btn-sm" disabled={busy || !label.trim() || !model.trim()}>
-            Save
+            {t("common.save")}
           </button>
           <button type="button" className="btn btn-ghost btn-sm" onClick={onCancel} disabled={busy}>
-            Cancel
+            {t("common.cancel")}
           </button>
         </div>
       </form>
@@ -291,6 +296,7 @@ export function ProvidersPanel({
   onOpenOnboarding,
   onClose,
 }: Props) {
+  const t = useT();
   const [type, setType] = useState<ProviderType>("gemini");
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState(PROVIDER_MANIFEST["gemini"].defaultModel);
@@ -321,7 +327,7 @@ export function ProvidersPanel({
       });
       setApiKey("");
     } catch (err) {
-      setFormError(`Couldn't add provider: ${describeError(err)}`);
+      setFormError(t("providers.addFailed", { error: describeError(err) }));
     } finally {
       setBusy(false);
     }
@@ -332,7 +338,7 @@ export function ProvidersPanel({
     try {
       await onRemove(id);
     } catch (err) {
-      setFormError(`Couldn't remove provider: ${describeError(err)}`);
+      setFormError(t("providers.removeFailed", { error: describeError(err) }));
     }
   }
 
@@ -341,7 +347,7 @@ export function ProvidersPanel({
     try {
       await onToggle(id, enabled);
     } catch (err) {
-      setFormError(`Couldn't update provider: ${describeError(err)}`);
+      setFormError(t("providers.updateFailed", { error: describeError(err) }));
     }
   }
 
@@ -350,7 +356,7 @@ export function ProvidersPanel({
     try {
       await onReorder(id, direction);
     } catch (err) {
-      setFormError(`Couldn't reorder providers: ${describeError(err)}`);
+      setFormError(t("providers.reorderFailed", { error: describeError(err) }));
     }
   }
 
@@ -365,23 +371,22 @@ export function ProvidersPanel({
     <div className="settings-overlay">
       <div className="settings-panel settings-panel-wide">
         <div className="settings-header">
-          <h2>Providers</h2>
+          <h2>{t("providers.title")}</h2>
           <button type="button" className="btn btn-ghost btn-sm" onClick={onClose}>
-            Close
+            {t("common.close")}
           </button>
         </div>
 
         <p className="settings-hint">
-          Add your own free-tier API keys. When one runs out of free requests, StudyLLM
-          automatically switches to the next one in the list.{" "}
+          {t("providers.hint")}{" "}
           <button type="button" className="btn btn-ghost btn-sm" onClick={onOpenOnboarding}>
-            Run setup guide
+            {t("providers.runSetupGuide")}
           </button>
         </p>
 
         {formError && <p className="error">{formError}</p>}
 
-        <h3 className="mcp-section-title">Your providers</h3>
+        <h3 className="mcp-section-title">{t("providers.yourProviders")}</h3>
         <ul className="provider-list">
           {providers.map((p, i) =>
             editingId === p.id ? (
@@ -397,12 +402,12 @@ export function ProvidersPanel({
                   <span className="provider-row-name">
                     <strong>{p.label}</strong>
                     {PROVIDER_MANIFEST[p.type]?.recommended && (
-                      <span className="provider-badge-recommended">Recommended</span>
+                      <span className="provider-badge-recommended">{t("providers.recommended")}</span>
                     )}
                   </span>
                   <span className="provider-model">{p.model}</span>
                   {PROVIDER_MANIFEST[p.type]?.freeTierNote && (
-                    <span className="provider-free-note">{PROVIDER_MANIFEST[p.type].freeTierNote}</span>
+                    <span className="provider-free-note">{t(freeTierNoteKey(p.type))}</span>
                   )}
                 </div>
                 <div className="provider-row-actions">
@@ -411,6 +416,8 @@ export function ProvidersPanel({
                     className="btn btn-icon btn-secondary btn-sm"
                     onClick={() => handleReorder(p.id, "up")}
                     disabled={i === 0}
+                    title={t("providers.moveUp")}
+                    aria-label={t("providers.moveUp")}
                   >
                     ↑
                   </button>
@@ -419,6 +426,8 @@ export function ProvidersPanel({
                     className="btn btn-icon btn-secondary btn-sm"
                     onClick={() => handleReorder(p.id, "down")}
                     disabled={i === providers.length - 1}
+                    title={t("providers.moveDown")}
+                    aria-label={t("providers.moveDown")}
                   >
                     ↓
                   </button>
@@ -428,47 +437,47 @@ export function ProvidersPanel({
                       checked={!!p.enabled}
                       onChange={(e) => handleToggle(p.id, e.currentTarget.checked)}
                     />
-                    enabled
+                    {t("providers.enabled")}
                   </label>
                   <button
                     type="button"
                     className="btn btn-secondary btn-sm"
                     onClick={() => setEditingId(p.id)}
                   >
-                    Edit
+                    {t("common.edit")}
                   </button>
                   <button type="button" className="btn btn-danger btn-sm" onClick={() => handleRemove(p.id)}>
-                    Remove
+                    {t("common.remove")}
                   </button>
                 </div>
               </li>
             ),
           )}
-          {providers.length === 0 && <li className="empty-state">No providers added yet.</li>}
+          {providers.length === 0 && <li className="empty-state">{t("providers.none")}</li>}
         </ul>
 
         <form className="add-provider-form" onSubmit={handleAdd}>
-          <h3 className="mcp-section-title">Add a provider</h3>
+          <h3 className="mcp-section-title">{t("providers.addProvider")}</h3>
           <ul className="provider-type-grid">
-            {SELECTABLE_PROVIDER_TYPES.map((t) => (
-              <li key={t}>
+            {SELECTABLE_PROVIDER_TYPES.map((pt) => (
+              <li key={pt}>
                 <button
                   type="button"
-                  className={`provider-type-card${type === t ? " provider-type-card-selected" : ""}`}
-                  onClick={() => handleTypeChange(t)}
-                  aria-pressed={type === t}
+                  className={`provider-type-card${type === pt ? " provider-type-card-selected" : ""}`}
+                  onClick={() => handleTypeChange(pt)}
+                  aria-pressed={type === pt}
                 >
                   <span className="provider-type-card-name">
-                    {PROVIDER_MANIFEST[t].label}
-                    {PROVIDER_MANIFEST[t].recommended && (
-                      <span className="provider-badge-recommended">Recommended</span>
+                    {PROVIDER_MANIFEST[pt].label}
+                    {PROVIDER_MANIFEST[pt].recommended && (
+                      <span className="provider-badge-recommended">{t("providers.recommended")}</span>
                     )}
                   </span>
-                  {PROVIDER_MANIFEST[t].freeTierNote && (
-                    <span className="provider-type-card-note">{PROVIDER_MANIFEST[t].freeTierNote}</span>
+                  {PROVIDER_MANIFEST[pt].freeTierNote && (
+                    <span className="provider-type-card-note">{t(freeTierNoteKey(pt))}</span>
                   )}
-                  {installedTypes.has(t) && (
-                    <span className="provider-type-card-configured">✓ Configured</span>
+                  {installedTypes.has(pt) && (
+                    <span className="provider-type-card-configured">{t("providers.configured")}</span>
                   )}
                 </button>
               </li>
@@ -483,19 +492,19 @@ export function ProvidersPanel({
             autoSelect
           />
           <label>
-            API key
+            {t("providers.apiKey")}
             <input
               type="password"
               value={apiKey}
               onChange={(e) => setApiKey(e.currentTarget.value)}
-              placeholder="Paste key…"
+              placeholder={t("providers.pasteKey")}
             />
           </label>
           <a href={PROVIDER_MANIFEST[type].apiKeyUrl} target="_blank" rel="noreferrer">
-            Get a free {PROVIDER_MANIFEST[type].label} API key
+            {t("providers.getKeyLink", { provider: PROVIDER_MANIFEST[type].label })}
           </a>
           <button type="submit" className="btn btn-primary" disabled={busy || !apiKey.trim()}>
-            Add provider
+            {t("providers.addProviderButton")}
           </button>
         </form>
       </div>

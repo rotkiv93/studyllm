@@ -9,6 +9,16 @@
  * Shape-first static data, same discipline as `studyTemplates.ts`. To add a mode, append an entry.
  */
 
+import type { MessageKey } from "./i18n";
+
+/** i18n keys for a research mode's user-facing text (`label` / `description` below are the English source). */
+export function researchModeKeys(id: string): { label: MessageKey; description: MessageKey } {
+  return {
+    label: `research.mode.${id}.label` as MessageKey,
+    description: `research.mode.${id}.description` as MessageKey,
+  };
+}
+
 export interface ResearchMode {
   /** Stable id / React key. */
   id: string;

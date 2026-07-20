@@ -1,5 +1,6 @@
 import { IconX } from "./icons";
 import { estimateTokenCount } from "../lib/tokenize";
+import { useT, type MessageKey, type TranslateFn } from "../lib/i18n";
 
 /**
  * The "Chat lab" — an in-chat control panel that lets a student steer the *real* conversation the
@@ -38,13 +39,35 @@ export function isChatSettingsActive(s: ChatSettings): boolean {
   );
 }
 
-const PRESETS: { label: string; text: string }[] = [
-  { label: "Friendly tutor", text: "You are a patient tutor. Explain simply, use short examples, and check understanding." },
-  { label: "Talk like a pirate", text: "You are a pirate. Answer everything in pirate slang." },
-  { label: "One word only", text: "Answer every question in exactly one word. Never more." },
-  { label: "Reply in French", text: "Always respond in French, regardless of the language asked." },
+/**
+ * System-prompt presets. Only the chip *label* is localized — `text` is the system prompt handed to
+ * the model, so it stays untranslated English (i18n here is interface-level only). The student can
+ * rewrite the inserted prompt in any language before sending.
+ */
+const PRESETS: { id: string; labelKey: MessageKey; text: string }[] = [
   {
-    label: "Explain like I'm 10",
+    id: "tutor",
+    labelKey: "chatLab.preset.tutor",
+    text: "You are a patient tutor. Explain simply, use short examples, and check understanding.",
+  },
+  {
+    id: "pirate",
+    labelKey: "chatLab.preset.pirate",
+    text: "You are a pirate. Answer everything in pirate slang.",
+  },
+  {
+    id: "oneWord",
+    labelKey: "chatLab.preset.oneWord",
+    text: "Answer every question in exactly one word. Never more.",
+  },
+  {
+    id: "french",
+    labelKey: "chatLab.preset.french",
+    text: "Always respond in French, regardless of the language asked.",
+  },
+  {
+    id: "eli10",
+    labelKey: "chatLab.preset.eli10",
     text: "Explain everything as if to a curious 10-year-old: plain words, a friendly tone, and a simple analogy.",
   },
 ];
@@ -53,9 +76,10 @@ const PRESETS: { label: string; text: string }[] = [
 const ENABLE_DEFAULTS = { temperature: 0.7, topP: 0.9, maxTokens: 512 };
 
 interface KnobProps {
-  label: string;
-  term: string;
-  explain: string;
+  t: TranslateFn;
+  labelKey: MessageKey;
+  termKey: MessageKey;
+  explainKey: MessageKey;
   min: number;
   max: number;
   step: number;
@@ -65,7 +89,7 @@ interface KnobProps {
   onChange: (v: number | null) => void;
 }
 
-function Knob({ label, term, explain, min, max, step, value, enableDefault, format, onChange }: KnobProps) {
+function Knob({ t, labelKey, termKey, explainKey, min, max, step, value, enableDefault, format, onChange }: KnobProps) {
   const on = value != null;
   const shown = value ?? enableDefault;
   return (
@@ -78,10 +102,12 @@ function Knob({ label, term, explain, min, max, step, value, enableDefault, form
             onChange={(e) => onChange(e.currentTarget.checked ? enableDefault : null)}
           />
           <span className="lab-knob-label">
-            {label} <span className="lab-knob-term">({term})</span>
+            {t(labelKey)} <span className="lab-knob-term">({t(termKey)})</span>
           </span>
         </label>
-        <span className="lab-knob-value">{on ? (format ? format(shown) : String(shown)) : "default"}</span>
+        <span className="lab-knob-value">
+          {on ? (format ? format(shown) : String(shown)) : t("chatLab.default")}
+        </span>
       </div>
       <input
         type="range"
@@ -93,7 +119,7 @@ function Knob({ label, term, explain, min, max, step, value, enableDefault, form
         disabled={!on}
         onChange={(e) => onChange(Number(e.currentTarget.value))}
       />
-      <p className="lab-knob-explain">{explain}</p>
+      <p className="lab-knob-explain">{t(explainKey)}</p>
     </div>
   );
 }
@@ -107,6 +133,7 @@ export function ChatLab({
   onChange: (next: ChatSettings) => void;
   onClose: () => void;
 }) {
+  const t = useT();
   const set = (patch: Partial<ChatSettings>) => onChange({ ...settings, ...patch });
   const systemTokens = estimateTokenCount(settings.systemPrompt);
 
@@ -114,13 +141,10 @@ export function ChatLab({
     <div className="chat-lab">
       <div className="chat-lab-head">
         <div>
-          <strong>Chat lab</strong>
-          <span className="chat-lab-sub">
-            Steer this conversation like an engineer would — a standing instruction and the model's
-            dials. Applies to your real messages and is saved with this chat.
-          </span>
+          <strong>{t("chatLab.title")}</strong>
+          <span className="chat-lab-sub">{t("chatLab.subtitle")}</span>
         </div>
-        <button type="button" className="btn btn-ghost btn-icon" onClick={onClose} aria-label="Close chat lab">
+        <button type="button" className="btn btn-ghost btn-icon" onClick={onClose} aria-label={t("chatLab.close")}>
           <IconX size={14} />
         </button>
       </div>
@@ -128,19 +152,20 @@ export function ChatLab({
       <div className="lab-field">
         <div className="lab-field-head">
           <label className="lab-knob-label" htmlFor="lab-system">
-            Standing instructions <span className="lab-knob-term">(system prompt)</span>
+            {t("chatLab.standingInstructions")}{" "}
+            <span className="lab-knob-term">{t("chatLab.systemPromptTerm")}</span>
           </label>
-          <span className="lab-knob-value">{systemTokens} tokens</span>
+          <span className="lab-knob-value">{t("chatLab.tokens", { count: systemTokens })}</span>
         </div>
         <div className="lab-presets">
           {PRESETS.map((p) => (
             <button
-              key={p.label}
+              key={p.id}
               type="button"
               className="btn btn-ghost btn-sm"
               onClick={() => set({ systemPrompt: p.text })}
             >
-              {p.label}
+              {t(p.labelKey)}
             </button>
           ))}
           {settings.systemPrompt.trim() && (
@@ -149,7 +174,7 @@ export function ChatLab({
               className="btn btn-ghost btn-sm lab-preset-clear"
               onClick={() => set({ systemPrompt: "" })}
             >
-              Clear
+              {t("chatLab.clear")}
             </button>
           )}
         </div>
@@ -159,18 +184,17 @@ export function ChatLab({
           value={settings.systemPrompt}
           onChange={(e) => set({ systemPrompt: e.currentTarget.value })}
           rows={3}
-          placeholder="e.g. You are a patient tutor. Explain simply and check understanding."
+          placeholder={t("chatLab.systemPlaceholder")}
         />
-        <p className="lab-knob-explain">
-          Hidden instructions the model follows before it sees your message — its persona and rules.
-        </p>
+        <p className="lab-knob-explain">{t("chatLab.systemExplain")}</p>
       </div>
 
       <div className="lab-knobs">
         <Knob
-          label="Creativity"
-          term="temperature"
-          explain="Low = focused and repeatable. High = more surprising and varied (and more likely to wander)."
+          t={t}
+          labelKey="chatLab.knob.creativity"
+          termKey="chatLab.knob.creativityTerm"
+          explainKey="chatLab.knob.creativityExplain"
           min={0}
           max={2}
           step={0.1}
@@ -180,9 +204,10 @@ export function ChatLab({
           onChange={(v) => set({ temperature: v })}
         />
         <Knob
-          label="Word variety"
-          term="top-p"
-          explain="Limits word choice to the most likely options. Lower = safer, more predictable wording."
+          t={t}
+          labelKey="chatLab.knob.variety"
+          termKey="chatLab.knob.varietyTerm"
+          explainKey="chatLab.knob.varietyExplain"
           min={0}
           max={1}
           step={0.05}
@@ -192,9 +217,10 @@ export function ChatLab({
           onChange={(v) => set({ topP: v })}
         />
         <Knob
-          label="Response length limit"
-          term="max tokens"
-          explain="A hard cap on how much the model may write. Set it low and long answers get cut off mid-sentence."
+          t={t}
+          labelKey="chatLab.knob.length"
+          termKey="chatLab.knob.lengthTerm"
+          explainKey="chatLab.knob.lengthExplain"
           min={64}
           max={4096}
           step={64}

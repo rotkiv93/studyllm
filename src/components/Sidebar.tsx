@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { ConversationRow } from "../lib/db";
+import { useT } from "../lib/i18n";
 import { IconBook, IconChevronDown, IconCompass, IconEdit, IconKey, IconMenu, IconMessage, IconPlug, IconPlus, IconSettings, IconTool, IconTrash } from "./icons";
 
 interface Props {
@@ -44,6 +45,7 @@ export function Sidebar({
   onOpenAppSettings,
   libraryDocCount,
 }: Props) {
+  const t = useT();
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -51,11 +53,11 @@ export function Sidebar({
   // Config destinations tucked under the "Settings" group (expanded sidebar) or laid out flat on the
   // collapsed icon rail. Providers carries a warning dot when none are active; MCP a running-count badge.
   const configItems = [
-    { key: "providers", icon: IconKey, label: "Providers", onClick: onOpenProviders, dot: activeProviderCount === 0, badge: 0 },
-    { key: "mcp", icon: IconTool, label: "Tools & Connections", onClick: onOpenMcp, dot: false, badge: mcpRunningCount },
-    { key: "plugins", icon: IconPlug, label: "Accounts (Plugins)", onClick: onOpenPlugins, dot: false, badge: 0 },
-    { key: "explore", icon: IconCompass, label: "Explore how it works", onClick: onOpenExplore, dot: false, badge: 0 },
-    { key: "diagnostics", icon: IconSettings, label: "Diagnostics", onClick: onOpenAppSettings, dot: false, badge: 0 },
+    { key: "providers", icon: IconKey, label: t("nav.providers"), onClick: onOpenProviders, dot: activeProviderCount === 0, badge: 0 },
+    { key: "mcp", icon: IconTool, label: t("nav.mcp"), onClick: onOpenMcp, dot: false, badge: mcpRunningCount },
+    { key: "plugins", icon: IconPlug, label: t("nav.plugins"), onClick: onOpenPlugins, dot: false, badge: 0 },
+    { key: "explore", icon: IconCompass, label: t("nav.explore"), onClick: onOpenExplore, dot: false, badge: 0 },
+    { key: "diagnostics", icon: IconSettings, label: t("nav.diagnostics"), onClick: onOpenAppSettings, dot: false, badge: 0 },
   ];
   // Surface the most important config status on the collapsed group gear so nothing hides.
   const settingsNeedsAttention = activeProviderCount === 0;
@@ -79,7 +81,7 @@ export function Sidebar({
           type="button"
           className="btn btn-icon btn-ghost sidebar-toggle"
           onClick={onToggleCollapsed}
-          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          title={collapsed ? t("sidebar.expand") : t("sidebar.collapse")}
         >
           <IconMenu size={18} />
         </button>
@@ -91,17 +93,17 @@ export function Sidebar({
         className="sidebar-new-chat"
         onClick={onNewChat}
         disabled={disabled}
-        title="New chat"
+        title={t("sidebar.newChat")}
       >
         <IconPlus size={16} />
-        {!collapsed && <span>New chat</span>}
+        {!collapsed && <span>{t("sidebar.newChat")}</span>}
       </button>
 
       {!collapsed && (
-        <nav className="conversation-list" aria-label="Conversation history">
-          <span className="sidebar-section-label">Conversations</span>
+        <nav className="conversation-list" aria-label={t("sidebar.conversationHistory")}>
+          <span className="sidebar-section-label">{t("sidebar.conversations")}</span>
           {conversations.length === 0 && (
-            <p className="conversation-empty">Your conversations will show up here.</p>
+            <p className="conversation-empty">{t("sidebar.empty")}</p>
           )}
           {conversations.map((c) =>
             renamingId === c.id ? (
@@ -132,14 +134,14 @@ export function Sidebar({
                   title={c.title}
                 >
                   <IconMessage size={14} />
-                  <span className="conversation-item-title">{c.title || "Untitled chat"}</span>
+                  <span className="conversation-item-title">{c.title || t("sidebar.untitled")}</span>
                 </button>
                 <button
                   type="button"
                   className="btn btn-icon btn-ghost conversation-item-rename"
                   onClick={() => startRename(c)}
                   disabled={disabled}
-                  title="Rename conversation"
+                  title={t("sidebar.renameConversation")}
                 >
                   <IconEdit size={13} />
                 </button>
@@ -148,7 +150,7 @@ export function Sidebar({
                   className="btn btn-icon btn-ghost conversation-item-delete"
                   onClick={() => onDeleteConversation(c.id)}
                   disabled={disabled}
-                  title="Delete conversation"
+                  title={t("sidebar.deleteConversation")}
                 >
                   <IconTrash size={14} />
                 </button>
@@ -164,10 +166,10 @@ export function Sidebar({
           type="button"
           className="sidebar-footer-btn"
           onClick={onOpenLibrary}
-          title="Document library"
+          title={t("sidebar.documentLibrary")}
         >
           <IconBook size={17} />
-          {!collapsed && <span>Library</span>}
+          {!collapsed && <span>{t("sidebar.library")}</span>}
           {libraryDocCount > 0 && <span className="sidebar-footer-badge">{libraryDocCount}</span>}
         </button>
 
@@ -177,7 +179,7 @@ export function Sidebar({
           configItems.map(({ key, icon: Icon, label, onClick, dot, badge }) => (
             <button key={key} type="button" className="sidebar-footer-btn" onClick={onClick} title={label}>
               <Icon size={17} />
-              {dot && <span className="sidebar-footer-dot" title="Needs attention" />}
+              {dot && <span className="sidebar-footer-dot" title={t("sidebar.needsAttention")} />}
               {badge > 0 && <span className="sidebar-footer-badge">{badge}</span>}
             </button>
           ))
@@ -188,12 +190,12 @@ export function Sidebar({
               className="sidebar-footer-btn sidebar-settings-toggle"
               onClick={() => setSettingsOpen((v) => !v)}
               aria-expanded={settingsOpen}
-              title="Settings & setup"
+              title={t("sidebar.settingsSetup")}
             >
               <IconSettings size={17} />
-              <span>Settings</span>
+              <span>{t("sidebar.settings")}</span>
               {!settingsOpen && settingsNeedsAttention && (
-                <span className="sidebar-footer-dot" title="No active providers" />
+                <span className="sidebar-footer-dot" title={t("sidebar.noActiveProviders")} />
               )}
               <IconChevronDown
                 size={14}
@@ -212,7 +214,7 @@ export function Sidebar({
                   >
                     <Icon size={16} />
                     <span>{label}</span>
-                    {dot && <span className="sidebar-footer-dot" title="No active providers" />}
+                    {dot && <span className="sidebar-footer-dot" title={t("sidebar.noActiveProviders")} />}
                     {badge > 0 && <span className="sidebar-footer-badge">{badge}</span>}
                   </button>
                 ))}

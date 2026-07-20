@@ -1,4 +1,5 @@
 import type { ExplainedChunk } from "../../lib/rag";
+import { useT } from "../../lib/i18n";
 
 /**
  * Horizontal bar ranking of every stored chunk by its cosine similarity to the query. The top `k`
@@ -19,17 +20,15 @@ export function SimilarityRanking({
   onHover: (index: number | null) => void;
   onSelect: (index: number) => void;
 }) {
+  const t = useT();
   if (scored.length === 0) return null;
   const maxScore = Math.max(...scored.map((s) => Math.max(0, s.score)), 0.0001);
   const cutoff = Math.min(k, scored.length);
 
   return (
     <div className="viz-block">
-      <div className="viz-title">Similarity ranking</div>
-      <p className="viz-caption">
-        Every passage in your library, scored against your question. The {cutoff} above the line are
-        the ones the assistant would answer from. Click any bar to read the full passage.
-      </p>
+      <div className="viz-title">{t("viz.similarityRanking")}</div>
+      <p className="viz-caption">{t("viz.rankingCaption", { count: cutoff })}</p>
       <ul className="rank-list">
         {scored.map((s, i) => {
           const showCutoff = i === cutoff && cutoff < scored.length;
@@ -39,7 +38,7 @@ export function SimilarityRanking({
             <li key={i}>
               {showCutoff && (
                 <div className="rank-cutoff" aria-hidden="true">
-                  <span>top {cutoff} · retrieved</span>
+                  <span>{t("viz.cutoff", { count: cutoff })}</span>
                 </div>
               )}
               <button
@@ -52,7 +51,7 @@ export function SimilarityRanking({
                 onMouseLeave={() => onHover(null)}
                 onBlur={() => onHover(null)}
                 onClick={() => onSelect(i)}
-                title="Click to read the full passage"
+                title={t("viz.clickToRead")}
               >
                 <span className="rank-tag">
                   {s.documentName} #{s.seq}

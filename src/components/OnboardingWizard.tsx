@@ -3,6 +3,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import {
   PROVIDER_MANIFEST,
   SELECTABLE_PROVIDER_TYPES,
+  freeTierNoteKey,
   type ProviderType,
 } from "../lib/providers";
 import {
@@ -12,6 +13,7 @@ import {
   providerSupportsLiveModels,
 } from "../lib/providerModels";
 import type { ProviderDraft } from "./ProvidersPanel";
+import { useT } from "../lib/i18n";
 
 interface Props {
   onAddProvider: (draft: ProviderDraft) => Promise<void>;
@@ -27,6 +29,7 @@ function describeError(err: unknown): string {
 }
 
 export function OnboardingWizard({ onAddProvider, onAddFilesystem, onClose, onOpenExplore }: Props) {
+  const t = useT();
   const [step, setStep] = useState<Step>("provider");
   const [type, setType] = useState<ProviderType>("gemini");
   const [apiKey, setApiKey] = useState("");
@@ -53,9 +56,7 @@ export function OnboardingWizard({ onAddProvider, onAddFilesystem, onClose, onOp
       } else {
         setVerifyStatus("unverified");
         setBusy(false);
-        setError(
-          "Couldn't verify this key against the live model list — double-check it, or continue anyway if you're sure it's correct.",
-        );
+        setError(t("onboarding.verifyFailed"));
         return;
       }
     }
@@ -64,7 +65,7 @@ export function OnboardingWizard({ onAddProvider, onAddFilesystem, onClose, onOp
       await onAddProvider({ type, label: manifest.label, model, apiKey: apiKey.trim() });
       setStep("mcp");
     } catch (err) {
-      setError(`Couldn't save this provider: ${describeError(err)}`);
+      setError(t("onboarding.saveFailed", { error: describeError(err) }));
     } finally {
       setBusy(false);
     }
@@ -77,7 +78,7 @@ export function OnboardingWizard({ onAddProvider, onAddFilesystem, onClose, onOp
       await onAddProvider({ type, label: manifest.label, model: manifest.defaultModel, apiKey: apiKey.trim() });
       setStep("mcp");
     } catch (err) {
-      setError(`Couldn't save this provider: ${describeError(err)}`);
+      setError(t("onboarding.saveFailed", { error: describeError(err) }));
     } finally {
       setBusy(false);
     }
@@ -92,7 +93,7 @@ export function OnboardingWizard({ onAddProvider, onAddFilesystem, onClose, onOp
       await onAddFilesystem(picked);
       setStep("features");
     } catch (err) {
-      setError(`Couldn't add filesystem access: ${describeError(err)}`);
+      setError(t("onboarding.mcpFailed", { error: describeError(err) }));
     } finally {
       setMcpBusy(false);
     }
@@ -102,39 +103,36 @@ export function OnboardingWizard({ onAddProvider, onAddFilesystem, onClose, onOp
     <div className="settings-overlay">
       <div className="settings-panel onboarding-panel">
         <div className="settings-header">
-          <h2>Welcome to StudyLLM</h2>
+          <h2>{t("onboarding.title")}</h2>
           <button type="button" className="btn btn-ghost btn-sm" onClick={onClose}>
-            Skip setup
+            {t("onboarding.skipSetup")}
           </button>
         </div>
 
         {step === "provider" && (
           <>
-            <p className="settings-hint">
-              StudyLLM works with your own free-tier API keys — no subscription needed. Pick a
-              provider to get started; you can add more later in Settings.
-            </p>
+            <p className="settings-hint">{t("onboarding.providerHint")}</p>
             <div className="onboarding-provider-grid">
-              {SELECTABLE_PROVIDER_TYPES.map((t) => (
+              {SELECTABLE_PROVIDER_TYPES.map((pt) => (
                 <button
-                  key={t}
+                  key={pt}
                   type="button"
-                  className={`onboarding-provider-choice${t === type ? " onboarding-provider-choice-active" : ""}`}
-                  onClick={() => setType(t)}
+                  className={`onboarding-provider-choice${pt === type ? " onboarding-provider-choice-active" : ""}`}
+                  onClick={() => setType(pt)}
                 >
                   <span className="onboarding-provider-name">
-                    {PROVIDER_MANIFEST[t].label}
-                    {PROVIDER_MANIFEST[t].recommended && (
-                      <span className="provider-badge-recommended">Recommended</span>
+                    {PROVIDER_MANIFEST[pt].label}
+                    {PROVIDER_MANIFEST[pt].recommended && (
+                      <span className="provider-badge-recommended">{t("onboarding.recommended")}</span>
                     )}
                   </span>
-                  <span className="provider-free-note">{PROVIDER_MANIFEST[t].freeTierNote}</span>
+                  <span className="provider-free-note">{t(freeTierNoteKey(pt))}</span>
                 </button>
               ))}
             </div>
             <div className="provider-edit-actions">
               <button type="button" className="btn btn-primary" onClick={() => setStep("key")}>
-                Continue with {manifest.label}
+                {t("onboarding.continueWith", { provider: manifest.label })}
               </button>
             </div>
           </>
@@ -143,13 +141,13 @@ export function OnboardingWizard({ onAddProvider, onAddFilesystem, onClose, onOp
         {step === "key" && (
           <>
             <p className="settings-hint">
-              Get a free API key from {manifest.label}, paste it below, and we'll verify it works.
+              {t("onboarding.keyHint", { provider: manifest.label })}
             </p>
             <a href={manifest.apiKeyUrl} target="_blank" rel="noreferrer">
-              Get a free {manifest.label} API key
+              {t("onboarding.getKeyLink", { provider: manifest.label })}
             </a>
             <label>
-              API key
+              {t("onboarding.apiKey")}
               <input
                 type="password"
                 value={apiKey}
@@ -158,20 +156,20 @@ export function OnboardingWizard({ onAddProvider, onAddFilesystem, onClose, onOp
                   setVerifyStatus("idle");
                   setError(null);
                 }}
-                placeholder="Paste key…"
+                placeholder={t("onboarding.pasteKey")}
                 autoFocus
               />
             </label>
-            {verifyStatus === "checking" && <p className="settings-hint">Verifying key…</p>}
-            {verifyStatus === "verified" && <p className="notice">Key verified — found live models.</p>}
+            {verifyStatus === "checking" && <p className="settings-hint">{t("onboarding.verifying")}</p>}
+            {verifyStatus === "verified" && <p className="notice">{t("onboarding.verified")}</p>}
             {error && <p className="error">{error}</p>}
             <div className="provider-edit-actions">
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => setStep("provider")} disabled={busy}>
-                Back
+                {t("common.back")}
               </button>
               {verifyStatus === "unverified" ? (
                 <button type="button" className="btn btn-secondary btn-sm" onClick={handleAddAnyway} disabled={busy}>
-                  Add anyway
+                  {t("onboarding.addAnyway")}
                 </button>
               ) : (
                 <button
@@ -180,7 +178,7 @@ export function OnboardingWizard({ onAddProvider, onAddFilesystem, onClose, onOp
                   onClick={handleVerifyAndAdd}
                   disabled={busy || !apiKey.trim()}
                 >
-                  {busy ? "Verifying…" : "Verify & continue"}
+                  {busy ? t("onboarding.verifyingShort") : t("onboarding.verifyAndContinue")}
                 </button>
               )}
             </div>
@@ -189,17 +187,14 @@ export function OnboardingWizard({ onAddProvider, onAddFilesystem, onClose, onOp
 
         {step === "mcp" && (
           <>
-            <p className="settings-hint">
-              Want the assistant to read and write files in a folder on this computer? You can
-              scope it to any folder you choose, and change or remove it later.
-            </p>
+            <p className="settings-hint">{t("onboarding.mcpHint")}</p>
             {error && <p className="error">{error}</p>}
             <div className="provider-edit-actions">
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => setStep("features")} disabled={mcpBusy}>
-                Skip
+                {t("common.skip")}
               </button>
               <button type="button" className="btn btn-primary btn-sm" onClick={handlePickFolder} disabled={mcpBusy}>
-                {mcpBusy ? "Adding…" : "Choose folder…"}
+                {mcpBusy ? t("onboarding.adding") : t("onboarding.chooseFolder")}
               </button>
             </div>
           </>
@@ -207,26 +202,21 @@ export function OnboardingWizard({ onAddProvider, onAddFilesystem, onClose, onOp
 
         {step === "features" && (
           <>
-            <p className="settings-hint">
-              Two things StudyLLM can do beyond a normal chat — you can turn each on from the boxes
-              just above the message field, whenever you need them:
-            </p>
+            <p className="settings-hint">{t("onboarding.featuresHint")}</p>
             <ul className="onboarding-features">
               <li>
-                <strong>Deep Research</strong> — ask a big question and the assistant searches the web
-                across several steps, reads sources, and writes an answer with citations.
+                <strong>{t("onboarding.featureResearch")}</strong> — {t("onboarding.featureResearchDesc")}
               </li>
               <li>
-                <strong>Chat with your documents</strong> — add your own notes, PDFs, or papers, and
-                the assistant answers using only those, pointing to the exact passages it used.
+                <strong>{t("onboarding.featureDocs")}</strong> — {t("onboarding.featureDocsDesc")}
               </li>
             </ul>
             <div className="provider-edit-actions">
               <button type="button" className="btn btn-ghost btn-sm" onClick={onOpenExplore}>
-                See how it works
+                {t("onboarding.seeHowItWorks")}
               </button>
               <button type="button" className="btn btn-primary btn-sm" onClick={() => setStep("done")}>
-                Continue
+                {t("onboarding.continue")}
               </button>
             </div>
           </>
@@ -234,10 +224,10 @@ export function OnboardingWizard({ onAddProvider, onAddFilesystem, onClose, onOp
 
         {step === "done" && (
           <>
-            <p className="settings-hint">You're all set! Start chatting whenever you're ready.</p>
+            <p className="settings-hint">{t("onboarding.doneHint")}</p>
             <div className="provider-edit-actions">
               <button type="button" className="btn btn-primary" onClick={onClose}>
-                Start chatting
+                {t("onboarding.startChatting")}
               </button>
             </div>
           </>

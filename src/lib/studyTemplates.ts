@@ -5,42 +5,49 @@
  * source) and sends.
  *
  * Shape-first, static data — same pattern as `curatedMcp.ts`. No backend, no network. To add a mode,
- * append an entry; `StudyModes.tsx` groups them by `topic`.
+ * append an entry here **and** add its two localized UI strings (`study.tpl.<id>.label`,
+ * `.description`) to `locales/es.ts` + `locales/en.ts`; `StudyModes.tsx` groups them by `topic`.
+ *
+ * **`promptSeed` deliberately lives here and is NOT localized.** It's model-facing text: it lands in
+ * the composer and is sent to the LLM. i18n in this app is interface-level only — chip labels and
+ * tooltips translate, the prompt itself does not. The student is free to rewrite the seed in any
+ * language before sending; the model follows whatever they write.
  */
+
+import type { MessageKey } from "./i18n";
 
 export type StudyTopic = "reading" | "writing" | "research" | "study";
 
 export interface StudyTemplate {
-  /** Stable id (also the React key). */
+  /** Stable id (also the React key, and the prefix of its i18n keys). */
   id: string;
-  /** Short label shown on the chip. */
-  label: string;
   /** Which topic this belongs to; drives grouping in the UI. */
   topic: StudyTopic;
-  /** Plain-language tooltip explaining what the mode does. */
-  description: string;
-  /** Text dropped into the composer input when the chip is clicked. */
+  /** Text dropped into the composer input when the chip is clicked. Never translated — see above. */
   promptSeed: string;
   /** Shown in the compact starter row on the empty screen; the rest live behind "Browse all". */
   featured?: boolean;
 }
 
-/** Group headings shown above each topic's chips. */
-export const STUDY_TOPIC_LABELS: Record<StudyTopic, string> = {
-  reading: "Reading & analysis",
-  writing: "Writing & drafting",
-  research: "Research & citations",
-  study: "Study & revision",
-};
+/** i18n key for a topic group heading. */
+export function topicLabelKey(topic: StudyTopic): MessageKey {
+  return `study.topic.${topic}` as MessageKey;
+}
+
+/** i18n keys for a template's *UI* text. The prompt seed is not among them — it stays untranslated. */
+export function templateKeys(id: string): { label: MessageKey; description: MessageKey } {
+  return {
+    label: `study.tpl.${id}.label` as MessageKey,
+    description: `study.tpl.${id}.description` as MessageKey,
+  };
+}
 
 export const STUDY_TEMPLATES: StudyTemplate[] = [
   // ── Reading & analysis ──────────────────────────────────────────────────────
   {
     id: "summarize",
-    label: "Summarize a document",
     topic: "reading",
     featured: true,
-    description: "Condense a long report, treaty, or reading into structured key points.",
     promptSeed:
       "Summarize the following text. Give me:\n" +
       "1. A 3-sentence overview.\n" +
@@ -50,9 +57,7 @@ export const STUDY_TEMPLATES: StudyTemplate[] = [
   },
   {
     id: "explain-treaty",
-    label: "Explain a treaty / agreement",
     topic: "reading",
-    description: "Break down what a treaty or agreement actually commits its parties to.",
     promptSeed:
       "Explain the treaty/agreement below in plain language. Cover: who the parties are, what each " +
       "side is obligated to do, the key terms, and any enforcement or exit mechanisms.\n\n" +
@@ -60,9 +65,7 @@ export const STUDY_TEMPLATES: StudyTemplate[] = [
   },
   {
     id: "extract-entities",
-    label: "Extract key facts & entities",
     topic: "reading",
-    description: "Pull out people, places, dates, and organizations from a source.",
     promptSeed:
       "From the source below, extract and list: People, Places, Organizations, Dates, and any key " +
       "events — each as a bullet list. Then give a one-line note on how they relate.\n\n" +
@@ -70,9 +73,7 @@ export const STUDY_TEMPLATES: StudyTemplate[] = [
   },
   {
     id: "translate-summarize",
-    label: "Translate & summarize a source",
     topic: "reading",
-    description: "Translate a foreign-language source into English and summarize it.",
     promptSeed:
       "The source below is in [language]. Translate it into clear English, then give me a short " +
       "summary of its main argument and any key facts. Note anything that's ambiguous in the " +
@@ -83,10 +84,8 @@ export const STUDY_TEMPLATES: StudyTemplate[] = [
   // ── Writing & drafting ──────────────────────────────────────────────────────
   {
     id: "policy-brief",
-    label: "Draft a policy brief",
     topic: "writing",
     featured: true,
-    description: "Turn your notes into a structured policy brief / position paper.",
     promptSeed:
       "Draft a concise policy brief from my notes below. Use this structure: Issue, Background, " +
       "Options (with pros/cons), and a Recommendation. Keep it neutral and evidence-based.\n\n" +
@@ -94,9 +93,7 @@ export const STUDY_TEMPLATES: StudyTemplate[] = [
   },
   {
     id: "compare-positions",
-    label: "Compare two actors' positions",
     topic: "writing",
-    description: "Side-by-side comparison of two countries' or actors' stances on an issue.",
     promptSeed:
       "Compare how [Country/Actor A] and [Country/Actor B] approach [issue]. Give me a side-by-side " +
       "table covering their official position, key interests, main arguments, and points of " +
@@ -106,10 +103,8 @@ export const STUDY_TEMPLATES: StudyTemplate[] = [
   // ── Research & citations ────────────────────────────────────────────────────
   {
     id: "lit-review-outline",
-    label: "Literature-review outline",
     topic: "research",
     featured: true,
-    description: "Turn a topic and a few sources into a structured literature-review outline.",
     promptSeed:
       "Help me outline a literature review on the topic below. Organize it into themes, note where " +
       "sources agree or disagree, and flag gaps worth researching.\n\n" +
@@ -118,9 +113,7 @@ export const STUDY_TEMPLATES: StudyTemplate[] = [
   },
   {
     id: "bibliography",
-    label: "Format a bibliography",
     topic: "research",
-    description: "Format references in APA, MLA, or Chicago style.",
     promptSeed:
       "Format the following references as a bibliography in [APA / MLA / Chicago] style, " +
       "alphabetized. Point out anything I'm missing (e.g. a publication year or page range).\n\n" +
@@ -128,9 +121,7 @@ export const STUDY_TEMPLATES: StudyTemplate[] = [
   },
   {
     id: "catalog-metadata",
-    label: "Catalog a document (metadata)",
     topic: "research",
-    description: "Produce descriptive archival metadata for a document.",
     promptSeed:
       "Produce descriptive catalog metadata for the document below. Return these fields: Title, " +
       "Author/Creator, Date, Document type, Language, Summary (2–3 sentences), Subject keywords, " +
@@ -142,10 +133,8 @@ export const STUDY_TEMPLATES: StudyTemplate[] = [
   // ── Study & revision ────────────────────────────────────────────────────────
   {
     id: "flashcards",
-    label: "Make flashcards / quiz",
     topic: "study",
     featured: true,
-    description: "Generate study flashcards or a short quiz from a document or topic.",
     promptSeed:
       "Create [10] study flashcards from the material below, formatted as 'Q: … / A: …'. Then give " +
       "me a 5-question short quiz (no answers until I ask).\n\n" +

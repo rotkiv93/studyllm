@@ -4,9 +4,11 @@ import { Markdown } from "./Markdown";
 import {
   RESEARCH_MODES,
   DEFAULT_RESEARCH_MODE,
+  researchModeKeys,
   type ResearchMode,
 } from "../lib/researchModes";
 import type { StreamEvent } from "../lib/providerRouter";
+import { useT, type MessageKey } from "../lib/i18n";
 
 /**
  * The Research-process tab of the Explore panel — a live trace of a Deep Research run. The student
@@ -29,13 +31,13 @@ interface ResearchTraceProps {
   ) => Promise<void>;
 }
 
-const STAGES = [
-  "Your question",
-  "Sub-questions",
-  "Search the web",
-  "Read sources",
-  "Synthesize",
-  "Cited report",
+const STAGE_KEYS: MessageKey[] = [
+  "researchTrace.stage.question",
+  "researchTrace.stage.subQuestions",
+  "researchTrace.stage.search",
+  "researchTrace.stage.read",
+  "researchTrace.stage.synthesize",
+  "researchTrace.stage.report",
 ];
 
 interface TraceSource {
@@ -77,6 +79,7 @@ export function ResearchTrace({
   onInstallTools,
   onRun,
 }: ResearchTraceProps) {
+  const t = useT();
   const [query, setQuery] = useState("");
   const [mode, setMode] = useState<ResearchMode>(DEFAULT_RESEARCH_MODE);
   const [running, setRunning] = useState(false);
@@ -120,19 +123,19 @@ export function ResearchTrace({
         break;
       case "router":
         if (e.event.kind === "switched") {
-          setSwitched(`Switched to ${e.event.toLabel} — restarting the research`);
+          setSwitched(t("researchTrace.switched", { provider: e.event.toLabel }));
           setStage(0);
           setToolSteps(0);
           setSources([]);
           setAnswer("");
           sawResult.current = false;
         } else if (e.event.kind === "auth-error") {
-          setError(`${e.event.providerLabel} key looks invalid — check Providers.`);
+          setError(t("researchTrace.authError", { provider: e.event.providerLabel }));
         } else if (e.event.kind === "exhausted") {
           setError(
             e.event.toolsUnsupported
-              ? "None of your models can use tools. Pick a tool-capable model in Providers."
-              : "All providers are rate-limited or failing. Try again shortly.",
+              ? t("researchTrace.noToolModels")
+              : t("researchTrace.exhausted"),
           );
         }
         break;
@@ -140,7 +143,7 @@ export function ResearchTrace({
         setError(e.message);
         break;
       case "done":
-        advance(STAGES.length); // mark every stage complete, including "Cited report"
+        advance(STAGE_KEYS.length); // mark every stage complete, including the cited report
         setDone({ providerLabel: e.providerLabel, model: e.model });
         break;
     }
@@ -163,7 +166,7 @@ export function ResearchTrace({
       await onRun(query.trim(), mode, handleEvent, ctrl.signal);
     } catch (e) {
       if (!ctrl.signal.aborted) {
-        setError(e instanceof Error ? e.message : "Research run failed.");
+        setError(e instanceof Error ? e.message : t("researchTrace.failed"));
       }
     } finally {
       setRunning(false);
@@ -174,30 +177,27 @@ export function ResearchTrace({
 
   return (
     <div className="explore-body">
-      <p className="settings-hint">
-        Ask a big question and watch Deep Research work — decompose it, search, read sources, and
-        synthesize a cited answer, step by step. It runs the real research loop over your web tools.
-      </p>
+      <p className="settings-hint">{t("researchTrace.intro")}</p>
 
       {!hasResearchTools && (
         <p className="notice">
-          No research tools are running yet.{" "}
+          {t("researchTrace.noTools")}{" "}
           <button
             type="button"
             className="link-btn"
             onClick={() => void onInstallTools()}
             disabled={installingTools}
           >
-            {installingTools ? "Setting up…" : "Set up the free research tools"}
+            {installingTools ? t("researchTrace.settingUp") : t("researchTrace.setUpTools")}
           </button>{" "}
-          (Web Reader, Wikipedia, OpenAlex) — no account needed.
+          {t("researchTrace.toolsSuffix")}
         </p>
       )}
 
       <div className="explore-query">
         <textarea
           className="explore-query-input"
-          placeholder="e.g. How do the EU and US approaches to regulating AI compare?"
+          placeholder={t("researchTrace.placeholder")}
           value={query}
           onChange={(e) => setQuery(e.currentTarget.value)}
           onKeyDown={(e) => {
@@ -215,17 +215,17 @@ export function ResearchTrace({
             value={mode.id}
             onChange={(e) => setMode(RESEARCH_MODES.find((r) => r.id === e.currentTarget.value) ?? DEFAULT_RESEARCH_MODE)}
             disabled={running}
-            title={mode.description}
+            title={t(researchModeKeys(mode.id).description)}
           >
             {RESEARCH_MODES.map((r) => (
               <option key={r.id} value={r.id}>
-                {r.label}
+                {t(researchModeKeys(r.id).label)}
               </option>
             ))}
           </select>
           {running ? (
             <button type="button" className="btn btn-secondary btn-sm explore-run" onClick={() => abortRef.current?.abort()}>
-              <IconStop size={13} /> Stop
+              <IconStop size={13} /> {t("researchTrace.stop")}
             </button>
           ) : (
             <button
@@ -234,7 +234,7 @@ export function ResearchTrace({
               onClick={() => void run()}
               disabled={!hasResearchTools || !query.trim()}
             >
-              <IconSearch size={14} /> Run research
+              <IconSearch size={14} /> {t("researchTrace.run")}
             </button>
           )}
         </div>
@@ -247,7 +247,7 @@ export function ResearchTrace({
         <>
           {/* Pipeline stepper */}
           <ol className="explore-pipeline research-pipeline">
-            {STAGES.map((label, i) => {
+            {STAGE_KEYS.map((stageKey, i) => {
               const state = i < stage ? "done" : i === stage ? "current" : "todo";
               return (
                 <li key={i} className={`explore-stage${state !== "todo" ? " explore-stage-on" : ""}`}>
@@ -255,7 +255,7 @@ export function ResearchTrace({
                     {state === "done" ? <IconCheck size={12} /> : i + 1}
                   </span>
                   <span className="explore-stage-body">
-                    <span className="explore-stage-label">{label}</span>
+                    <span className="explore-stage-label">{t(stageKey)}</span>
                   </span>
                 </li>
               );
@@ -265,10 +265,8 @@ export function ResearchTrace({
           {/* Step-budget progress */}
           <div className="research-progress">
             <div className="research-progress-head">
-              <span>Research steps</span>
-              <span>
-                {toolSteps} of up to {mode.maxSteps}
-              </span>
+              <span>{t("researchTrace.steps")}</span>
+              <span>{t("researchTrace.stepsOf", { done: toolSteps, max: mode.maxSteps })}</span>
             </div>
             <div className="research-progress-track">
               <div className="research-progress-fill" style={{ width: `${pct}%` }} />
@@ -278,7 +276,9 @@ export function ResearchTrace({
           {/* Sources consulted */}
           {sources.length > 0 && (
             <div className="viz-block">
-              <div className="viz-title">Sources consulted ({sources.length})</div>
+              <div className="viz-title">
+                {t("researchTrace.sources", { count: sources.length })}
+              </div>
               <ul className="research-source-list">
                 {sources.map((s) => (
                   <li key={s.id} className="research-source">
@@ -296,7 +296,9 @@ export function ResearchTrace({
                       {s.label}
                     </span>
                     {s.status === "done" && s.chars > 0 && (
-                      <span className="research-source-chars">{s.chars.toLocaleString()} chars</span>
+                      <span className="research-source-chars">
+                        {t("researchTrace.chars", { count: s.chars.toLocaleString() })}
+                      </span>
                     )}
                   </li>
                 ))}
@@ -308,11 +310,13 @@ export function ResearchTrace({
           {answer && (
             <div className="viz-block research-answer">
               <div className="viz-title">
-                {done ? "Cited report" : "Writing…"}
+                {done ? t("researchTrace.report") : t("researchTrace.writing")}
                 {done && (
                   <span className="research-answer-meta">
-                    {" "}
-                    · via {done.providerLabel} · {done.model}
+                    {t("researchTrace.via", {
+                      provider: done.providerLabel,
+                      model: done.model,
+                    })}
                   </span>
                 )}
               </div>

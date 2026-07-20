@@ -3,6 +3,7 @@ import { IconSearch, IconLoader, IconStop } from "./icons";
 import { Markdown } from "./Markdown";
 import { estimateTokenCount } from "../lib/tokenize";
 import type { StreamEvent } from "../lib/providerRouter";
+import { useT, type MessageKey } from "../lib/i18n";
 
 /**
  * The "System prompt" playground — two lessons in one tab:
@@ -21,19 +22,24 @@ import type { StreamEvent } from "../lib/providerRouter";
  * tools) — same machinery the grounding playground uses.
  */
 
-const PRESETS: { label: string; text: string }[] = [
-  { label: "Helpful assistant", text: "You are a helpful, friendly assistant." },
-  { label: "Talk like a pirate", text: "You are a pirate. Answer everything in pirate slang." },
-  { label: "One word only", text: "Answer every question in exactly one word. Never more." },
+/**
+ * Preset **labels** are localized (`prompt.preset.*`); the prompt `text` deliberately is not — it's
+ * model-facing and lands in the editable textarea, same rule as `studyTemplates.ts`'s `promptSeed`.
+ * The student can rewrite it in any language before running.
+ */
+const PRESETS: { labelKey: MessageKey; text: string }[] = [
+  { labelKey: "prompt.preset.helpful", text: "You are a helpful, friendly assistant." },
+  { labelKey: "prompt.preset.pirate", text: "You are a pirate. Answer everything in pirate slang." },
+  { labelKey: "prompt.preset.oneWord", text: "Answer every question in exactly one word. Never more." },
   {
-    label: "Socratic tutor",
+    labelKey: "prompt.preset.socratic",
     text: "You are a strict tutor. Never give the final answer — only reply with a hint or a guiding question so the student works it out themselves.",
   },
   {
-    label: "JSON only",
+    labelKey: "prompt.preset.json",
     text: 'Reply with ONLY valid JSON in the form {"answer": "..."} and nothing else — no prose, no code fences.',
   },
-  { label: "Always in French", text: "Always respond in French, regardless of the language asked." },
+  { labelKey: "prompt.preset.french", text: "Always respond in French, regardless of the language asked." },
 ];
 
 const DEFAULT_SYSTEM = PRESETS[0].text;
@@ -60,6 +66,7 @@ export function PromptPlayground({
     signal: AbortSignal,
   ) => Promise<void>;
 }) {
+  const t = useT();
   const [system, setSystem] = useState(DEFAULT_SYSTEM);
   const [user, setUser] = useState(DEFAULT_USER);
   const [running, setRunning] = useState(false);
@@ -103,7 +110,7 @@ export function PromptPlayground({
       patch((r) => (r.status === "error" ? r : { ...r, status: "done" }));
     } catch (err) {
       if (!controller.signal.aborted) {
-        setError(err instanceof Error ? err.message : "The run failed.");
+        setError(err instanceof Error ? err.message : t("prompt.failed"));
       }
       patch((r) => ({ ...r, status: "error" }));
     } finally {
@@ -119,25 +126,22 @@ export function PromptPlayground({
 
   return (
     <div className="explore-body">
-      <p className="settings-hint">
-        A chatbot never just gets your message. Behind every turn is a hidden <strong>system
-        prompt</strong> — standing instructions the model follows. Edit it below, watch the exact
-        thing the model receives, then run it and see how the same question gets a different answer.
-      </p>
+      <p className="settings-hint">{t("prompt.intro")}</p>
 
       <div className="prompt-field">
         <label className="prompt-field-label" htmlFor="pp-system">
-          System prompt <span className="prompt-field-hint">the hidden instructions</span>
+          {t("prompt.systemLabel")}{" "}
+          <span className="prompt-field-hint">{t("prompt.systemHint")}</span>
         </label>
         <div className="prompt-presets">
           {PRESETS.map((p) => (
             <button
-              key={p.label}
+              key={p.labelKey}
               type="button"
               className="btn btn-ghost btn-sm"
               onClick={() => setSystem(p.text)}
             >
-              {p.label}
+              {t(p.labelKey)}
             </button>
           ))}
         </div>
@@ -147,13 +151,13 @@ export function PromptPlayground({
           value={system}
           onChange={(e) => setSystem(e.currentTarget.value)}
           rows={3}
-          placeholder="e.g. You are a helpful assistant."
+          placeholder={t("prompt.systemPlaceholder")}
         />
       </div>
 
       <div className="prompt-field">
         <label className="prompt-field-label" htmlFor="pp-user">
-          Your message
+          {t("prompt.userLabel")}
         </label>
         <div className="explore-query">
           <textarea
@@ -168,12 +172,12 @@ export function PromptPlayground({
               }
             }}
             rows={2}
-            placeholder="Ask anything…"
+            placeholder={t("prompt.userPlaceholder")}
             disabled={running}
           />
           {running ? (
             <button type="button" className="btn btn-secondary btn-sm explore-run" onClick={stop}>
-              <IconStop size={14} /> Stop
+              <IconStop size={14} /> {t("prompt.stop")}
             </button>
           ) : (
             <button
@@ -182,7 +186,7 @@ export function PromptPlayground({
               onClick={() => void run()}
               disabled={!user.trim() || !hasProviders}
             >
-              <IconSearch size={14} /> Run
+              <IconSearch size={14} /> {t("prompt.run")}
             </button>
           )}
         </div>
@@ -191,45 +195,47 @@ export function PromptPlayground({
       {/* Prompt inspector — the exact assembled prompt the model will receive, updated live. */}
       <div className="prompt-inspector">
         <div className="prompt-inspector-head">
-          <span>What the model actually receives</span>
-          <span className="prompt-inspector-total">{totalTokens} tokens total</span>
+          <span>{t("prompt.inspectorHead")}</span>
+          <span className="prompt-inspector-total">
+            {t("prompt.totalTokens", { count: totalTokens })}
+          </span>
         </div>
         {system.trim() && (
           <div className="prompt-msg prompt-msg-system">
             <div className="prompt-msg-role">
-              SYSTEM <span className="prompt-msg-tokens">{systemTokens} tokens</span>
+              SYSTEM{" "}
+              <span className="prompt-msg-tokens">
+                {t("prompt.msgTokens", { count: systemTokens })}
+              </span>
             </div>
             <div className="prompt-msg-text">{system}</div>
           </div>
         )}
         <div className="prompt-msg prompt-msg-user">
           <div className="prompt-msg-role">
-            USER <span className="prompt-msg-tokens">{userTokens} tokens</span>
+            USER{" "}
+            <span className="prompt-msg-tokens">{t("prompt.msgTokens", { count: userTokens })}</span>
           </div>
-          <div className="prompt-msg-text">{user || <span className="grounding-wait">(empty)</span>}</div>
+          <div className="prompt-msg-text">
+            {user || <span className="grounding-wait">{t("prompt.empty")}</span>}
+          </div>
         </div>
-        <p className="prompt-inspector-note">
-          That’s the whole prompt — the model sees nothing else about you. In a real chat, the earlier
-          back-and-forth would be stacked in here too, which is why long chats fill up the token
-          budget and older turns eventually get dropped.
-        </p>
+        <p className="prompt-inspector-note">{t("prompt.inspectorNote")}</p>
       </div>
 
-      {!hasProviders && (
-        <p className="notice">Add an AI provider in Providers to run the prompt and see the answer.</p>
-      )}
+      {!hasProviders && <p className="notice">{t("prompt.needProvider")}</p>}
       {error && <p className="error">{error}</p>}
 
       {runs.length > 0 && (
         <div className="prompt-runs">
           {runs.map((r) => (
             <div key={r.id} className="prompt-run">
-              <div className="prompt-run-system" title={r.system || "(no system prompt)"}>
-                <span className="prompt-run-system-label">System:</span>{" "}
+              <div className="prompt-run-system" title={r.system || t("prompt.noSystemTitle")}>
+                <span className="prompt-run-system-label">{t("prompt.runSystemLabel")}</span>{" "}
                 {r.system ? (
                   r.system.length > 90 ? `${r.system.slice(0, 90)}…` : r.system
                 ) : (
-                  <em>none</em>
+                  <em>{t("prompt.noSystem")}</em>
                 )}
                 {r.status === "streaming" && <IconLoader size={12} />}
               </div>

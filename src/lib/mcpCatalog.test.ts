@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { computeTrustTier, sortByTrust, trustTierLabel } from "./mcpCatalog";
+import {
+  computeTrustTier,
+  sortByTrust,
+  trustTierLabelKey,
+  trustTierTooltipKey,
+} from "./mcpCatalog";
 import type { CatalogEntry } from "./mcp";
 
 function entry(overrides: Partial<CatalogEntry> & { name: string; repositoryUrl: string | null }): CatalogEntry {
@@ -44,11 +49,17 @@ describe("computeTrustTier", () => {
   });
 });
 
-describe("trustTierLabel", () => {
-  it("renders a human label per tier", () => {
-    expect(trustTierLabel("official")).toBe("Official");
-    expect(trustTierLabel("verified")).toBe("Verified");
-    expect(trustTierLabel("community")).toBe("Community");
+describe("trustTierLabelKey", () => {
+  it("maps each tier to its i18n key", () => {
+    expect(trustTierLabelKey("official")).toBe("trust.official");
+    expect(trustTierLabelKey("verified")).toBe("trust.verified");
+    expect(trustTierLabelKey("community")).toBe("trust.community");
+  });
+
+  it("maps each tier to its tooltip key", () => {
+    expect(trustTierTooltipKey("official")).toBe("trust.tooltip.official");
+    expect(trustTierTooltipKey("verified")).toBe("trust.tooltip.verified");
+    expect(trustTierTooltipKey("community")).toBe("trust.tooltip.community");
   });
 });
 

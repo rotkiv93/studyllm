@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { projectTo2D } from "../../lib/projection";
 import type { ExplainedChunk } from "../../lib/rag";
+import { useT } from "../../lib/i18n";
 
 /**
  * A 2D "map" of the embedding space: the query and every chunk projected (via PCA) onto the plane
@@ -30,6 +31,7 @@ export function EmbeddingMap({
   onHover: (index: number | null) => void;
   onSelect: (index: number) => void;
 }) {
+  const t = useT();
   // Project the query (index 0) together with all chunks so they share one coordinate frame.
   const points = useMemo(
     () => projectTo2D([queryVector, ...scored.map((s) => s.vector)]),
@@ -63,12 +65,14 @@ export function EmbeddingMap({
 
   return (
     <div className="viz-block">
-      <div className="viz-title">Embedding space</div>
-      <p className="viz-caption">
-        Your question (★) and every passage, mapped by meaning. Closer means more similar — the
-        filled dots are the ones retrieved. Click any dot to read the full passage.
-      </p>
-      <svg className="embed-map" viewBox={`0 0 ${VIEW} ${VIEW}`} role="img" aria-label="Embedding space map">
+      <div className="viz-title">{t("viz.embeddingSpace")}</div>
+      <p className="viz-caption">{t("viz.embeddingCaption")}</p>
+      <svg
+        className="embed-map"
+        viewBox={`0 0 ${VIEW} ${VIEW}`}
+        role="img"
+        aria-label={t("viz.embeddingSpaceAria")}
+      >
         {chunkPts.map((p, i) => {
           const retrieved = i < cutoff;
           const hovered = hoveredIndex === i;
@@ -85,7 +89,7 @@ export function EmbeddingMap({
               onMouseLeave={() => onHover(null)}
               onClick={() => onSelect(i)}
             >
-              <title>Click to read the full passage</title>
+              <title>{t("viz.clickToRead")}</title>
             </circle>
           );
         })}

@@ -1,7 +1,8 @@
 import { useRef, useState } from "react";
 import { IconSearch, IconLoader, IconStop, IconCheck, IconX } from "./icons";
 import type { McpToolInfo } from "../lib/mcp";
-import type { StreamEvent } from "../lib/providerRouter";
+import { routerReasonKey, type StreamEvent } from "../lib/providerRouter";
+import { useT } from "../lib/i18n";
 
 /**
  * The "How does it use tools? (MCP)" playground — gives MCP the same glass-box treatment RAG got.
@@ -62,6 +63,7 @@ export function McpToolExplorer({
     signal: AbortSignal,
   ) => Promise<void>;
 }) {
+  const t = useT();
   const [selectedId, setSelectedId] = useState<string>(servers[0]?.id ?? "");
   const [question, setQuestion] = useState("");
   const [running, setRunning] = useState(false);
@@ -74,11 +76,7 @@ export function McpToolExplorer({
   if (servers.length === 0) {
     return (
       <div className="explore-body">
-        <p className="notice">
-          No tools are connected yet. Open <strong>Tools &amp; Connections (MCP)</strong> and start a
-          server (the Filesystem tool is the easiest to try), then come back here to watch the model
-          use it.
-        </p>
+        <p className="notice">{t("toolExplorer.noServers")}</p>
       </div>
     );
   }
@@ -104,14 +102,19 @@ export function McpToolExplorer({
           else if (e.type === "tool-result")
             append({ kind: "call", id: e.toolCallId, tool: e.toolName, input: undefined, output: e.output, isError: e.isError });
           else if (e.type === "router" && e.event.kind === "switched")
-            append({ kind: "note", text: `Switched provider (${e.event.reason})` });
+            append({
+              kind: "note",
+              text: t("toolExplorer.switched", {
+                reason: t(routerReasonKey(e.event.reason)),
+              }),
+            });
           else if (e.type === "error") setError(e.message);
         },
         controller.signal,
       );
     } catch (err) {
       if (!controller.signal.aborted) {
-        setError(err instanceof Error ? err.message : "The run failed.");
+        setError(err instanceof Error ? err.message : t("toolExplorer.runFailed"));
       }
     } finally {
       setRunning(false);
@@ -126,16 +129,11 @@ export function McpToolExplorer({
 
   return (
     <div className="explore-body">
-      <p className="settings-hint">
-        A <strong>tool</strong> is just a function the model is allowed to ask for — it has a name, a
-        description, and some blanks (inputs) to fill in. Below are the real tools your connected
-        server exposes. Ask a question and watch the model pick one, fill in the blanks, and read
-        back the result.
-      </p>
+      <p className="settings-hint">{t("toolExplorer.intro")}</p>
 
       {servers.length > 1 && (
         <div className="tool-explorer-picker">
-          <span className="token-examples-label">Server:</span>
+          <span className="token-examples-label">{t("toolExplorer.server")}</span>
           {servers.map((s) => (
             <button
               key={s.id}
@@ -162,13 +160,15 @@ export function McpToolExplorer({
                     <li key={p.name} className="tool-schema-param">
                       <code>{p.name}</code>
                       <span className="tool-schema-type">{p.type}</span>
-                      {p.required && <span className="tool-schema-required">required</span>}
+                      {p.required && (
+                        <span className="tool-schema-required">{t("toolExplorer.required")}</span>
+                      )}
                       {p.description && <span className="tool-schema-param-desc">{p.description}</span>}
                     </li>
                   ))}
                 </ul>
               ) : (
-                <p className="tool-schema-desc tool-schema-noargs">Takes no inputs.</p>
+                <p className="tool-schema-desc tool-schema-noargs">{t("toolExplorer.noInputs")}</p>
               )}
             </div>
           );
@@ -176,13 +176,13 @@ export function McpToolExplorer({
       </div>
 
       {!hasProviders ? (
-        <p className="notice">Add an AI provider in Providers to run the live “watch it decide” demo.</p>
+        <p className="notice">{t("toolExplorer.needProvider")}</p>
       ) : (
         <>
           <div className="explore-query">
             <textarea
               className="explore-query-input"
-              placeholder={`e.g. something that would need ${selected?.name}`}
+              placeholder={t("toolExplorer.placeholder", { name: selected?.name ?? "" })}
               value={question}
               onChange={(e) => setQuestion(e.currentTarget.value)}
               onKeyDown={(e) => {
@@ -196,7 +196,7 @@ export function McpToolExplorer({
             />
             {running ? (
               <button type="button" className="btn btn-secondary btn-sm explore-run" onClick={stop}>
-                <IconStop size={14} /> Stop
+                <IconStop size={14} /> {t("toolExplorer.stop")}
               </button>
             ) : (
               <button
@@ -205,7 +205,7 @@ export function McpToolExplorer({
                 onClick={() => void run()}
                 disabled={!question.trim()}
               >
-                <IconSearch size={14} /> Run
+                <IconSearch size={14} /> {t("toolExplorer.run")}
               </button>
             )}
           </div>
@@ -237,19 +237,21 @@ export function McpToolExplorer({
                         {done ? item.isError ? <IconX size={12} /> : <IconCheck size={12} /> : <IconLoader size={12} />}
                       </span>
                       <span className="tool-trace-call-name">
-                        The model asked for <code>{item.tool}</code>
+                        {t("toolExplorer.modelAsked")} <code>{item.tool}</code>
                       </span>
                     </div>
                     {item.input !== undefined && (
                       <div className="tool-trace-io">
-                        <span className="tool-trace-io-label">It sent (the blanks it filled in):</span>
+                        <span className="tool-trace-io-label">{t("toolExplorer.itSent")}</span>
                         <pre className="tool-trace-pre">{prettyJson(item.input)}</pre>
                       </div>
                     )}
                     {done && (
                       <div className="tool-trace-io">
                         <span className="tool-trace-io-label">
-                          {item.isError ? "The tool returned an error:" : "The tool answered:"}
+                          {item.isError
+                            ? t("toolExplorer.toolError")
+                            : t("toolExplorer.toolAnswered")}
                         </span>
                         <pre className="tool-trace-pre">{item.output}</pre>
                       </div>

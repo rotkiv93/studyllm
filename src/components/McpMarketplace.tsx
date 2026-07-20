@@ -8,10 +8,12 @@ import {
   computeTrustTier,
   getCachedCatalog,
   searchCatalog,
-  trustTierLabel,
+  trustTierLabelKey,
+  trustTierTooltipKey,
   type TrustTier,
 } from "../lib/mcpCatalog";
 import { IconCheck } from "./icons";
+import { useT } from "../lib/i18n";
 
 export interface ResolvedInstall {
   entry: CatalogEntry;
@@ -26,12 +28,6 @@ interface Props {
   servers: McpServerRow[];
   onInstall: (resolved: ResolvedInstall) => Promise<void>;
 }
-
-const TRUST_TOOLTIP: Record<TrustTier, string> = {
-  official: "Built and maintained by the MCP project itself.",
-  verified: "Made by an outside developer whose source code is public, but not audited by StudyLLM.",
-  community: "An unverified tool from an independent developer — it can run code on this computer with your permissions.",
-};
 
 const AVATAR_CLASSES = ["avatar-c0", "avatar-c1", "avatar-c2"];
 
@@ -55,6 +51,7 @@ function MarketplaceCard({
   installed: boolean;
   onInstall: () => void;
 }) {
+  const t = useT();
   const tier = computeTrustTier(entry);
   const unsupported = entry.install.kind === "unsupported";
   return (
@@ -65,8 +62,8 @@ function MarketplaceCard({
         </span>
         <div className="marketplace-card-title">
           <strong>{entry.name}</strong>
-          <span className={`trust-badge trust-${tier}`} title={TRUST_TOOLTIP[tier]}>
-            {trustTierLabel(tier)}
+          <span className={`trust-badge trust-${tier}`} title={t(trustTierTooltipKey(tier))}>
+            {t(trustTierLabelKey(tier))}
           </span>
         </div>
       </div>
@@ -77,11 +74,11 @@ function MarketplaceCard({
       <div className="marketplace-card-footer">
         {installed ? (
           <span className="marketplace-added">
-            <IconCheck size={14} /> Added
+            <IconCheck size={14} /> {t("market.added")}
           </span>
         ) : (
           <button type="button" className="btn btn-primary btn-sm" disabled={unsupported} onClick={onInstall}>
-            Add
+            {t("market.add")}
           </button>
         )}
       </div>
@@ -90,6 +87,7 @@ function MarketplaceCard({
 }
 
 export function McpMarketplace({ servers, onInstall }: Props) {
+  const t = useT();
   const [query, setQuery] = useState("");
   const [entries, setEntries] = useState<CatalogEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -197,10 +195,7 @@ export function McpMarketplace({ servers, onInstall }: Props) {
 
   return (
     <>
-      <p className="settings-hint">
-        Add extra tools the assistant can use, like reading files or checking your inbox. Only add
-        tools from people or projects you trust — check the badge before adding.
-      </p>
+      <p className="settings-hint">{t("market.intro")}</p>
 
       <form
         className="marketplace-search"
@@ -210,20 +205,24 @@ export function McpMarketplace({ servers, onInstall }: Props) {
         }}
       >
         <input
-          placeholder="Search for a tool…"
+          placeholder={t("market.searchPlaceholder")}
           value={query}
           onChange={(e) => setQuery(e.currentTarget.value)}
         />
         <button type="submit" className="btn btn-primary" disabled={loading}>
-          {loading ? "Searching…" : "Search"}
+          {loading ? t("market.searching") : t("market.search")}
         </button>
       </form>
 
       {source === "cache" && (
         <p className="notice">
-          Couldn't reach the tool directory{searchError ? ` (${searchError})` : ""} — showing what
-          was saved{cacheAgeMs != null ? ` from ${Math.round(cacheAgeMs / 60000)} min ago` : ""}.
-          {" "}
+          {t("market.cacheNotice", {
+            error: searchError ? t("market.cacheError", { error: searchError }) : "",
+            age:
+              cacheAgeMs != null
+                ? t("market.cacheAge", { minutes: Math.round(cacheAgeMs / 60000) })
+                : "",
+          })}{" "}
           <button
             type="button"
             className="btn btn-ghost btn-sm"
@@ -232,14 +231,14 @@ export function McpMarketplace({ servers, onInstall }: Props) {
               runSearch(query);
             }}
           >
-            Clear saved results
+            {t("market.clearCache")}
           </button>
         </p>
       )}
 
       {popular.length > 0 && (
         <>
-          <h3 className="mcp-section-title">Popular</h3>
+          <h3 className="mcp-section-title">{t("market.section.popular")}</h3>
           <ul className="marketplace-grid">
             {popular.map((entry) => (
               <MarketplaceCard
@@ -253,7 +252,7 @@ export function McpMarketplace({ servers, onInstall }: Props) {
         </>
       )}
 
-      {popular.length > 0 && <h3 className="mcp-section-title">All tools</h3>}
+      {popular.length > 0 && <h3 className="mcp-section-title">{t("market.section.all")}</h3>}
       <ul className="marketplace-grid">
         {rest.map((entry) => (
           <MarketplaceCard
@@ -263,24 +262,26 @@ export function McpMarketplace({ servers, onInstall }: Props) {
             onInstall={() => openInstall(entry)}
           />
         ))}
-        {!loading && entries.length === 0 && <li className="empty-state">No tools found.</li>}
+        {!loading && entries.length === 0 && (
+          <li className="empty-state">{t("market.empty")}</li>
+        )}
       </ul>
 
       {installTarget && (
         <div className="settings-overlay">
           <div className="settings-panel">
             <div className="settings-header">
-              <h2>Add {installTarget.name}</h2>
+              <h2>{t("market.addTitle", { name: installTarget.name })}</h2>
               <button type="button" className="btn btn-ghost btn-sm" onClick={closeInstall}>
-                Cancel
+                {t("common.cancel")}
               </button>
             </div>
 
             {computeTrustTier(installTarget) !== "official" && (
               <p className={`error marketplace-warning-${computeTrustTier(installTarget)}`}>
                 {computeTrustTier(installTarget) === "community"
-                  ? "This is an unverified community tool — it can run arbitrary code on this computer with your user account's permissions. Only add it if you trust the publisher."
-                  : "This tool's publisher has a public repository but hasn't been audited by StudyLLM. Review it before adding."}
+                  ? t("market.warn.community")
+                  : t("market.warn.verified")}
               </p>
             )}
 
@@ -288,7 +289,7 @@ export function McpMarketplace({ servers, onInstall }: Props) {
               {(installTarget.install.kind === "npx" || installTarget.install.kind === "uvx") &&
                 installTarget.install.positionalArgs.map((arg, i) => (
                   <label key={i}>
-                    {arg.description ?? `Argument ${i + 1}`}
+                    {arg.description ?? t("market.argument", { n: i + 1 })}
                     <div className="marketplace-path-row">
                       <input
                         value={positionalInputs[i] ?? ""}
@@ -305,7 +306,7 @@ export function McpMarketplace({ servers, onInstall }: Props) {
                       />
                       {looksLikePath(arg.description) && (
                         <button type="button" className="btn btn-secondary btn-sm" onClick={() => pickFolder(i)}>
-                          Choose folder…
+                          {t("market.chooseFolder")}
                         </button>
                       )}
                     </div>
@@ -315,7 +316,7 @@ export function McpMarketplace({ servers, onInstall }: Props) {
               {installTarget.requiredEnv.map((v) => (
                 <label key={v.name}>
                   {v.description ?? v.name}
-                  {v.isRequired ? " *" : " (optional)"}
+                  {v.isRequired ? " *" : t("market.optional")}
                   <input
                     type={v.isSecret ? "password" : "text"}
                     placeholder={v.name}
@@ -338,7 +339,7 @@ export function McpMarketplace({ servers, onInstall }: Props) {
                   checked={acknowledged}
                   onChange={(e) => setAcknowledged(e.currentTarget.checked)}
                 />
-                I understand the risk and want to add this tool anyway.
+                {t("market.ack")}
               </label>
             )}
 
@@ -354,7 +355,7 @@ export function McpMarketplace({ servers, onInstall }: Props) {
               }
               onClick={confirmInstall}
             >
-              {installBusy ? "Adding…" : "Add"}
+              {installBusy ? t("market.adding") : t("market.add")}
             </button>
           </div>
         </div>

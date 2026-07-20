@@ -1,6 +1,7 @@
 import { streamText, APICallError, RetryError, isStepCount, type ModelMessage, type ToolSet } from "ai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import type { ProviderType } from "./providers";
+import type { MessageKey } from "./i18n";
 
 export interface ChatMessage {
   role: "user" | "assistant";
@@ -60,6 +61,32 @@ const MAX_COOLDOWN_MS = 60_000;
 
 /** Reason string carried on a "switched" event when a model rejected tool calls. */
 const TOOLS_UNSUPPORTED_REASON = "model can't use tools";
+
+/**
+ * The fixed set of `switched` fail-over reasons. These are emitted as English strings on the
+ * `StreamEvent` (they're also what the crash log records); the UI maps them to a localized label
+ * via `routerReasonKey` rather than showing them raw.
+ */
+export const ROUTER_REASONS = {
+  toolsUnsupported: TOOLS_UNSUPPORTED_REASON,
+  invalidKey: "invalid key",
+  rateLimited: "rate-limited",
+  requestFailed: "request failed",
+} as const;
+
+/** Maps a `switched` event's `reason` to its i18n key, falling back to a generic failure. */
+export function routerReasonKey(reason: string): MessageKey {
+  switch (reason) {
+    case ROUTER_REASONS.toolsUnsupported:
+      return "router.reason.toolsUnsupported";
+    case ROUTER_REASONS.invalidKey:
+      return "router.reason.invalidKey";
+    case ROUTER_REASONS.rateLimited:
+      return "router.reason.rateLimited";
+    default:
+      return "router.reason.requestFailed";
+  }
+}
 
 /**
  * True when a failed request looks like the model rejecting tool/function calls (rather
@@ -309,14 +336,14 @@ export class ProviderRouter {
             type: "router",
             event: { kind: "auth-error", providerId: candidate.id, providerLabel: candidate.label },
           };
-          reason = "invalid key";
+          reason = ROUTER_REASONS.invalidKey;
         } else if (statusCode === 429) {
           this.coolingDownUntil.set(candidate.id, Date.now() + this.retryAfterMs(effectiveError));
-          reason = "rate-limited";
+          reason = ROUTER_REASONS.rateLimited;
         } else {
           // Network/5xx/unknown: short cooldown, still eligible for retry later this session.
           this.coolingDownUntil.set(candidate.id, Date.now() + DEFAULT_COOLDOWN_MS);
-          reason = "request failed";
+          reason = ROUTER_REASONS.requestFailed;
         }
 
         const next = this.candidates(toolsAttached)[0];

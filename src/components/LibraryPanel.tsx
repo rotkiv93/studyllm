@@ -3,6 +3,7 @@ import { IconBook, IconTrash, IconLoader, IconPaperclip } from "./icons";
 import { EMBEDDING_CAPABLE, type EmbeddingConfig } from "../lib/embeddings";
 import { SUPPORTED_ATTACHMENT_HINT } from "../lib/attachments";
 import type { ProviderRow, RagDocumentRow } from "../lib/db";
+import { useT } from "../lib/i18n";
 
 /**
  * The document Library — the RAG surface. Two tabs following the established panel convention
@@ -40,6 +41,7 @@ export function LibraryPanel({
   error,
   onClose,
 }: LibraryPanelProps) {
+  const t = useT();
   const [tab, setTab] = useState<Tab>("documents");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -52,10 +54,11 @@ export function LibraryPanel({
       <div className="settings-panel settings-panel-wide settings-panel-tall">
         <div className="settings-header">
           <h2>
-            <IconBook size={18} /> Your documents <span className="settings-header-term">(library)</span>
+            <IconBook size={18} /> {t("library.title")}{" "}
+            <span className="settings-header-term">{t("library.titleTerm")}</span>
           </h2>
           <button type="button" className="btn btn-ghost btn-sm" onClick={onClose}>
-            Close
+            {t("common.close")}
           </button>
         </div>
 
@@ -67,7 +70,7 @@ export function LibraryPanel({
             className={`mcp-tab-btn${tab === "documents" ? " mcp-tab-btn-active" : ""}`}
             onClick={() => setTab("documents")}
           >
-            Documents
+            {t("library.tab.documents")}
           </button>
           <button
             type="button"
@@ -76,24 +79,15 @@ export function LibraryPanel({
             className={`mcp-tab-btn${tab === "settings" ? " mcp-tab-btn-active" : ""}`}
             onClick={() => setTab("settings")}
           >
-            Embedding model
+            {t("library.tab.embedding")}
           </button>
         </div>
 
         {tab === "documents" ? (
           <>
-            <p className="settings-hint">
-              Add your notes, PDFs, or papers. Each document is split into passages and turned into
-              searchable “meaning” data so the assistant can pull the most relevant parts when you
-              turn on “Chat with your documents” in the composer. Answers cite the passages they used.
-            </p>
+            <p className="settings-hint">{t("library.documentsHint")}</p>
 
-            {!configured && (
-              <p className="notice">
-                Pick an embedding model in the “Embedding model” tab first — that’s how documents get
-                indexed.
-              </p>
-            )}
+            {!configured && <p className="notice">{t("library.pickEmbeddingFirst")}</p>}
             {error && <p className="error">{error}</p>}
 
             <input
@@ -113,14 +107,18 @@ export function LibraryPanel({
               className="btn btn-primary btn-sm library-add-btn"
               onClick={() => fileInputRef.current?.click()}
               disabled={busy || !configured}
-              title={configured ? `Add a file (${SUPPORTED_ATTACHMENT_HINT})` : "Choose an embedding model first"}
+              title={
+                configured
+                  ? t("library.addFileTitle", { formats: SUPPORTED_ATTACHMENT_HINT })
+                  : t("library.chooseEmbeddingFirst")
+              }
             >
               {busy ? <IconLoader size={14} /> : <IconPaperclip size={14} />}
-              {busy ? "Indexing…" : "Add documents"}
+              {busy ? t("library.indexing") : t("library.addDocuments")}
             </button>
 
             {documents.length === 0 ? (
-              <p className="settings-hint library-empty">No documents yet.</p>
+              <p className="settings-hint library-empty">{t("library.empty")}</p>
             ) : (
               <ul className="library-doc-list">
                 {documents.map((d) => (
@@ -128,14 +126,17 @@ export function LibraryPanel({
                     <div className="library-doc-info">
                       <span className="library-doc-name">{d.name}</span>
                       <span className="library-doc-meta">
-                        {d.chunk_count} passage{d.chunk_count === 1 ? "" : "s"} ·{" "}
-                        {d.char_count.toLocaleString()} chars · {d.embed_model}
+                        {t(d.chunk_count === 1 ? "library.passageOne" : "library.passageOther", {
+                          count: d.chunk_count,
+                        })}{" "}
+                        · {t("library.chars", { count: d.char_count.toLocaleString() })} ·{" "}
+                        {d.embed_model}
                       </span>
                     </div>
                     <button
                       type="button"
                       className="btn btn-icon btn-ghost"
-                      title="Remove document"
+                      title={t("library.removeDocument")}
                       onClick={() => void onDeleteDocument(d.id)}
                       disabled={busy}
                     >
@@ -167,6 +168,7 @@ function EmbeddingSettings({
   embeddingConfig: EmbeddingConfig | null;
   onSave: (config: EmbeddingConfig) => void;
 }) {
+  const t = useT();
   const [providerId, setProviderId] = useState(
     embeddingConfig?.providerId ?? embedProviders[0]?.id ?? "",
   );
@@ -176,23 +178,16 @@ function EmbeddingSettings({
 
   if (embedProviders.length === 0) {
     return (
-      <p className="settings-hint">
-        No embedding-capable provider is set up. Add a <strong>Google Gemini</strong> or{" "}
-        <strong>Mistral</strong> provider in Providers — both offer free embedding models — then come
-        back here to select it.
-      </p>
+      <p className="settings-hint">{t("library.noEmbeddingProvider")}</p>
     );
   }
 
   return (
     <div className="library-settings">
-      <p className="settings-hint">
-        Embeddings turn your documents into searchable vectors. Choose a provider you’ve set up and
-        the embedding model to use. This runs on the provider’s free tier, same as chat.
-      </p>
+      <p className="settings-hint">{t("library.embeddingHint")}</p>
 
       <label className="library-field">
-        <span>Provider</span>
+        <span>{t("library.provider")}</span>
         <select
           value={providerId}
           onChange={(e) => {
@@ -211,7 +206,7 @@ function EmbeddingSettings({
       </label>
 
       <label className="library-field">
-        <span>Embedding model</span>
+        <span>{t("library.embeddingModel")}</span>
         <input
           type="text"
           value={model}
@@ -226,12 +221,14 @@ function EmbeddingSettings({
         disabled={!providerId || !model.trim()}
         onClick={() => onSave({ providerId, model: model.trim() })}
       >
-        Save
+        {t("common.save")}
       </button>
       {embeddingConfig && (
         <p className="settings-hint library-current">
-          Current: {embedProviders.find((p) => p.id === embeddingConfig.providerId)?.label ?? "—"} ·{" "}
-          {embeddingConfig.model}
+          {t("library.current", {
+            provider: embedProviders.find((p) => p.id === embeddingConfig.providerId)?.label ?? "—",
+            model: embeddingConfig.model,
+          })}
         </p>
       )}
     </div>

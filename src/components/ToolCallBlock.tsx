@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { IconCheck, IconChevronDown, IconLoader, IconTool, IconX } from "./icons";
 import type { McpServerRow } from "../lib/db";
+import { useT } from "../lib/i18n";
 
 export interface ToolCallBlockProps {
   toolName: string;
@@ -41,6 +42,7 @@ function formatPayload(value: unknown): string {
 }
 
 export function ToolCallBlock({ toolName, input, output, isError, pending, mcpServers }: ToolCallBlockProps) {
+  const t = useT();
   const { server, tool } = resolveToolLabel(toolName, mcpServers);
   const [expanded, setExpanded] = useState(false);
 
@@ -65,7 +67,9 @@ export function ToolCallBlock({ toolName, input, output, isError, pending, mcpSe
         <IconTool size={14} className="tool-block-icon" />
         <span className="tool-block-name">{tool}</span>
         {server && <span className="tool-block-server">{server}</span>}
-        <span className="tool-block-state-label">{pending ? "Running…" : isError ? "Failed" : "Done"}</span>
+        <span className="tool-block-state-label">
+          {pending ? t("toolCall.running") : isError ? t("toolCall.failed") : t("toolCall.done")}
+        </span>
         <IconChevronDown size={14} className={`tool-block-chevron${expanded ? " is-open" : ""}`} />
       </button>
 
@@ -73,13 +77,15 @@ export function ToolCallBlock({ toolName, input, output, isError, pending, mcpSe
         <div className="tool-block-body">
           {hasInput && (
             <div className="tool-block-section">
-              <span className="tool-block-section-label">Input</span>
+              <span className="tool-block-section-label">{t("toolCall.input")}</span>
               <pre className="tool-block-pre">{inputText}</pre>
             </div>
           )}
           <div className="tool-block-section">
-            <span className="tool-block-section-label">{isError ? "Error" : "Output"}</span>
-            <pre className="tool-block-pre">{pending ? "Running…" : formatPayload(output)}</pre>
+            <span className="tool-block-section-label">
+              {isError ? t("toolCall.error") : t("toolCall.output")}
+            </span>
+            <pre className="tool-block-pre">{pending ? t("toolCall.running") : formatPayload(output)}</pre>
           </div>
         </div>
       )}

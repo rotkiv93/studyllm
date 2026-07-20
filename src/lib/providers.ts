@@ -1,3 +1,5 @@
+import type { MessageKey } from "./i18n";
+
 export type ProviderType =
   | "gemini"
   | "mistral"
@@ -21,7 +23,10 @@ export interface ProviderManifestEntry {
   suggestedModels: string[];
   /** Flagship free tiers we steer users toward (most generous + reliable for tool calls). */
   recommended: boolean;
-  /** One-line free-tier hint shown in the UI, e.g. quota + tool-calling reliability. */
+  /**
+   * One-line free-tier hint shown in the UI, e.g. quota + tool-calling reliability.
+   * English source text — the UI renders the localized version via `freeTierNoteKey(type)`.
+   */
   freeTierNote: string;
   /** When true, hidden from the add/onboarding pickers but still renders for already-saved rows. */
   deprecated?: boolean;
@@ -137,6 +142,14 @@ export const PROVIDER_MANIFEST: Record<ProviderType, ProviderManifestEntry> = {
 };
 
 export const PROVIDER_TYPES = Object.keys(PROVIDER_MANIFEST) as ProviderType[];
+
+/**
+ * i18n key for a provider's free-tier note. Provider *labels* are brand names and stay untranslated;
+ * only the descriptive quota/tool-support note is localized.
+ */
+export function freeTierNoteKey(type: ProviderType): MessageKey {
+  return `provider.freeTier.${type}` as MessageKey;
+}
 
 /**
  * Provider types offered in the add/onboarding pickers — excludes deprecated ones. Already-saved

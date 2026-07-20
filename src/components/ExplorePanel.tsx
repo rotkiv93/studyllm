@@ -10,6 +10,7 @@ import { ResearchTrace } from "./ResearchTrace";
 import type { ResearchMode } from "../lib/researchModes";
 import type { StreamEvent } from "../lib/providerRouter";
 import type { ProviderRow, RagDocumentRow } from "../lib/db";
+import { useT, type MessageKey } from "../lib/i18n";
 
 /**
  * "Explore how it works" — a hands-on playground for the concepts a non-technical student keeps
@@ -27,14 +28,14 @@ export type ExploreTab =
   | "tools"
   | "research";
 
-const TABS: { id: ExploreTab; label: string }[] = [
-  { id: "lessons", label: "Lessons" },
-  { id: "tokens", label: "Tokens" },
-  { id: "system", label: "System prompt" },
-  { id: "retrieval", label: "Your documents (RAG)" },
-  { id: "grounding", label: "Guessing vs. grounded" },
-  { id: "tools", label: "Tools (MCP)" },
-  { id: "research", label: "Research process" },
+const TABS: { id: ExploreTab; labelKey: MessageKey }[] = [
+  { id: "lessons", labelKey: "explore.tab.lessons" },
+  { id: "tokens", labelKey: "explore.tab.tokens" },
+  { id: "system", labelKey: "explore.tab.system" },
+  { id: "retrieval", labelKey: "explore.tab.retrieval" },
+  { id: "grounding", labelKey: "explore.tab.grounding" },
+  { id: "tools", labelKey: "explore.tab.tools" },
+  { id: "research", labelKey: "explore.tab.research" },
 ];
 
 interface ExplorePanelProps {
@@ -81,6 +82,7 @@ export function ExplorePanel({
   onRunAnswer,
   onRunResearch,
 }: ExplorePanelProps) {
+  const t = useT();
   const [tab, setTab] = useState<ExploreTab>("lessons");
 
   return (
@@ -88,24 +90,24 @@ export function ExplorePanel({
       <div className="settings-panel settings-panel-wide settings-panel-tall">
         <div className="settings-header">
           <h2>
-            <IconCompass size={18} /> Explore how it works
+            <IconCompass size={18} /> {t("explore.title")}
           </h2>
           <button type="button" className="btn btn-ghost btn-sm" onClick={onClose}>
-            Close
+            {t("common.close")}
           </button>
         </div>
 
         <div className="mcp-tabs explore-tabs" role="tablist">
-          {TABS.map((t) => (
+          {TABS.map((item) => (
             <button
-              key={t.id}
+              key={item.id}
               type="button"
               role="tab"
-              aria-selected={tab === t.id}
-              className={`mcp-tab-btn${tab === t.id ? " mcp-tab-btn-active" : ""}`}
-              onClick={() => setTab(t.id)}
+              aria-selected={tab === item.id}
+              className={`mcp-tab-btn${tab === item.id ? " mcp-tab-btn-active" : ""}`}
+              onClick={() => setTab(item.id)}
             >
-              {t.label}
+              {t(item.labelKey)}
             </button>
           ))}
         </div>

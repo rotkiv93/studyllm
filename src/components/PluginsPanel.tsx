@@ -3,6 +3,7 @@ import type { McpServerRow } from "../lib/db";
 import type { OAuthConnector } from "../lib/googleConnectors";
 import { onOAuthProgress, type OAuthProgressPhase } from "../lib/oauth";
 import { IconCheck, IconPlug } from "./icons";
+import { useT, type MessageKey } from "../lib/i18n";
 
 interface Props {
   connectors: OAuthConnector[];
@@ -16,12 +17,17 @@ function describeError(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-const PHASE_LABEL: Record<OAuthProgressPhase, string> = {
-  "opening-browser": "Opening your browser…",
-  waiting: "Waiting for you to finish signing in with Google…",
-  exchanging: "Connecting…",
-  connected: "Connected!",
-  error: "Something went wrong.",
+/** i18n key for a connector's blurb (the `description` on the connector is the English source). */
+function connectorDescriptionKey(connectorId: string): MessageKey {
+  return `connector.${connectorId}.description` as MessageKey;
+}
+
+const PHASE_LABEL_KEY: Record<OAuthProgressPhase, MessageKey> = {
+  "opening-browser": "plugins.phase.openingBrowser",
+  waiting: "plugins.phase.waiting",
+  exchanging: "plugins.phase.exchanging",
+  connected: "plugins.phase.connected",
+  error: "plugins.phase.error",
 };
 
 /**
@@ -30,46 +36,34 @@ const PHASE_LABEL: Record<OAuthProgressPhase, string> = {
  * read-only scopes. Collapsed by default so it doesn't crowd the card.
  */
 function GoogleSetupInstructions() {
+  const t = useT();
+  // The intro sentence embeds a link, so it's split around the `{link}` placeholder.
+  const [introBefore, introAfter] = t("plugins.setup.intro").split("{link}");
   return (
     <details className="plugin-setup">
-      <summary>How to set up Google access</summary>
+      <summary>{t("plugins.setup.summary")}</summary>
       <div className="plugin-setup-body">
         <p>
-          One-time setup in your{" "}
+          {introBefore}
           <a href="https://console.cloud.google.com/" target="_blank" rel="noreferrer">
-            Google Cloud Console
+            {t("plugins.setup.consoleLink")}
           </a>
-          , then click Connect:
+          {introAfter}
         </p>
         <ol>
-          <li>
-            Under <strong>APIs &amp; Services → Library</strong>, enable the Gmail, Google Calendar,
-            Google Tasks, Google Docs, Google Sheets, and Google Drive APIs.
-          </li>
-          <li>
-            Open <strong>APIs &amp; Services → OAuth consent screen</strong> and add these scopes:
-            <code>gmail.modify</code>, <code>gmail.send</code>, <code>calendar</code>,{" "}
-            <code>tasks</code>, <code>documents</code>, <code>spreadsheets</code>, and{" "}
-            <code>drive.readonly</code>.
-          </li>
-          <li>
-            While the consent screen is in "Testing", add your Google address under{" "}
-            <strong>Test users</strong> so Google will let you through.
-          </li>
-          <li>Come back here and click Connect, then approve the permissions in the browser.</li>
+          <li>{t("plugins.setup.step1")}</li>
+          <li>{t("plugins.setup.step2")}</li>
+          <li>{t("plugins.setup.step3")}</li>
+          <li>{t("plugins.setup.step4")}</li>
         </ol>
-        <p className="plugin-setup-note">
-          Already connected before? These permissions were recently broadened — <strong>Disconnect
-          then Connect once more</strong> to grant the new access. Actions that send or delete
-          (send email, trash a message, delete an event or task) ask for your approval each time;
-          you can change that per tool in the Tools panel.
-        </p>
+        <p className="plugin-setup-note">{t("plugins.setup.note")}</p>
       </div>
     </details>
   );
 }
 
 export function PluginsPanel({ connectors, servers, onConnect, onDisconnect, onClose }: Props) {
+  const t = useT();
   const [busyConnectorId, setBusyConnectorId] = useState<string | null>(null);
   const [phaseByConnector, setPhaseByConnector] = useState<Record<string, OAuthProgressPhase>>({});
   const [errorByConnector, setErrorByConnector] = useState<Record<string, string>>({});
@@ -113,21 +107,21 @@ export function PluginsPanel({ connectors, servers, onConnect, onDisconnect, onC
     <div className="settings-overlay">
       <div className="settings-panel settings-panel-wide">
         <div className="settings-header">
-          <h2>Accounts <span className="settings-header-term">(Plugins)</span></h2>
+          <h2>
+            {t("plugins.title")}{" "}
+            <span className="settings-header-term">{t("plugins.titleTerm")}</span>
+          </h2>
           <button type="button" className="btn btn-ghost btn-sm" onClick={onClose}>
-            Close
+            {t("common.close")}
           </button>
         </div>
 
-        <p className="settings-hint">
-          Connect accounts so the assistant can use them, like a Google account for email and
-          files. StudyLLM never sees your Google password — you sign in directly with Google.
-        </p>
+        <p className="settings-hint">{t("plugins.hint")}</p>
 
         <ul className="marketplace-grid">
           {connectors.map((connector) => {
-            const connectedTargets = connector.targets.filter((t) =>
-              servers.some((s) => s.id === t.serverId),
+            const connectedTargets = connector.targets.filter((target) =>
+              servers.some((s) => s.id === target.serverId),
             );
             const isConnected = connectedTargets.length > 0;
             const isBusy = busyConnectorId === connector.id;
@@ -143,38 +137,35 @@ export function PluginsPanel({ connectors, servers, onConnect, onDisconnect, onC
                   </span>
                   <div className="marketplace-card-title">
                     <strong>{connector.displayName}</strong>
-                    <span className="trust-badge trust-official">Official</span>
+                    <span className="trust-badge trust-official">{t("plugins.official")}</span>
                   </div>
                 </div>
-                <p className="marketplace-card-desc">{connector.description}</p>
+                <p className="marketplace-card-desc">{t(connectorDescriptionKey(connector.id))}</p>
 
                 {connector.id === "google" && <GoogleSetupInstructions />}
 
                 {isConnected && (
                   <div className="plugin-connected-list">
-                    {connectedTargets.map((t) => (
+                    {connectedTargets.map((target) => (
                       <span
-                        key={t.serverId}
+                        key={target.serverId}
                         className={`mcp-status mcp-status-${hasError ? "error" : "running"}`}
                       >
-                        {t.name}: {hasError ? "error" : "connected"}
+                        {target.name}:{" "}
+                        {hasError ? t("plugins.errorLower") : t("plugins.connectedLower")}
                       </span>
                     ))}
                   </div>
                 )}
 
-                {isBusy && phase && (
-                  <p className="settings-hint">{PHASE_LABEL[phase]}</p>
-                )}
-                {hasError && (
-                  <p className="error">{errorMessage || "Couldn't connect — please try again."}</p>
-                )}
+                {isBusy && phase && <p className="settings-hint">{t(PHASE_LABEL_KEY[phase])}</p>}
+                {hasError && <p className="error">{errorMessage || t("plugins.connectFailed")}</p>}
 
                 <div className="marketplace-card-footer">
                   {isConnected ? (
                     <>
                       <span className="marketplace-added">
-                        <IconCheck size={14} /> Connected
+                        <IconCheck size={14} /> {t("plugins.connected")}
                       </span>
                       <button
                         type="button"
@@ -183,11 +174,11 @@ export function PluginsPanel({ connectors, servers, onConnect, onDisconnect, onC
                         onClick={() =>
                           handleDisconnect(
                             connector,
-                            connectedTargets.map((t) => t.serverId),
+                            connectedTargets.map((target) => target.serverId),
                           )
                         }
                       >
-                        Disconnect
+                        {t("plugins.disconnect")}
                       </button>
                     </>
                   ) : (
@@ -197,7 +188,11 @@ export function PluginsPanel({ connectors, servers, onConnect, onDisconnect, onC
                       disabled={isBusy}
                       onClick={() => handleConnect(connector)}
                     >
-                      {isBusy ? "Connecting…" : hasError ? "Try again" : "Connect Google Account"}
+                      {isBusy
+                        ? t("plugins.connecting")
+                        : hasError
+                          ? t("plugins.tryAgain")
+                          : t("plugins.connectGoogle")}
                     </button>
                   )}
                 </div>

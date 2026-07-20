@@ -14,7 +14,8 @@ import {
   type ToolPermissionMode,
 } from "../lib/mcp";
 import { McpMarketplace, type ResolvedInstall } from "./McpMarketplace";
-import { trustTierLabel, type TrustTier } from "../lib/mcpCatalog";
+import { trustTierLabelKey, type TrustTier } from "../lib/mcpCatalog";
+import { useT, type MessageKey } from "../lib/i18n";
 
 const MAX_LOG_LINES_PER_SERVER = 300;
 
@@ -71,6 +72,7 @@ function ToolPermissionRow({
   permission: ToolPermissionMode;
   onChange: (mode: ToolPermissionMode) => void;
 }) {
+  const t = useT();
   return (
     <li className="tool-perm-row">
       <div className="tool-perm-info">
@@ -78,9 +80,9 @@ function ToolPermissionRow({
         {tool.description && <span className="tool-perm-desc">{tool.description}</span>}
       </div>
       <select value={permission} onChange={(e) => onChange(e.currentTarget.value as ToolPermissionMode)}>
-        <option value="allow">Allow</option>
-        <option value="ask">Ask every time</option>
-        <option value="deny">Deny (hidden)</option>
+        <option value="allow">{t("mcp.perm.allow")}</option>
+        <option value="ask">{t("mcp.perm.ask")}</option>
+        <option value="deny">{t("mcp.perm.deny")}</option>
       </select>
     </li>
   );
@@ -102,6 +104,7 @@ function EditServerForm({
   onEditFilesystemPath: (newPath: string) => Promise<void>;
   onCancel: () => void;
 }) {
+  const t = useT();
   const [name, setName] = useState(server.name);
   const [url, setUrl] = useState(server.url ?? "");
   const envRefs = JSON.parse(server.env_refs_json || "{}") as Record<string, { secret: boolean; value: string }>;
@@ -181,50 +184,52 @@ function EditServerForm({
       <form onSubmit={handleSave}>
         {formError && <p className="error">{formError}</p>}
         <label>
-          Name
+          {t("mcp.edit.name")}
           <input value={name} onChange={(e) => setName(e.currentTarget.value)} />
         </label>
 
         {server.kind === "filesystem" && (
           <label>
-            Folder
+            {t("mcp.edit.folder")}
             <div className="mcp-path-edit">
               <span className="provider-model">{server.scoped_path}</span>
               <button type="button" className="btn btn-secondary btn-sm" onClick={handlePickFolder} disabled={busy}>
-                Change folder…
+                {t("mcp.edit.changeFolder")}
               </button>
             </div>
           </label>
         )}
 
         {server.oauth_provider ? (
-          <p className="settings-hint">Manage this connection from the Plugins panel.</p>
+          <p className="settings-hint">{t("mcp.edit.oauthHint")}</p>
         ) : (
           <>
             {server.transport === "remote-http" && (
               <label>
-                URL
+                {t("mcp.edit.url")}
                 <input value={url} onChange={(e) => setUrl(e.currentTarget.value)} placeholder="https://…" />
               </label>
             )}
 
             {(Object.keys(envRefs).length > 0 || newVars.length > 0) && (
               <div className="mcp-env-edit">
-                <span className="tool-block-section-label">Environment variables</span>
+                <span className="tool-block-section-label">{t("mcp.edit.envVars")}</span>
                 {Object.entries(envRefs).map(([key, ref]) => (
                   <div key={key} className="mcp-env-row">
                     <label className={removedKeys.has(key) ? "mcp-env-removed" : ""}>
                       {key}
-                      {ref.secret && <span className="trust-badge trust-community"> secret</span>}
+                      {ref.secret && (
+                        <span className="trust-badge trust-community"> {t("mcp.edit.secret")}</span>
+                      )}
                       <input
                         type={ref.secret ? "password" : "text"}
                         value={envDrafts[key] ?? ""}
                         onChange={(e) => setEnvDrafts((prev) => ({ ...prev, [key]: e.currentTarget.value }))}
                         placeholder={
                           removedKeys.has(key)
-                            ? "Will be removed on save"
+                            ? t("mcp.edit.willRemove")
                             : ref.secret
-                              ? "Leave blank to keep current value"
+                              ? t("mcp.edit.keepCurrent")
                               : ref.value
                         }
                         disabled={removedKeys.has(key)}
@@ -235,7 +240,7 @@ function EditServerForm({
                       className={`btn btn-sm ${removedKeys.has(key) ? "btn-secondary" : "btn-danger"}`}
                       onClick={() => toggleRemoved(key)}
                     >
-                      {removedKeys.has(key) ? "Undo" : "Remove"}
+                      {removedKeys.has(key) ? t("common.undo") : t("common.remove")}
                     </button>
                   </div>
                 ))}
@@ -243,7 +248,7 @@ function EditServerForm({
                 {newVars.map((v, i) => (
                   <div key={i} className="mcp-env-row">
                     <label>
-                      Name
+                      {t("mcp.edit.name")}
                       <input
                         value={v.name}
                         onChange={(e) => updateNewVar(i, { name: e.currentTarget.value })}
@@ -251,7 +256,7 @@ function EditServerForm({
                       />
                     </label>
                     <label>
-                      Value
+                      {t("mcp.edit.value")}
                       <input
                         type={v.isSecret ? "password" : "text"}
                         value={v.value}
@@ -264,10 +269,10 @@ function EditServerForm({
                         checked={v.isSecret}
                         onChange={(e) => updateNewVar(i, { isSecret: e.currentTarget.checked })}
                       />
-                      secret
+                      {t("mcp.edit.secret")}
                     </label>
                     <button type="button" className="btn btn-danger btn-sm" onClick={() => removeNewVarRow(i)}>
-                      Remove
+                      {t("common.remove")}
                     </button>
                   </div>
                 ))}
@@ -275,17 +280,17 @@ function EditServerForm({
             )}
 
             <button type="button" className="btn btn-secondary btn-sm" onClick={addNewVarRow}>
-              + Add variable
+              {t("mcp.edit.addVariable")}
             </button>
           </>
         )}
 
         <div className="provider-edit-actions">
           <button type="submit" className="btn btn-primary btn-sm" disabled={busy}>
-            Save
+            {t("common.save")}
           </button>
           <button type="button" className="btn btn-ghost btn-sm" onClick={onCancel} disabled={busy}>
-            Cancel
+            {t("common.cancel")}
           </button>
         </div>
       </form>
@@ -305,6 +310,7 @@ export function McpPanel({
   onInstall,
   onClose,
 }: Props) {
+  const t = useT();
   const [tab, setTab] = useState<PanelTab>("installed");
   const [statuses, setStatuses] = useState<Record<string, Status>>({});
   const [statusMessages, setStatusMessages] = useState<Record<string, string>>({});
@@ -360,7 +366,7 @@ export function McpPanel({
     try {
       await onAddFilesystem(picked);
     } catch (err) {
-      setFormError(`Couldn't add filesystem access: ${describeError(err)}`);
+      setFormError(t("mcp.err.addFilesystem", { error: describeError(err) }));
     } finally {
       setBusy(false);
     }
@@ -371,7 +377,7 @@ export function McpPanel({
     try {
       await onStart(server);
     } catch (err) {
-      setFormError(`Couldn't start ${server.name}: ${describeError(err)}`);
+      setFormError(t("mcp.err.start", { name: server.name, error: describeError(err) }));
     }
   }
 
@@ -380,7 +386,7 @@ export function McpPanel({
     try {
       await stopMcpServer(server.id);
     } catch (err) {
-      setFormError(`Couldn't stop ${server.name}: ${describeError(err)}`);
+      setFormError(t("mcp.err.stop", { name: server.name, error: describeError(err) }));
     }
   }
 
@@ -392,7 +398,7 @@ export function McpPanel({
       }
       await onRemove(server.id);
     } catch (err) {
-      setFormError(`Couldn't remove ${server.name}: ${describeError(err)}`);
+      setFormError(t("mcp.err.remove", { name: server.name, error: describeError(err) }));
     }
   }
 
@@ -443,19 +449,23 @@ export function McpPanel({
         <div className="provider-row-main">
           <strong>
             {s.name}{" "}
-            <span className={`trust-badge trust-${s.trust_tier}`}>{trustTierLabel(s.trust_tier as TrustTier)}</span>
+            <span className={`trust-badge trust-${s.trust_tier}`}>
+              {t(trustTierLabelKey(s.trust_tier as TrustTier))}
+            </span>
           </strong>
           <span className="provider-model">
             {s.scoped_path ?? s.url ?? s.command}
             {" · "}
-            <span className={`mcp-status mcp-status-${status}`}>{status}</span>
+            <span className={`mcp-status mcp-status-${status}`}>
+              {t(`mcp.status.${status}` as MessageKey)}
+            </span>
             {status === "error" && statusMessages[s.id] ? `: ${statusMessages[s.id]}` : ""}
           </span>
         </div>
         <div className="provider-row-actions">
           {status === "running" ? (
             <button type="button" className="btn btn-secondary btn-sm" onClick={() => handleStop(s)}>
-              Stop
+              {t("mcp.stop")}
             </button>
           ) : (
             <button
@@ -464,7 +474,7 @@ export function McpPanel({
               onClick={() => handleStart(s)}
               disabled={status === "starting"}
             >
-              {status === "starting" ? "Starting…" : "Start"}
+              {status === "starting" ? t("mcp.starting") : t("mcp.start")}
             </button>
           )}
           <button
@@ -472,41 +482,47 @@ export function McpPanel({
             className="btn btn-secondary btn-sm"
             onClick={() => setManagingToolsId(managingToolsId === s.id ? null : s.id)}
             disabled={!tools || tools.length === 0}
-            title={!tools || tools.length === 0 ? "Start the server to see its tools" : "Configure this server's tools"}
+            title={
+              !tools || tools.length === 0
+                ? t("mcp.toolsDisabledTitle")
+                : t("mcp.toolsTitle")
+            }
           >
-            Tools{tools ? ` (${tools.length})` : ""}
+            {tools ? t("mcp.toolsWithCount", { count: tools.length }) : t("mcp.tools")}
           </button>
           <button
             type="button"
             className="btn btn-secondary btn-sm"
             onClick={() => setViewingLogsId(viewingLogsId === s.id ? null : s.id)}
             disabled={s.transport !== "stdio"}
-            title={s.transport !== "stdio" ? "Logs are only available for locally-spawned servers" : "View this server's stderr output"}
+            title={
+              s.transport !== "stdio" ? t("mcp.logsDisabledTitle") : t("mcp.logsTitle")
+            }
           >
-            Logs{(logsByServer[s.id]?.length ?? 0) > 0 ? ` (${logsByServer[s.id].length})` : ""}
+            {(logsByServer[s.id]?.length ?? 0) > 0
+              ? t("mcp.logsWithCount", { count: logsByServer[s.id].length })
+              : t("mcp.logs")}
           </button>
-          <label className="mcp-autostart-toggle" title="Start this server automatically when the app launches">
+          <label className="mcp-autostart-toggle" title={t("mcp.autostartTitle")}>
             <input
               type="checkbox"
               checked={!!s.autostart}
               onChange={(e) => onUpdateServer(s.id, { autostart: e.currentTarget.checked ? 1 : 0 })}
             />
-            Autostart
+            {t("mcp.autostart")}
           </label>
           <button type="button" className="btn btn-secondary btn-sm" onClick={() => setEditingId(s.id)}>
-            Edit
+            {t("common.edit")}
           </button>
           <button type="button" className="btn btn-danger btn-sm" onClick={() => handleRemove(s)}>
-            Remove
+            {t("common.remove")}
           </button>
         </div>
 
         {managingToolsId === s.id && tools && tools.length > 0 && (
           <>
             {isCachedToolList && (
-              <p className="settings-hint">
-                Showing the tool list from the last time this server ran — start it to refresh.
-              </p>
+              <p className="settings-hint">{t("mcp.cachedToolsHint")}</p>
             )}
             <ul className="tool-perm-list">
               {tools.map((t) => (
@@ -526,7 +542,7 @@ export function McpPanel({
             {logsByServer[s.id] && logsByServer[s.id].length > 0 ? (
               <pre className="tool-block-pre">{logsByServer[s.id].join("\n")}</pre>
             ) : (
-              <p className="settings-hint">No log output yet — logs appear once the server writes to stderr.</p>
+              <p className="settings-hint">{t("mcp.noLogs")}</p>
             )}
           </div>
         )}
@@ -538,9 +554,11 @@ export function McpPanel({
     <div className="settings-overlay">
       <div className="settings-panel settings-panel-wide settings-panel-tall">
         <div className="settings-header">
-          <h2>Tools &amp; Connections <span className="settings-header-term">(MCP)</span></h2>
+          <h2>
+            {t("mcp.title")} <span className="settings-header-term">{t("mcp.titleTerm")}</span>
+          </h2>
           <button type="button" className="btn btn-ghost btn-sm" onClick={onClose}>
-            Close
+            {t("common.close")}
           </button>
         </div>
 
@@ -552,7 +570,7 @@ export function McpPanel({
             className={`mcp-tab-btn${tab === "installed" ? " mcp-tab-btn-active" : ""}`}
             onClick={() => setTab("installed")}
           >
-            Installed
+            {t("mcp.tab.installed")}
           </button>
           <button
             type="button"
@@ -561,31 +579,26 @@ export function McpPanel({
             className={`mcp-tab-btn${tab === "discover" ? " mcp-tab-btn-active" : ""}`}
             onClick={() => setTab("discover")}
           >
-            Discover
+            {t("mcp.tab.discover")}
           </button>
         </div>
 
         {tab === "installed" ? (
           <>
-            <p className="settings-hint">
-              These give the assistant extra tools — like reading and writing files on this computer,
-              or searching the web. (The technical name for them is “MCP servers.”) Only add ones you
-              trust. Set a tool to "Ask every time" to approve each call, or "Deny" to hide it from
-              the assistant entirely. Every allowed tool call is shown in the chat.
-            </p>
+            <p className="settings-hint">{t("mcp.intro")}</p>
 
             <ul className="mcp-trust-legend">
               <li>
-                <span className="trust-badge trust-official">Official</span>
-                Published by the tool's own makers.
+                <span className="trust-badge trust-official">{t("trust.official")}</span>
+                {t("mcp.legend.official")}
               </li>
               <li>
-                <span className="trust-badge trust-verified">Verified</span>
-                From a known public code repository.
+                <span className="trust-badge trust-verified">{t("trust.verified")}</span>
+                {t("mcp.legend.verified")}
               </li>
               <li>
-                <span className="trust-badge trust-community">Community</span>
-                From an independent developer — runs with your permissions, so add with care.
+                <span className="trust-badge trust-community">{t("trust.community")}</span>
+                {t("mcp.legend.community")}
               </li>
             </ul>
 
@@ -594,37 +607,39 @@ export function McpPanel({
 
             <input
               className="mcp-search"
-              placeholder="Search installed servers…"
+              placeholder={t("mcp.searchPlaceholder")}
               value={search}
               onChange={(e) => setSearch(e.currentTarget.value)}
             />
 
-            <h3 className="mcp-section-title">Pinned</h3>
+            <h3 className="mcp-section-title">{t("mcp.section.pinned")}</h3>
             <ul className="provider-list mcp-card-list">
               {pinned.map(renderServerCard)}
               {!hasFilesystem && !query && (
                 <li className="mcp-server-card mcp-server-card-empty">
                   <div className="provider-row-main">
-                    <strong>Filesystem</strong>
-                    <span className="provider-model">Let the assistant read/write files in a folder you choose.</span>
+                    <strong>{t("mcp.filesystem.name")}</strong>
+                    <span className="provider-model">{t("mcp.filesystem.desc")}</span>
                   </div>
                   <button type="button" className="btn btn-secondary btn-sm" onClick={handleAddFilesystem} disabled={busy}>
-                    {busy ? "Adding…" : "Add…"}
+                    {busy ? t("mcp.adding") : t("mcp.addEllipsis")}
                   </button>
                 </li>
               )}
               {pinned.length === 0 && (query || hasFilesystem) && (
                 <li className="empty-state">
-                  {query ? "No pinned servers match your search." : "No pinned servers."}
+                  {query ? t("mcp.noPinnedMatch") : t("mcp.noPinned")}
                 </li>
               )}
             </ul>
 
-            <h3 className="mcp-section-title">All servers</h3>
+            <h3 className="mcp-section-title">{t("mcp.section.all")}</h3>
             <ul className="provider-list mcp-card-list">
               {rest.map(renderServerCard)}
               {rest.length === 0 && (
-                <li className="empty-state">{query ? "No servers match your search." : "No other servers installed."}</li>
+                <li className="empty-state">
+                  {query ? t("mcp.noServersMatch") : t("mcp.noOtherServers")}
+                </li>
               )}
             </ul>
           </>
