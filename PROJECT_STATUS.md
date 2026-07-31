@@ -272,6 +272,12 @@ any future OAuth remote-HTTP server, even though Google no longer uses that path
 - Catalog cache evicts entries older than `CATALOG_CACHE_TTL_DAYS` (14) only after a successful
   *live* search, never on the cache-fallback path — so a long offline stretch can't wipe the fallback.
 - Only servers with `autostart` set start on launch; a failed autostart just leaves it stopped.
+- The curated **Web Reader** (`mcp-server-fetch`) is launched with an explicit `--with "mcp<2"` pin
+  (`FETCH_SDK_PIN` in `src\lib\curatedMcp.ts`): upstream declares an unbounded `mcp>=1.1.3`, so uvx
+  otherwise resolves the 2.x Python SDK, which renamed `McpError` → `MCPError` and makes the server
+  die on import. Because an install freezes its argv into `args_json`, `repairStoredMcpArgs` in
+  `App.tsx` rewrites already-installed rows at startup. Drop both once upstream ships a 2.x-compatible
+  build.
 
 **RAG / Research**
 - Retrieval is **O(n)** cosine in TypeScript over every stored chunk — fine at tens of docs, not

@@ -81,7 +81,7 @@ import {
   researchModeKeys,
   type ResearchMode,
 } from "./lib/researchModes";
-import { CURATED_ENTRIES } from "./lib/curatedMcp";
+import { CURATED_ENTRIES, repairCuratedArgs } from "./lib/curatedMcp";
 import { sanitizeToolSchema } from "./lib/toolSchema";
 import { computeTrustTier } from "./lib/mcpCatalog";
 import {
@@ -212,6 +212,31 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
+/**
+ * Heal servers whose stored argv was persisted before the curated catalog fixed it (see
+ * `repairCuratedArgs`) — an install writes `args_json` once, so editing CURATED_ENTRIES alone
+ * leaves existing rows launching the broken command forever. Runs at startup, before autostart,
+ * and rewrites only the rows that actually need it.
+ */
+async function repairStoredMcpArgs(rows: McpServerRow[]): Promise<McpServerRow[]> {
+  return Promise.all(
+    rows.map(async (row) => {
+      let args: unknown;
+      try {
+        args = JSON.parse(row.args_json);
+      } catch {
+        return row;
+      }
+      if (!Array.isArray(args) || !args.every((a) => typeof a === "string")) return row;
+      const repaired = repairCuratedArgs(row.command, args as string[]);
+      if (!repaired) return row;
+      const args_json = JSON.stringify(repaired);
+      await updateMcpServer(row.id, { args_json });
+      return { ...row, args_json };
+    }),
+  );
+}
+
 export default function App() {
   const t = useT();
   const [providers, setProviders] = useState<ProviderRow[]>([]);
@@ -287,7 +312,7 @@ export default function App() {
     refreshConversations();
     refreshRagDocuments();
     (async () => {
-      const rows = await listMcpServers();
+      const rows = await repairStoredMcpArgs(await listMcpServers());
       setMcpServers(rows);
       for (const server of rows.filter((s) => s.autostart)) {
         try {

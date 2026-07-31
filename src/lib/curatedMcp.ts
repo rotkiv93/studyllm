@@ -13,6 +13,28 @@
 
 import type { CatalogEntry } from "./mcp";
 
+/**
+ * Upstream `mcp-server-fetch` declares an unbounded `mcp>=1.1.3`, so uvx resolves the 2.x Python
+ * SDK — which renamed `McpError` to `MCPError`. The server still imports the old name and dies at
+ * startup with `ImportError: cannot import name 'McpError' from 'mcp.shared.exceptions'`. Pinning
+ * the SDK below 2.0 for this one server keeps it launchable; drop the pin once upstream publishes
+ * a build compatible with the 2.x SDK.
+ */
+const FETCH_SDK_PIN = ["--with", "mcp<2"];
+const FETCH_PACKAGE = "mcp-server-fetch";
+
+/**
+ * Repair the stored argv of a server installed before {@link FETCH_SDK_PIN} existed — the row in
+ * SQLite still holds the bare `["mcp-server-fetch"]` that crashes on start, and the curated
+ * catalog only governs *new* installs. Returns the corrected argv, or `null` when the row is
+ * already fine and must be left untouched.
+ */
+export function repairCuratedArgs(command: string, args: string[]): string[] | null {
+  if (command !== "uvx" || !args.includes(FETCH_PACKAGE)) return null;
+  if (args.some((a) => a === FETCH_SDK_PIN[1])) return null;
+  return [...FETCH_SDK_PIN, ...args];
+}
+
 export const CURATED_ENTRIES: CatalogEntry[] = [
   {
     id: "curated:notion",
@@ -102,7 +124,7 @@ export const CURATED_ENTRIES: CatalogEntry[] = [
       "text, a UN report. No account or key needed.",
     version: null,
     repositoryUrl: "https://github.com/modelcontextprotocol/servers/tree/main/src/fetch",
-    install: { kind: "uvx", args: ["mcp-server-fetch"], positionalArgs: [] },
+    install: { kind: "uvx", args: [...FETCH_SDK_PIN, FETCH_PACKAGE], positionalArgs: [] },
     requiredEnv: [],
   },
   {
