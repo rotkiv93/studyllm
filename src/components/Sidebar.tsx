@@ -10,6 +10,7 @@ interface Props {
   onToggleCollapsed: () => void;
   disabled: boolean;
   mcpRunningCount: number;
+  pluginsRunningCount: number;
   activeProviderCount: number;
   onNewChat: () => void;
   onSelectConversation: (id: string) => void;
@@ -34,6 +35,7 @@ export function Sidebar({
   onToggleCollapsed,
   disabled,
   mcpRunningCount,
+  pluginsRunningCount,
   activeProviderCount,
   onNewChat,
   onSelectConversation,
@@ -57,7 +59,7 @@ export function Sidebar({
   const configItems = [
     { key: "providers", icon: IconKey, label: t("nav.providers"), onClick: onOpenProviders, dot: activeProviderCount === 0, badge: 0 },
     { key: "mcp", icon: IconTool, label: t("nav.mcp"), onClick: onOpenMcp, dot: false, badge: mcpRunningCount },
-    { key: "plugins", icon: IconPlug, label: t("nav.plugins"), onClick: onOpenPlugins, dot: false, badge: 0 },
+    { key: "plugins", icon: IconPlug, label: t("nav.plugins"), onClick: onOpenPlugins, dot: false, badge: pluginsRunningCount },
     { key: "diagnostics", icon: IconSettings, label: t("nav.diagnostics"), onClick: onOpenAppSettings, dot: false, badge: 0 },
   ];
   // Surface the most important config status on the collapsed group gear so nothing hides.

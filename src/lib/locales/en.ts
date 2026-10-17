@@ -287,25 +287,40 @@ export const en: Messages = {
   "plugins.disconnect": "Disconnect",
   "plugins.connecting": "Connecting…",
   "plugins.tryAgain": "Try again",
-  "plugins.connectGoogle": "Connect Google Account",
   "plugins.connectFailed": "Couldn't connect — please try again.",
   "plugins.phase.openingBrowser": "Opening your browser…",
-  "plugins.phase.waiting": "Waiting for you to finish signing in with Google…",
+  "plugins.phase.waiting": "Waiting for you to finish signing in…",
   "plugins.phase.exchanging": "Connecting…",
   "plugins.phase.connected": "Connected!",
   "plugins.phase.error": "Something went wrong.",
   "connector.google.description":
-    "Connect your Google account so the assistant can work with your Gmail, Calendar, Tasks, Drive, Docs, and Sheets — reading and (with your approval) sending, creating, and editing.",
+    "Connect your Google account so the assistant can work with your Gmail, Calendar, Tasks, Drive, Docs, and Sheets — reading and (with your approval) sending, creating, and editing. Drive can also create files and folders for your notes.",
   "plugins.setup.summary": "How to set up Google access",
   "plugins.setup.intro": "One-time setup in your {link}, then click Connect:",
   "plugins.setup.consoleLink": "Google Cloud Console",
   "plugins.setup.step1":
     "Under APIs & Services → Library, enable the Gmail, Google Calendar, Google Tasks, Google Docs, Google Sheets, and Google Drive APIs.",
   "plugins.setup.step2":
-    "Open APIs & Services → OAuth consent screen and add these scopes: gmail.modify, gmail.send, calendar, tasks, documents, spreadsheets, and drive.readonly.",
+    "Open APIs & Services → OAuth consent screen and add these scopes: gmail.modify, gmail.send, calendar, tasks, documents, spreadsheets, drive.readonly, and drive.file.",
   "plugins.setup.step3":
     "While the consent screen is in \"Testing\", add your Google address under Test users so Google will let you through.",
   "plugins.setup.step4": "Come back here and click Connect, then approve the permissions in the browser.",
+  "plugins.connect.google": "Connect Google Account",
+  "plugins.notLive": "Some services aren't connected right now — press Reconnect to restore them.",
+  "plugins.disableAll": "Turn off all tools",
+  "plugins.enableAll": "Turn all tools back on",
+  "plugins.serviceOff": "all off",
+  "plugins.status.connected": "Connected",
+  "plugins.status.reconnect": "Needs reconnecting",
+  "plugins.status.off": "Not connected",
+  "plugins.reconnect": "Reconnect",
+  "plugins.perm.off": "Off",
+  "plugins.kind.read": "Only reads your data",
+  "plugins.kind.write": "Creates or edits data",
+  "plugins.kind.danger": "Sends, overwrites or deletes",
+  "plugins.tileLocked": "Connect to enable",
+  "plugins.toolsCount": "{count} on",
+  "plugins.noTools": "No tools yet — reconnect this account to load them.",
   // ── Providers panel ────────────────────────────────────────────────
   "providers.title": "Providers",
   "providers.hint":
@@ -426,7 +441,7 @@ export const en: Messages = {
   "chat.emptySubtitle": "Ask anything or drag in a file. The AI's settings are in the bar on the right.",
 
   "plugins.setup.note":
-    "Already connected before? These permissions were recently broadened — Disconnect then Connect once more to grant the new access. Actions that send or delete (send email, trash a message, delete an event or task) ask for your approval each time; you can change that per tool in the Tools panel.",
+    "Already connected before? These permissions were recently broadened (Drive can now create files) — Disconnect then Connect once more to grant the new access. Actions that send, overwrite or delete (send email, trash a message, delete an event or task, update a file) ask for your approval each time; you can change that per tool right here, under each service.",
 
   // ── Trust tiers (shared: McpPanel + McpMarketplace) ─────────────────
   "trust.official": "Official",
@@ -533,6 +548,12 @@ export const en: Messages = {
   "market.c.arxiv.try": "Search papers on evaluating language models and explain the most recent one.",
   "market.c.memory.does": "Remembers facts about you and your projects between conversations, stored on your computer.",
   "market.c.memory.try": "Remember that I’m writing a paper on Brexit for European politics.",
+  "market.c.youtube.does": "Reads the transcript of any YouTube video, so it can summarise a lecture or find a quote.",
+  "market.c.youtube.try": "Summarise this lecture in ten bullet points and list the key terms: https://youtube.com/watch?v=…",
+  "market.c.obsidian.does": "Reads, searches and writes notes in your Obsidian vault.",
+  "market.c.obsidian.try": "Find my notes about the French Revolution and write a one-page study summary as a new note.",
+  "market.c.zotero.does": "Searches your Zotero library and pulls out reference details and citations.",
+  "market.c.zotero.try": "List the papers in my library about nuclear deterrence and give me their citations.",
   "market.c.time.does": "Tells the current time in any city and converts between time zones.",
   "market.c.time.try": "If it’s 10:00 in Madrid, what time is it in Tokyo and in New York?",
   "market.c.notion.does": "Reads and edits your Notion pages and databases.",

@@ -288,25 +288,40 @@ export const es = {
   "plugins.disconnect": "Desconectar",
   "plugins.connecting": "Conectando…",
   "plugins.tryAgain": "Reintentar",
-  "plugins.connectGoogle": "Conectar cuenta de Google",
   "plugins.connectFailed": "No se pudo conectar. Inténtalo de nuevo.",
   "plugins.phase.openingBrowser": "Abriendo tu navegador…",
-  "plugins.phase.waiting": "Esperando a que termines de iniciar sesión con Google…",
+  "plugins.phase.waiting": "Esperando a que termines de iniciar sesión…",
   "plugins.phase.exchanging": "Conectando…",
   "plugins.phase.connected": "¡Conectado!",
   "plugins.phase.error": "Algo salió mal.",
   "connector.google.description":
-    "Conecta tu cuenta de Google para que el asistente pueda trabajar con tu Gmail, Calendar, Tasks, Drive, Docs y Sheets: leyendo y (con tu aprobación) enviando, creando y editando.",
+    "Conecta tu cuenta de Google para que el asistente pueda trabajar con tu Gmail, Calendar, Tasks, Drive, Docs y Sheets: leyendo y (con tu aprobación) enviando, creando y editando. Drive también puede crear archivos y carpetas para tus apuntes.",
   "plugins.setup.summary": "Cómo configurar el acceso a Google",
   "plugins.setup.intro": "Configuración única en tu {link}, y después pulsa Conectar:",
   "plugins.setup.consoleLink": "Consola de Google Cloud",
   "plugins.setup.step1":
     "En APIs y servicios → Biblioteca, activa las APIs de Gmail, Google Calendar, Google Tasks, Google Docs, Google Sheets y Google Drive.",
   "plugins.setup.step2":
-    "Abre APIs y servicios → Pantalla de consentimiento de OAuth y añade estos permisos (scopes): gmail.modify, gmail.send, calendar, tasks, documents, spreadsheets y drive.readonly.",
+    "Abre APIs y servicios → Pantalla de consentimiento de OAuth y añade estos permisos (scopes): gmail.modify, gmail.send, calendar, tasks, documents, spreadsheets, drive.readonly y drive.file.",
   "plugins.setup.step3":
     "Mientras la pantalla de consentimiento esté en «Testing», añade tu dirección de Google en Usuarios de prueba para que Google te deje pasar.",
   "plugins.setup.step4": "Vuelve aquí, pulsa Conectar y aprueba los permisos en el navegador.",
+  "plugins.connect.google": "Conectar cuenta de Google",
+  "plugins.notLive": "Algunos servicios no están conectados ahora mismo: pulsa Reconectar para restaurarlos.",
+  "plugins.disableAll": "Desactivar todas las herramientas",
+  "plugins.enableAll": "Reactivar todas las herramientas",
+  "plugins.serviceOff": "todo apagado",
+  "plugins.status.connected": "Conectado",
+  "plugins.status.reconnect": "Hay que reconectar",
+  "plugins.status.off": "Sin conectar",
+  "plugins.reconnect": "Reconectar",
+  "plugins.perm.off": "Apagada",
+  "plugins.kind.read": "Solo lee tus datos",
+  "plugins.kind.write": "Crea o edita datos",
+  "plugins.kind.danger": "Envía, sobrescribe o elimina",
+  "plugins.tileLocked": "Conecta para activar",
+  "plugins.toolsCount": "{count} activas",
+  "plugins.noTools": "Aún no hay herramientas: vuelve a conectar esta cuenta para cargarlas.",
   // ── Providers panel ────────────────────────────────────────────────
   "providers.title": "Proveedores",
   "providers.hint":
@@ -427,7 +442,7 @@ export const es = {
   "chat.emptySubtitle": "Pregunta lo que quieras o arrastra un archivo. Los ajustes de la IA están en la barra de la derecha.",
 
   "plugins.setup.note":
-    "¿Ya te habías conectado antes? Estos permisos se han ampliado hace poco: desconecta y vuelve a conectar una vez para conceder el nuevo acceso. Las acciones que envían o eliminan (enviar un correo, mover un mensaje a la papelera, borrar un evento o una tarea) piden tu aprobación cada vez; puedes cambiarlo por herramienta en el panel de Herramientas.",
+    "¿Ya te habías conectado antes? Estos permisos se han ampliado hace poco (Drive ya puede crear archivos): desconecta y vuelve a conectar una vez para conceder el nuevo acceso. Las acciones que envían, sobrescriben o eliminan (enviar un correo, mover un mensaje a la papelera, borrar un evento o una tarea, actualizar un archivo) piden tu aprobación cada vez; puedes cambiarlo por herramienta aquí mismo, bajo cada servicio.",
 
   // ── Trust tiers (shared: McpPanel + McpMarketplace) ─────────────────
   "trust.official": "Oficial",
@@ -536,6 +551,12 @@ export const es = {
   "market.c.arxiv.try": "Busca artículos sobre evaluación de modelos de lenguaje y explícame el más reciente.",
   "market.c.memory.does": "Recuerda datos sobre ti y tus proyectos entre conversaciones, guardados en tu ordenador.",
   "market.c.memory.try": "Recuerda que preparo un trabajo sobre el Brexit para política europea.",
+  "market.c.youtube.does": "Lee la transcripción de cualquier vídeo de YouTube, para resumir una clase o encontrar una cita.",
+  "market.c.youtube.try": "Resume esta clase en diez puntos y lista los términos clave: https://youtube.com/watch?v=…",
+  "market.c.obsidian.does": "Lee, busca y escribe notas en tu bóveda de Obsidian.",
+  "market.c.obsidian.try": "Busca mis notas sobre la Revolución Francesa y escribe un resumen de estudio de una página como nota nueva.",
+  "market.c.zotero.does": "Busca en tu biblioteca de Zotero y saca los datos de las referencias y sus citas.",
+  "market.c.zotero.try": "Lista los artículos de mi biblioteca sobre disuasión nuclear y dame sus citas.",
   "market.c.time.does": "Dice la hora actual en cualquier ciudad y convierte entre husos horarios.",
   "market.c.time.try": "Si son las 10:00 en Madrid, ¿qué hora es en Tokio y en Nueva York?",
   "market.c.notion.does": "Lee y edita tus páginas y bases de datos de Notion.",

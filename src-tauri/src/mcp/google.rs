@@ -839,6 +839,54 @@ fn drive_tools() -> Vec<McpToolInfo> {
                 "required": ["file_id"]
             }),
         },
+        McpToolInfo {
+            name: "drive_create_folder".to_string(),
+            description: Some(
+                "Create a folder in the user's Google Drive. Optionally nest it inside another folder by passing that folder's id as parent_id."
+                    .to_string(),
+            ),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "name": { "type": "string", "description": "Folder name" },
+                    "parent_id": { "type": "string", "description": "Optional id of the parent folder (default: My Drive root)" }
+                },
+                "required": ["name"]
+            }),
+        },
+        McpToolInfo {
+            name: "drive_create_file".to_string(),
+            description: Some(
+                "Create a new text file (notes, summary, CSV, Markdown…) in Google Drive with the given content. Returns the new file's id and link."
+                    .to_string(),
+            ),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "name": { "type": "string", "description": "File name including extension, e.g. 'notes.md'" },
+                    "content": { "type": "string", "description": "The text content of the file" },
+                    "mime_type": { "type": "string", "description": "Content type (default text/plain; use text/markdown, text/csv, application/json…)" },
+                    "parent_id": { "type": "string", "description": "Optional id of the folder to put it in (default: My Drive root)" }
+                },
+                "required": ["name", "content"]
+            }),
+        },
+        McpToolInfo {
+            name: "drive_update_file".to_string(),
+            description: Some(
+                "Replace the text content of a Drive file that StudyLLM created earlier (Google's limited-access rule: files you didn't create through this app can't be overwritten)."
+                    .to_string(),
+            ),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "file_id": { "type": "string", "description": "The Drive file id" },
+                    "content": { "type": "string", "description": "The new full text content" },
+                    "mime_type": { "type": "string", "description": "Content type (default text/plain)" }
+                },
+                "required": ["file_id", "content"]
+            }),
+        },
     ]
 }
 
@@ -846,8 +894,92 @@ async fn call_drive_tool(token: &str, name: &str, args: Value) -> Result<McpCall
     match name {
         "drive_search_files" => drive_search_files(token, args).await,
         "drive_read_file" => drive_read_file(token, args).await,
+        "drive_create_folder" => drive_create_folder(token, args).await,
+        "drive_create_file" => drive_create_file(token, args).await,
+        "drive_update_file" => drive_update_file(token, args).await,
         other => Err(format!("Unknown Drive tool '{other}'")),
     }
+}
+
+async fn drive_create_folder(token: &str, args: Value) -> Result<McpCallOutcome, String> {
+    let name = get_str_arg(&args, "name")?;
+    let mut meta = json!({ "name": name, "mimeType": "application/vnd.google-apps.folder" });
+    if let Some(parent) = get_opt_str_arg(&args, "parent_id") {
+        meta["parents"] = json!([parent]);
+    }
+    let body = api_call!(
+        reqwest::Method::POST,
+        "https://www.googleapis.com/drive/v3/files",
+        &[("fields", "id,name,webViewLink")],
+        Some(&meta),
+        token
+    );
+    ok_text(format!(
+        "Created folder '{}' (id: {}).
+{}",
+        str_field(&body, "name"),
+        str_field(&body, "id"),
+        str_field(&body, "webViewLink"),
+    ))
+}
+
+/// Sends one `multipart/related` upload (JSON metadata part + content part) — the only way to
+/// create a Drive file with both a name and content in a single request.
+async fn drive_create_file(token: &str, args: Value) -> Result<McpCallOutcome, String> {
+    let name = get_str_arg(&args, "name")?;
+    let content = get_str_arg(&args, "content")?;
+    let mime = get_opt_str_arg(&args, "mime_type").unwrap_or_else(|| "text/plain".to_string());
+    let mut meta = json!({ "name": name, "mimeType": mime });
+    if let Some(parent) = get_opt_str_arg(&args, "parent_id") {
+        meta["parents"] = json!([parent]);
+    }
+    let boundary = "studyllm_boundary_7f3a9c";
+    let body = format!(
+        "--{boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n{meta}\r\n--{boundary}\r\nContent-Type: {mime}; charset=UTF-8\r\n\r\n{content}\r\n--{boundary}--"
+    );
+    let resp = reqwest::Client::new()
+        .post("https://www.googleapis.com/upload/drive/v3/files")
+        .bearer_auth(token)
+        .query(&[("uploadType", "multipart"), ("fields", "id,name,webViewLink")])
+        .header("Content-Type", format!("multipart/related; boundary={boundary}"))
+        .body(body)
+        .send()
+        .await
+        .map_err(|e| format!("Couldn't reach Drive: {e}"))?;
+    let status = resp.status();
+    let text = resp.text().await.map_err(|e| e.to_string())?;
+    if !status.is_success() {
+        return Ok(McpCallOutcome { is_error: true, text: describe_google_error(&text, status) });
+    }
+    let file: Value = serde_json::from_str(&text).map_err(|e| format!("Unexpected Drive response: {e}"))?;
+    ok_text(format!(
+        "Created file '{}' (id: {}).
+{}",
+        str_field(&file, "name"),
+        str_field(&file, "id"),
+        str_field(&file, "webViewLink"),
+    ))
+}
+
+async fn drive_update_file(token: &str, args: Value) -> Result<McpCallOutcome, String> {
+    let file_id = get_str_arg(&args, "file_id")?;
+    let content = get_str_arg(&args, "content")?;
+    let mime = get_opt_str_arg(&args, "mime_type").unwrap_or_else(|| "text/plain".to_string());
+    let resp = reqwest::Client::new()
+        .patch(format!("https://www.googleapis.com/upload/drive/v3/files/{file_id}"))
+        .bearer_auth(token)
+        .query(&[("uploadType", "media"), ("fields", "id,name")])
+        .header("Content-Type", format!("{mime}; charset=UTF-8"))
+        .body(content)
+        .send()
+        .await
+        .map_err(|e| format!("Couldn't reach Drive: {e}"))?;
+    let status = resp.status();
+    let text = resp.text().await.map_err(|e| e.to_string())?;
+    if !status.is_success() {
+        return Ok(McpCallOutcome { is_error: true, text: describe_google_error(&text, status) });
+    }
+    ok_text(format!("Updated file {file_id}."))
 }
 
 /// Drive's query language wraps string literals in single quotes; escape backslashes and quotes

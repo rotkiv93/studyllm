@@ -41,12 +41,82 @@ export function trustTierTooltipKey(tier: TrustTier): MessageKey {
   return `trust.tooltip.${tier}` as MessageKey;
 }
 
-const TRUST_RANK: Record<TrustTier, number> = { official: 0, verified: 1, community: 2 };
+/**
+ * Well-known servers, most useful first. The MCP registry exposes no download/star counts and
+ * returns entries alphabetically, so "popular" has to be curated: a server whose name or repo
+ * contains one of these tokens is boosted, earlier in the list = higher.
+ */
+const POPULAR_TOKENS = [
+  "github", "notion", "playwright", "context7", "filesystem", "fetch", "brave", "tavily", "firecrawl",
+  "sequential", "memory", "google", "gmail", "calendar", "drive", "slack", "postgres", "sqlite",
+  "supabase", "linear", "figma", "sentry", "stripe", "cloudflare", "docker", "mongodb", "atlassian",
+  "jira", "asana", "todoist", "obsidian", "zotero", "youtube", "arxiv", "wikipedia", "puppeteer",
+  "excalidraw", "exa",
+];
 
-export function sortByTrust(entries: CatalogEntry[]): CatalogEntry[] {
-  return [...entries].sort(
-    (a, b) => TRUST_RANK[computeTrustTier(a)] - TRUST_RANK[computeTrustTier(b)],
-  );
+/**
+ * Official, widely used servers published to the registry under these exact names. The registry
+ * lists alphabetically (so they'd be buried under thousands of "ai.*"/"com.*" entries), which is
+ * why the landing view looks each one up directly and pins it near the top.
+ */
+const FEATURED_SERVERS = [
+  "io.github.github/github-mcp-server",
+  "io.github.upstash/context7",
+  "com.notion/mcp",
+  "com.figma.mcp/mcp",
+  "app.linear/linear",
+  "com.supabase/mcp",
+  "io.github.getsentry/sentry-mcp",
+  "com.stripe/mcp",
+];
+
+function nameTokens(entry: CatalogEntry): Set<string> {
+  // Drop the repo host so every github.com URL doesn't count as the "github" server.
+  const repoPath = (entry.repositoryUrl ?? "").replace(/^https?:\/\/[^/]+\//, "");
+  // Only the part after the reverse-DNS publisher ("io.github.acme/") names the server itself.
+  const serverName = entry.name.includes("/") ? entry.name.slice(entry.name.indexOf("/") + 1) : entry.name;
+  const text = `${serverName} ${repoPath}`.toLowerCase();
+  return new Set(text.split(/[^a-z0-9]+/).filter(Boolean));
+}
+
+/** Higher = shown earlier. Trust and popularity dominate; keyless and installable entries get a nudge. */
+export function catalogScore(entry: CatalogEntry): number {
+  let score = { official: 30, verified: 10, community: 0 }[computeTrustTier(entry)];
+  const tokens = nameTokens(entry);
+  const popularIndex = POPULAR_TOKENS.findIndex((token) => tokens.has(token));
+  if (popularIndex >= 0) score += 100 - popularIndex * 2;
+  if (FEATURED_SERVERS.some((n) => n.toLowerCase() === entry.name.toLowerCase())) score += 150;
+  if (entry.install.kind === "unsupported") score -= 50;
+  if (!entry.requiredEnv.some((v) => v.isRequired)) score += 5;
+  if (entry.description.trim().length >= 20) score += 2;
+  return score;
+}
+
+/** Best-first ordering for the Discover list; ties keep the registry's order. Does not mutate. */
+export function rankCatalog(entries: CatalogEntry[]): CatalogEntry[] {
+  return entries
+    .map((entry, index) => ({ entry, index, score: catalogScore(entry) }))
+    .sort((a, b) => b.score - a.score || a.index - b.index)
+    .map((r) => r.entry);
+}
+
+/**
+ * The landing view: the registry's first page plus a direct lookup of every featured server (in
+ * parallel; a failed lookup is ignored), de-duplicated by name. A search keeps one plain page.
+ */
+async function fetchRegistryEntries(query: string): Promise<CatalogEntry[]> {
+  if (query) return (await searchMcpRegistry(query)).entries;
+  const [first, ...featured] = await Promise.allSettled([
+    searchMcpRegistry(undefined),
+    ...FEATURED_SERVERS.map((name) => searchMcpRegistry(name)),
+  ]);
+  if (first.status === "rejected") throw first.reason;
+  const byName = new Map<string, CatalogEntry>();
+  const results = [first.value, ...featured.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []))];
+  for (const page of results) {
+    for (const entry of page.entries) if (!byName.has(entry.name)) byName.set(entry.name, entry);
+  }
+  return [...byName.values()];
 }
 
 function toCacheRow(entry: CatalogEntry, fetchedAt: number): McpCatalogCacheRow {
@@ -91,7 +161,7 @@ export interface CatalogSearchResult {
  */
 export async function searchCatalog(query: string): Promise<CatalogSearchResult> {
   try {
-    const page = await searchMcpRegistry(query || undefined);
+    const page = { entries: await fetchRegistryEntries(query) };
     // Fire-and-forget the cache write + stale eviction: these are pure side effects for the *next*
     // visit, so awaiting them just delays returning the results the user is waiting to see. The
     // eviction only runs on this successful-live path (never on the cache fallback below), so a
@@ -103,12 +173,12 @@ export async function searchCatalog(query: string): Promise<CatalogSearchResult>
     } else {
       void evictStaleCatalogEntries().catch(() => {});
     }
-    return { entries: sortByTrust(page.entries), source: "live", cacheAgeMs: null, error: null };
+    return { entries: rankCatalog(page.entries), source: "live", cacheAgeMs: null, error: null };
   } catch (err) {
     const cached = await loadCachedCatalog(query);
     const newestFetch = cached.reduce((max, r) => Math.max(max, r.fetched_at), 0);
     return {
-      entries: sortByTrust(cached.map(fromCacheRow)),
+      entries: rankCatalog(cached.map(fromCacheRow)),
       source: "cache",
       cacheAgeMs: newestFetch > 0 ? Date.now() - newestFetch : null,
       error: err instanceof Error ? err.message : String(err),
@@ -127,5 +197,5 @@ async function loadCachedCatalog(query: string): Promise<McpCatalogCacheRow[]> {
  */
 export async function getCachedCatalog(query: string): Promise<CatalogEntry[]> {
   const cached = await loadCachedCatalog(query);
-  return sortByTrust(cached.map(fromCacheRow));
+  return rankCatalog(cached.map(fromCacheRow));
 }

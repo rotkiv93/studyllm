@@ -441,6 +441,35 @@ any future OAuth remote-HTTP server, even though Google no longer uses that path
 
 **Broadening scopes invalidates consent** — every connected user must Disconnect → Connect once.
 
+### Drive write + Plugins panel redesign
+
+- **Drive write**: scope `drive.file` added next to `drive.readonly`; new tools `drive_create_folder`,
+  `drive_create_file` (multipart upload), `drive_update_file` (only files the app created — Google's
+  `drive.file` rule). `drive_update_file` defaults to "ask". Verified live (create → update → read).
+  Existing users must Disconnect → Connect once to grant the scope.
+- **Plugins panel** (`PluginsPanel.tsx`): plugin tools live here, not in the MCP panel (which lists only
+  non-OAuth servers). Card per connector with a status pill (Connected / Needs reconnecting / Not
+  connected), Connect / Reconnect / Disconnect actions, a tile per service with a master on/off switch
+  (all tools → "deny", back on restores destructive tools to "ask"), and a per-service tool list with a
+  read/write/danger badge and an Allow / Ask / Off segmented control per tool. A service is "live" only
+  if its tools are in `toolsByServer` (cached tools alone don't count).
+- **Sidebar badges**: "Herramientas y conexiones" counts running non-OAuth servers; "Cuentas (Plugins)" counts
+  running plugin services (so Google shows 6 there, not under MCP).
+- **Curated MCP additions**: YouTube Transcripts (`@kimtaeyoon83/mcp-server-youtube-transcript`, no key),
+  Obsidian (`@mauricio.wolff/mcp-obsidian <vault>`, folder picker; includes `delete_note`) and Zotero
+  (`uvx --from zotero-mcp-server zotero-mcp`, needs `ZOTERO_API_KEY` + `ZOTERO_LIBRARY_ID`). All three verified
+  to start and list tools (1 / 14 / 38); Zotero was started with dummy credentials only.
+- **Discover ordering** (`mcpCatalog.ts`): the registry is alphabetical with no popularity data, so
+  `rankCatalog` scores entries (trust tier, a curated `POPULAR_TOKENS` list, `FEATURED_SERVERS` pinned,
+  installable/keyless nudges) instead of the old trust-only sort. The landing view also looks up each featured
+  server directly (parallel, failures ignored) and de-dupes by name. Curated "Start here" order: filesystem,
+  fetch, DuckDuckGo, YouTube, Wikipedia, OpenAlex, arXiv, Obsidian, memory, time; accounts: Notion, Zotero,
+  GitHub, Brave.
+- ⚠️ Google OAuth app is in **Testing** mode → refresh tokens expire after 7 days (`invalid_grant`);
+  publishing needs Google verification (restricted Gmail/Drive scopes). Reconnect weekly.
+- **Microsoft 365 was tried and dropped**: a personal Outlook account has no Entra directory, so apps
+  can't be registered without an Azure sign-up (phone + card). The code was removed.
+
 ## CI / release
 
 - `.github/workflows/ci.yml` (push/PR to `main`): lint, Vitest, `npm run build`, `cargo check

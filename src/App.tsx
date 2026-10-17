@@ -958,7 +958,7 @@ export default function App() {
     setNotice(t("notice.embeddingModelSaved"));
   }
 
-  async function handleConnectGoogle(connector: OAuthConnector) {
+  async function handleConnectPlugin(connector: OAuthConnector) {
     const results = await oauthConnect(
       connector.id,
       connector.scopes,
@@ -1008,7 +1008,7 @@ export default function App() {
     await refreshMcpServers();
   }
 
-  async function handleDisconnectGoogle(serverIds: string[]) {
+  async function handleDisconnectPlugin(serverIds: string[]) {
     for (const id of serverIds) {
       await stopMcpServer(id); // also cancels the Rust-side refresh task (McpHost::stop)
       await deleteCredential(`mcp:${id}:oauth_access`);
@@ -1674,7 +1674,8 @@ export default function App() {
         collapsed={sidebarCollapsed}
         onToggleCollapsed={toggleSidebar}
         disabled={isStreaming}
-        mcpRunningCount={Object.keys(mcpToolsByServer).length}
+        mcpRunningCount={mcpServers.filter((s) => !s.oauth_provider && s.id in mcpToolsByServer).length}
+        pluginsRunningCount={mcpServers.filter((s) => s.oauth_provider && s.id in mcpToolsByServer).length}
         activeProviderCount={activeProviders.filter((p) => p.enabled).length}
         onNewChat={handleNewChat}
         onSelectConversation={handleSelectConversation}
@@ -2016,7 +2017,7 @@ export default function App() {
 
       {showMcp && (
         <McpPanel
-          servers={mcpServers}
+          servers={mcpServers.filter((s) => !s.oauth_provider)}
           toolsByServer={mcpToolsByServer}
           onAddFilesystem={handleAddFilesystemServer}
           onStart={handleStartMcpServer}
@@ -2032,9 +2033,11 @@ export default function App() {
       {showPlugins && (
         <PluginsPanel
           connectors={CONNECTORS}
-          servers={mcpServers}
-          onConnect={handleConnectGoogle}
-          onDisconnect={handleDisconnectGoogle}
+          servers={mcpServers.filter((s) => s.oauth_provider)}
+          toolsByServer={mcpToolsByServer}
+          onUpdateServer={handleUpdateMcpServer}
+          onConnect={handleConnectPlugin}
+          onDisconnect={handleDisconnectPlugin}
           onClose={() => setShowPlugins(false)}
         />
       )}

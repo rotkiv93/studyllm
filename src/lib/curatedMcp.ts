@@ -48,6 +48,9 @@ export const CURATED_ICONS: Record<string, string> = {
   "curated:duckduckgo": "🦆",
   "curated:arxiv": "📄",
   "curated:time": "🕐",
+  "curated:youtube": "▶️",
+  "curated:obsidian": "🗃️",
+  "curated:zotero": "📚",
 };
 
 /** What a server asks of the student before it works — drives the badge on its Discover card. */
@@ -71,12 +74,15 @@ export const CURATED_META: Record<string, CuratedMeta> = {
   "curated:filesystem": { slug: "filesystem", group: "start", needs: "folder" },
   "curated:fetch": { slug: "fetch", group: "start", needs: "none" },
   "curated:duckduckgo": { slug: "duckduckgo", group: "start", needs: "none" },
+  "curated:youtube": { slug: "youtube", group: "start", needs: "none" },
   "curated:wikipedia": { slug: "wikipedia", group: "start", needs: "none" },
   "curated:openalex": { slug: "openalex", group: "start", needs: "none" },
   "curated:arxiv": { slug: "arxiv", group: "start", needs: "none" },
+  "curated:obsidian": { slug: "obsidian", group: "start", needs: "folder" },
   "curated:memory": { slug: "memory", group: "start", needs: "none" },
   "curated:time": { slug: "time", group: "start", needs: "none" },
   "curated:notion": { slug: "notion", group: "account", needs: "key" },
+  "curated:zotero": { slug: "zotero", group: "account", needs: "key" },
   "curated:github": { slug: "github", group: "account", needs: "key" },
   "curated:brave-search": { slug: "brave", group: "account", needs: "key" },
 };
@@ -253,5 +259,61 @@ export const CURATED_ENTRIES: CatalogEntry[] = [
     repositoryUrl: "https://github.com/modelcontextprotocol/servers/tree/main/src/time",
     install: { kind: "uvx", args: ["mcp-server-time"], positionalArgs: [] },
     requiredEnv: [],
+  },
+  {
+    id: "curated:youtube",
+    name: "YouTube Transcripts",
+    description:
+      "Give the assistant a YouTube link and it reads the video's transcript — handy to summarise a " +
+      "lecture or pull out the key points. No account or key needed.",
+    version: null,
+    repositoryUrl: "https://github.com/kimtaeyoon83/mcp-server-youtube-transcript",
+    install: {
+      kind: "npx",
+      args: ["-y", "@kimtaeyoon83/mcp-server-youtube-transcript"],
+      positionalArgs: [],
+    },
+    requiredEnv: [],
+  },
+  {
+    id: "curated:obsidian",
+    name: "Obsidian",
+    description:
+      "Let the assistant read, search and write notes in an Obsidian vault. You'll pick the vault " +
+      "folder when adding it.",
+    version: null,
+    repositoryUrl: "https://github.com/bitbonsai/mcp-obsidian",
+    install: {
+      kind: "npx",
+      args: ["-y", "@mauricio.wolff/mcp-obsidian"],
+      positionalArgs: [{ description: "Your Obsidian vault folder", default: null }],
+    },
+    requiredEnv: [],
+  },
+  {
+    id: "curated:zotero",
+    name: "Zotero",
+    description:
+      "Search your Zotero library, read item details and pull out citations. Create an API key in " +
+      "your Zotero account settings and paste it below with your library ID.",
+    version: null,
+    repositoryUrl: "https://github.com/54yyyu/zotero-mcp",
+    install: { kind: "uvx", args: ["--from", "zotero-mcp-server", "zotero-mcp"], positionalArgs: [] },
+    requiredEnv: [
+      {
+        name: "ZOTERO_API_KEY",
+        description: "Your Zotero API key (zotero.org → Settings → Security → Applications)",
+        isRequired: true,
+        isSecret: true,
+        default: null,
+      },
+      {
+        name: "ZOTERO_LIBRARY_ID",
+        description: "Your numeric Zotero user ID (shown on the same API keys page)",
+        isRequired: true,
+        isSecret: false,
+        default: null,
+      },
+    ],
   },
 ];

@@ -38,7 +38,8 @@ export const GOOGLE_CONNECTOR: OAuthConnector = {
     "Drive, Docs, and Sheets — reading and (with your approval) sending, creating, and editing.",
   // Full read+write across the connected services. `gmail.modify` covers read + label edits +
   // drafts + trash; `gmail.send` is the separate scope Gmail requires to actually deliver mail.
-  // Drive stays read-only (we only read Drive files; Docs/Sheets creation uses their own APIs).
+  // Drive: `drive.readonly` to read anything, plus `drive.file` so the assistant can create files and
+  // folders (and later edit the ones it created) without ever getting write access to the rest.
   // NOTE: broadening these scopes invalidates existing consent — users must Disconnect → Connect
   // once to re-consent, and the maintainer must add these scopes + enable the Calendar/Tasks/Docs/
   // Sheets APIs on the OAuth client in Cloud Console. See PluginsPanel's setup instructions.
@@ -50,6 +51,7 @@ export const GOOGLE_CONNECTOR: OAuthConnector = {
     "https://www.googleapis.com/auth/documents",
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive.readonly",
+    "https://www.googleapis.com/auth/drive.file",
   ],
   targets: [
     { serverId: "google-gmail", name: "Gmail", provider: "gmail" },
@@ -76,4 +78,5 @@ export const DESTRUCTIVE_GOOGLE_TOOLS: readonly string[] = [
   "gmail_trash_message",
   "calendar_delete_event",
   "tasks_delete_task",
+  "drive_update_file",
 ];
