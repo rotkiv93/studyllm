@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { McpServerRow } from "../lib/db";
 import type { CatalogEntry } from "../lib/mcp";
-import { CURATED_ENTRIES } from "../lib/curatedMcp";
+import { CURATED_ENTRIES, CURATED_ICONS, CURATED_META, curatedInDisplayOrder } from "../lib/curatedMcp";
 import {
   clearCatalogCache,
   computeTrustTier,
@@ -13,7 +13,7 @@ import {
   type TrustTier,
 } from "../lib/mcpCatalog";
 import { IconCheck } from "./icons";
-import { useT } from "../lib/i18n";
+import { useT, type MessageKey } from "../lib/i18n";
 
 export interface ResolvedInstall {
   entry: CatalogEntry;
@@ -54,11 +54,15 @@ function MarketplaceCard({
   const t = useT();
   const tier = computeTrustTier(entry);
   const unsupported = entry.install.kind === "unsupported";
+  const icon = CURATED_ICONS[entry.id];
+  // Curated servers get plain-language copy ("what it lets the AI do" + a question to try) and a
+  // badge for what they ask of you; registry entries keep the publisher's description.
+  const meta = CURATED_META[entry.id];
   return (
     <li className="marketplace-card">
       <div className="marketplace-card-head">
-        <span className={`marketplace-card-avatar ${avatarClass(entry.name)}`}>
-          {entry.name.trim().charAt(0).toUpperCase() || "?"}
+        <span className={`marketplace-card-avatar ${avatarClass(entry.name)}${icon ? " marketplace-card-avatar-icon" : ""}`} aria-hidden="true">
+          {icon ?? (entry.name.trim().charAt(0).toUpperCase() || "?")}
         </span>
         <div className="marketplace-card-title">
           <strong>{entry.name}</strong>
@@ -67,7 +71,22 @@ function MarketplaceCard({
           </span>
         </div>
       </div>
-      <p className="marketplace-card-desc">{entry.description}</p>
+      {meta ? (
+        <>
+          <p className="marketplace-card-desc marketplace-card-desc-full">
+            {t(`market.c.${meta.slug}.does` as MessageKey)}
+          </p>
+          <p className="marketplace-card-try">
+            <span>{t("market.tryAsking")}</span>
+            “{t(`market.c.${meta.slug}.try` as MessageKey)}”
+          </p>
+          <span className={`marketplace-needs marketplace-needs-${meta.needs}`}>
+            {t(`market.needs.${meta.needs}` as MessageKey)}
+          </span>
+        </>
+      ) : (
+        <p className="marketplace-card-desc">{entry.description}</p>
+      )}
       {entry.install.kind === "unsupported" && (
         <p className="marketplace-unsupported">{entry.install.reason}</p>
       )}
@@ -187,11 +206,12 @@ export function McpMarketplace({ servers, onInstall }: Props) {
   const query_ = query.trim();
   // Popular = the curated catalog, shown only on the empty-query landing view and de-duped against
   // anything already installed. It's a static import, so it paints instantly — no network wait.
-  const popular = query_
-    ? []
-    : CURATED_ENTRIES.filter((e) => !installedNames.has(e.name.toLowerCase()));
-  const popularNames = new Set(popular.map((e) => e.name.toLowerCase()));
-  const rest = entries.filter((e) => !popularNames.has(e.name.toLowerCase()));
+  const notInstalled = (e: CatalogEntry) => !installedNames.has(e.name.toLowerCase());
+  const startHere = query_ ? [] : curatedInDisplayOrder("start").filter(notInstalled);
+  const withAccount = query_ ? [] : curatedInDisplayOrder("account").filter(notInstalled);
+  const popular = [...startHere, ...withAccount];
+  const curatedNames = new Set(CURATED_ENTRIES.map((e) => e.name.toLowerCase()));
+  const rest = entries.filter((e) => !curatedNames.has(e.name.toLowerCase()));
 
   return (
     <>
@@ -236,17 +256,25 @@ export function McpMarketplace({ servers, onInstall }: Props) {
         </p>
       )}
 
-      {popular.length > 0 && (
+      {startHere.length > 0 && (
         <>
           <h3 className="mcp-section-title">{t("market.section.popular")}</h3>
+          <p className="settings-hint">{t("market.section.popularHint")}</p>
           <ul className="marketplace-grid">
-            {popular.map((entry) => (
-              <MarketplaceCard
-                key={entry.id}
-                entry={entry}
-                installed={installedNames.has(entry.name.toLowerCase())}
-                onInstall={() => openInstall(entry)}
-              />
+            {startHere.map((entry) => (
+              <MarketplaceCard key={entry.id} entry={entry} installed={false} onInstall={() => openInstall(entry)} />
+            ))}
+          </ul>
+        </>
+      )}
+
+      {withAccount.length > 0 && (
+        <>
+          <h3 className="mcp-section-title">{t("market.section.account")}</h3>
+          <p className="settings-hint">{t("market.section.accountHint")}</p>
+          <ul className="marketplace-grid">
+            {withAccount.map((entry) => (
+              <MarketplaceCard key={entry.id} entry={entry} installed={false} onInstall={() => openInstall(entry)} />
             ))}
           </ul>
         </>

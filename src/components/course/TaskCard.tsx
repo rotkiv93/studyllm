@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react";
 import { ChatLab } from "./ChatLab";
 import { IconChevronDown } from "../icons";
 import { evaluateCheck, type CourseState } from "../../lib/course/checks";
-import { judgeNumber, type RunLab } from "../../lib/course/labs";
+import type { RunLab } from "../../lib/course/labs";
 import {
   QUIZ_OPTION_COUNT,
   quizKeys,
@@ -28,7 +28,6 @@ const KIND_ICON: Record<TaskKind, string> = {
   check: "🤖",
   do: "🛠️",
   lab: "💬",
-  number: "🧮",
   manual: "✋",
   quiz: "❓",
   reflect: "✍️",
@@ -161,8 +160,6 @@ export function TaskCard({
           </>
         )}
 
-        {task.kind === "number" && task.number && <NumberTask task={task} done={done} onMark={onMark} />}
-
         {task.kind === "manual" && (
           <TickButton
             done={done}
@@ -221,55 +218,6 @@ function TickButton({
     <button type="button" className="btn btn-primary btn-sm" onClick={() => void onTick()}>
       {label}
     </button>
-  );
-}
-
-/** A numeric answer worked out with the estimators above it. Wrong answers say which way to adjust. */
-function NumberTask({ task, done, onMark }: { task: CourseTask; done: boolean; onMark: Mark }) {
-  const t = useT();
-  const spec = task.number!;
-  const prefix = taskPrefix(task);
-  const [raw, setRaw] = useState("");
-  const [verdict, setVerdict] = useState<ReturnType<typeof judgeNumber> | null>(null);
-  const [misses, setMisses] = useState(0);
-  const solved = done || verdict === "ok";
-
-  async function submit() {
-    const v = judgeNumber(spec, raw);
-    setVerdict(v);
-    if (v === "ok") await onMark(task.id);
-    else if (v !== "invalid") setMisses((n) => n + 1);
-  }
-
-  return (
-    <div className="task-number">
-      {!solved && (
-        <div className="task-number-row">
-          <input
-            inputMode="decimal"
-            value={raw}
-            placeholder={t("course.number.placeholder")}
-            onChange={(e) => {
-              setRaw(e.currentTarget.value);
-              setVerdict(null);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") void submit();
-            }}
-            aria-label={t(taskCopyKeys(task).title as MessageKey)}
-          />
-          <span className="task-number-unit">{spec.unit}</span>
-          <button type="button" className="btn btn-primary btn-sm" onClick={() => void submit()} disabled={!raw.trim()}>
-            {t("course.quiz.check")}
-          </button>
-        </div>
-      )}
-      {verdict === "invalid" && <p className="error">{t("course.number.invalid")}</p>}
-      {verdict === "low" && <p className="error">{t("course.number.low")}</p>}
-      {verdict === "high" && <p className="error">{t("course.number.high")}</p>}
-      {!solved && misses >= 1 && <p className="notice">{t(`${prefix}.hint` as MessageKey)}</p>}
-      {solved && <p className="notice">{t(`${prefix}.why` as MessageKey)}</p>}
-    </div>
   );
 }
 

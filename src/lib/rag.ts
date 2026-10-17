@@ -124,6 +124,37 @@ export async function ingestDocument(
   return { doc, truncated: parsed.truncated };
 }
 
+/** A stored passage with its decoded embedding — what the Library shows when you open a document. */
+export interface LibraryChunk {
+  id: string;
+  documentId: string;
+  documentName: string;
+  seq: number;
+  text: string;
+  vector: number[];
+}
+
+/** Every stored passage, embeddings decoded (an unreadable one becomes an empty vector). */
+export async function loadLibraryChunks(): Promise<LibraryChunk[]> {
+  const rows = await listAllRagChunks();
+  return rows.map((row) => {
+    let vector: number[];
+    try {
+      vector = JSON.parse(row.embedding) as number[];
+    } catch {
+      vector = [];
+    }
+    return {
+      id: row.id,
+      documentId: row.document_id,
+      documentName: row.document_name,
+      seq: row.seq,
+      text: row.text,
+      vector,
+    };
+  });
+}
+
 export interface RetrievedChunk {
   documentName: string;
   seq: number;

@@ -1,5 +1,9 @@
-import { useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { IconBook, IconTrash, IconLoader, IconPaperclip } from "./icons";
+import { Fingerprint } from "./viz/Fingerprint";
+import { LibraryMap } from "./viz/LibraryMap";
+import { loadLibraryChunks, type LibraryChunk } from "../lib/rag";
+import { snippet } from "../lib/ragInsights";
 import { EMBEDDING_CAPABLE, type EmbeddingConfig } from "../lib/embeddings";
 import { SUPPORTED_ATTACHMENT_HINT } from "../lib/attachments";
 import type { ProviderRow, RagDocumentRow } from "../lib/db";
@@ -7,16 +11,18 @@ import { useT } from "../lib/i18n";
 import { useEscapeClose } from "../lib/useEscapeClose";
 
 /**
- * The document Library — the RAG surface. Two tabs following the established panel convention
+ * The document Library — the RAG surface. Three tabs following the established panel convention
  * (`settings-overlay` > `settings-panel`, `.settings-header`, `.settings-hint`, `.mcp-tabs`):
- *   • Documents — add files (parsed + chunked + embedded by the caller), see chunk counts, remove.
+ *   • Documents — add files (parsed + chunked + embedded by the caller), open one to read its
+ *     passages and see each passage's embedding "fingerprint", remove.
+ *   • Map       — every passage of every document plotted by meaning (PCA), coloured by document.
  *   • Settings  — choose which configured provider + model to embed with.
  *
  * Presentational: ingestion, deletion, and config persistence are handled by the caller (App),
  * which owns the providers list, the keychain, and the DB.
  */
 
-type Tab = "documents" | "settings";
+type Tab = "documents" | "map" | "settings";
 
 interface LibraryPanelProps {
   documents: RagDocumentRow[];
@@ -51,6 +57,24 @@ export function LibraryPanel({
   const embedProviders = providers.filter((p) => p.enabled && EMBEDDING_CAPABLE[p.type]);
   const configured = !!embeddingConfig && embedProviders.some((p) => p.id === embeddingConfig.providerId);
 
+  // Passages are only read from SQLite when there is something to show them in.
+  const [chunks, setChunks] = useState<LibraryChunk[] | null>(null);
+  useEffect(() => {
+    if (tab === "settings") return;
+    let cancelled = false;
+    void loadLibraryChunks()
+      .then((rows) => !cancelled && setChunks(rows))
+      .catch(() => !cancelled && setChunks([]));
+    return () => {
+      cancelled = true;
+    };
+  }, [tab, documents]);
+
+  const dims = useMemo(() => chunks?.find((c) => c.vector.length > 0)?.vector.length ?? 0, [chunks]);
+  const totalPassages = documents.reduce((n, d) => n + d.chunk_count, 0);
+  const models = [...new Set(documents.map((d) => d.embed_model))];
+  const documentOrder = documents.map((d) => d.id);
+
   return (
     <div className="settings-overlay">
       <div className="settings-panel settings-panel-wide settings-panel-tall">
@@ -73,6 +97,15 @@ export function LibraryPanel({
             onClick={() => setTab("documents")}
           >
             {t("library.tab.documents")}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === "map"}
+            className={`mcp-tab-btn${tab === "map" ? " mcp-tab-btn-active" : ""}`}
+            onClick={() => setTab("map")}
+          >
+            {t("library.tab.map")}
           </button>
           <button
             type="button"
@@ -122,33 +155,38 @@ export function LibraryPanel({
             {documents.length === 0 ? (
               <p className="settings-hint library-empty">{t("library.empty")}</p>
             ) : (
-              <ul className="library-doc-list">
-                {documents.map((d) => (
-                  <li key={d.id} className="library-doc">
-                    <div className="library-doc-info">
-                      <span className="library-doc-name">{d.name}</span>
-                      <span className="library-doc-meta">
-                        {t(d.chunk_count === 1 ? "library.passageOne" : "library.passageOther", {
-                          count: d.chunk_count,
-                        })}{" "}
-                        · {t("library.chars", { count: d.char_count.toLocaleString() })} ·{" "}
-                        {d.embed_model}
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      className="btn btn-icon btn-ghost"
-                      title={t("library.removeDocument")}
-                      onClick={() => void onDeleteDocument(d.id)}
-                      disabled={busy}
-                    >
-                      <IconTrash size={14} />
-                    </button>
-                  </li>
-                ))}
-              </ul>
+              <>
+                <div className="library-stats">
+                  <LibraryStat value={documents.length} label={t("library.stat.documents")} />
+                  <LibraryStat value={totalPassages} label={t("library.stat.passages")} />
+                  <LibraryStat value={dims || "—"} label={t("library.stat.dims")} />
+                </div>
+                <p className="settings-hint">{t("library.statHint")}</p>
+                {models.length > 1 && (
+                  <p className="notice">{t("library.modelMismatch", { models: models.join(", ") })}</p>
+                )}
+                <ul className="library-doc-list">
+                  {documents.map((d) => (
+                    <LibraryDocument
+                      key={d.id}
+                      doc={d}
+                      chunks={chunks?.filter((c) => c.documentId === d.id) ?? null}
+                      busy={busy}
+                      onDelete={() => void onDeleteDocument(d.id)}
+                    />
+                  ))}
+                </ul>
+              </>
             )}
           </>
+        ) : tab === "map" ? (
+          documents.length === 0 ? (
+            <p className="settings-hint library-empty">{t("library.mapEmpty")}</p>
+          ) : chunks === null ? (
+            <p className="settings-hint">{t("library.passagesLoading")}</p>
+          ) : (
+            <LibraryMap chunks={chunks} documentOrder={documentOrder} />
+          )
         ) : (
           <EmbeddingSettings
             embedProviders={embedProviders}
@@ -158,6 +196,102 @@ export function LibraryPanel({
         )}
       </div>
     </div>
+  );
+}
+
+function LibraryStat({ value, label }: { value: number | string; label: string }) {
+  return (
+    <div className="library-stat">
+      <span className="library-stat-value">{typeof value === "number" ? value.toLocaleString() : value}</span>
+      <span className="library-stat-label">{label}</span>
+    </div>
+  );
+}
+
+/** One document: its numbers, and — opened — every passage with its embedding fingerprint. */
+function LibraryDocument({
+  doc,
+  chunks,
+  busy,
+  onDelete,
+}: {
+  doc: RagDocumentRow;
+  chunks: LibraryChunk[] | null;
+  busy: boolean;
+  onDelete: () => void;
+}) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const avg = doc.chunk_count > 0 ? Math.round(doc.char_count / doc.chunk_count) : 0;
+  const dims = chunks?.find((c) => c.vector.length > 0)?.vector.length ?? 0;
+
+  return (
+    <li className={`library-doc${open ? " library-doc-open" : ""}`}>
+      <div className="library-doc-row">
+        <button
+          type="button"
+          className="library-doc-toggle"
+          aria-expanded={open}
+          onClick={() => setOpen((o) => !o)}
+        >
+          <span className="library-doc-chevron" aria-hidden="true">
+            {open ? "▾" : "▸"}
+          </span>
+          <span className="library-doc-info">
+            <span className="library-doc-name">{doc.name}</span>
+            <span className="library-doc-meta">
+              {t(doc.chunk_count === 1 ? "library.passageOne" : "library.passageOther", { count: doc.chunk_count })} ·{" "}
+              {t("library.chars", { count: doc.char_count.toLocaleString() })} · {doc.embed_model}
+            </span>
+          </span>
+          <span className="library-doc-action">{open ? t("library.hidePassages") : t("library.showPassages")}</span>
+        </button>
+        <button
+          type="button"
+          className="btn btn-icon btn-ghost"
+          title={t("library.removeDocument")}
+          onClick={onDelete}
+          disabled={busy}
+        >
+          <IconTrash size={14} />
+        </button>
+      </div>
+
+      {open && (
+        <div className="library-doc-body">
+          {chunks === null ? (
+            <p className="settings-hint">{t("library.passagesLoading")}</p>
+          ) : (
+            <>
+              <p className="settings-hint">
+                {t("library.docDetail", { avg, dims: dims || "—" })} {t("library.fingerprintHint")}
+              </p>
+              <ol className="library-chunk-list">
+                {chunks.map((c) => {
+                  const isOpen = expanded === c.id;
+                  return (
+                    <li key={c.id} className="library-chunk">
+                      <button
+                        type="button"
+                        className="library-chunk-head"
+                        aria-expanded={isOpen}
+                        onClick={() => setExpanded(isOpen ? null : c.id)}
+                      >
+                        <span className="library-chunk-tag">#{c.seq}</span>
+                        <Fingerprint vector={c.vector} label={t("library.fingerprintLabel", { dims: c.vector.length })} />
+                        {!isOpen && <span className="library-chunk-snippet">{snippet(c.text)}</span>}
+                      </button>
+                      {isOpen && <div className="library-chunk-text">{c.text}</div>}
+                    </li>
+                  );
+                })}
+              </ol>
+            </>
+          )}
+        </div>
+      )}
+    </li>
   );
 }
 

@@ -3,8 +3,6 @@ import { LESSONS, lessonShotNames, lessonTaskIds } from "./lessons";
 import { COURSE_GROUPS, COURSE_MODULES } from "./modules";
 import { es } from "../locales/es";
 import { en } from "../locales/en";
-import { estimateVramGb, requestCost } from "./estimates";
-import { estimateTokenCount } from "../tokenize";
 
 describe("lesson layout", () => {
   it("has a lesson for every module", () => {
@@ -30,33 +28,6 @@ describe("lesson layout", () => {
       const shots = lessonShotNames(mod.n);
       expect(new Set(shots).size).toBe(shots.length);
     }
-  });
-});
-
-describe("calculation tasks agree with the estimators they point to", () => {
-  const range = (id: string) => COURSE_MODULES.flatMap((m) => m.tasks).find((t) => t.id === id)!.number!;
-
-  it("13B at 8 bits (module 6)", () => {
-    const { min, max } = range("m8.estimate");
-    const gb = estimateVramGb(13, 8);
-    expect(gb).toBeGreaterThanOrEqual(min);
-    expect(gb).toBeLessThanOrEqual(max);
-  });
-
-  it("600 words are about 800 tokens (module 7)", () => {
-    const { min, max } = range("m6.split");
-    const tokens = Math.round(600 / 0.75);
-    expect(tokens).toBeGreaterThanOrEqual(min);
-    expect(tokens).toBeLessThanOrEqual(max);
-    // The approximate tokenizer used in the explorer should land in the same neighbourhood.
-    expect(estimateTokenCount("word ".repeat(600))).toBeGreaterThan(0);
-  });
-
-  it("2,000 in + 500 out at $1 / $4 per million (module 7)", () => {
-    const { min, max } = range("m6.cost");
-    const usd = requestCost(2000, 500, { input: 1, output: 4 });
-    expect(usd).toBeGreaterThanOrEqual(min);
-    expect(usd).toBeLessThanOrEqual(max);
   });
 });
 

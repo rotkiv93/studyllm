@@ -169,6 +169,11 @@ web-tool-name fallback. A name-only tool regex is wrong — it matches `drive_se
 `gmail_search_messages`. "Set up research tools" both installs missing keyless servers *and* starts
 installed-but-stopped ones (curated installs don't autostart).
 
+**Curated MCP cards** (`CURATED_ENTRIES` / `CURATED_ICONS` in `curatedMcp.ts`): each has an emoji icon on its card
+(registry results keep the letter avatar); installed servers get one via `mcpServerIcon`; providers have `providerIcon` (`providers.ts`) in the Providers list/picker, onboarding and Course setup; Filesystem is listed first; **Memory** (`server-memory`, keyless) was added.
+
+**Discover tab order is a teaching order** (`CURATED_META` + `curatedInDisplayOrder` in `curatedMcp.ts`; `McpMarketplace.tsx`): "Start here" (no account: Filesystem, Web Reader, **DuckDuckGo Search**, Wikipedia, OpenAlex, **arXiv**, Memory, **Time**) then "Connect your accounts" (Notion, GitHub, Brave — need a key), then the registry results under "More tools from the directory". A curated card shows plain-language copy (`market.c.<slug>.does`), a sample question to ask (`.try`) and a badge for what it needs (no account / pick a folder / needs a key), instead of the English registry description; a test enforces that "start here" never needs a key. The three new servers are `uvx duckduckgo-mcp-server`, `uvx arxiv-mcp-server`, `uvx mcp-server-time` (each handshake-tested, SDK-pinned upstream). **DuckDuckGo is also in `RESEARCH_TOOL_CATALOG_IDS`**, so "Set up research tools" now gives Deep Research real web *search* (before: only fetch-a-known-URL, Wikipedia, OpenAlex). Not yet looked at in the running app.
+
 ### RAG (`src/lib/rag.ts`, `chunking.ts`, `embeddings.ts`)
 
 Migration **v7** adds `rag_documents` + `rag_chunks` (embeddings as JSON `TEXT` — SQLite has no
@@ -179,6 +184,15 @@ top-k; `buildRagSystemBlock` injects the grounding directive (answer only from p
 
 `retrieveExplained()` is the explorer's variant — keeps the full scored list + query/chunk vectors
 that `retrieve()` discards. `retrieve()` itself is untouched by it.
+
+**Library as a window into the index** (`LibraryPanel.tsx`): three tabs — Documents, **Map**, Embedding model.
+Documents shows stat tiles (documents / passages / numbers per passage), and each document opens to its
+passages (`loadLibraryChunks()` in `rag.ts` decodes the stored vectors; read only while a non-settings tab is
+open). Every passage carries a **fingerprint** (`viz/Fingerprint.tsx`, math in `lib/ragInsights.ts`): the
+embedding squeezed into ~48 coloured cells. The passage dialog of the Retrieval explorer shows the question's
+fingerprint next to the passage's. The Map tab (`viz/LibraryMap.tsx`) is a PCA scatter of *all* passages coloured
+per document (`--viz-1…6` tokens). A notice appears when documents were indexed with **different embedding models**
+(their vectors aren't comparable). `fitToView` is shared by `EmbeddingMap` and `LibraryMap`.
 
 Embeddings require a **Gemini or Mistral** key (`EMBEDDING_CAPABLE`); config lives in `localStorage`,
 the key is resolved from the keychain at call time.
@@ -261,7 +275,7 @@ that needs a provider. (The modules were renumbered once; `migrateCourseModuleOr
 progress from the old ids, once, behind `localStorage` `studyllm.course.order`.)
 
 - **Structure vs copy.** `lib/course/modules.ts` holds each module's tasks (kind, auto-check, embedded tool,
-  lab spec, accepted number range, quiz answer index); `lib/course/lessons.ts` holds each lesson's **layout**
+  lab spec, quiz answer index); `lib/course/lessons.ts` holds each lesson's **layout**
   as an ordered list of blocks, *including where each task appears* (a test proves every task is placed
   exactly once and the quiz comes last). Every string is a locale key — lesson text in
   `locales/course.lessons.*.ts`, module headers/tasks/quizzes/suggested prompts in `course.modules.*.ts`,
@@ -275,8 +289,7 @@ progress from the old ids, once, behind `localStorage` `studyllm.course.order`.)
   scrolls to each card. Key scheme for each block kind: header of `lessons.ts`.
 - **Task kinds** (`TaskCard.tsx`): `check` (auto-verified from real state by `evaluateCheck`), `do` (an
   embedded tool that reports back when really used — `onRan` on the reused playgrounds), `lab` (a chat in
-  the lesson; optional "what did you notice?" confirmation), `number` (calculate with the estimators; range
-  tolerance, `judgeNumber` in `lib/course/labs.ts`, hint after a miss), `manual`, `quiz`, `reflect`. `check`
+  the lesson; optional "what did you notice?" confirmation), `manual`, `quiz`, `reflect`. `check`
   works on any kind and a pass is persisted the first time. Optional tasks (router, Ollama, Gmail) never
   hold a module back. After "Reset progress" still-detected checks re-complete by design.
 - **Embedded chats** (`course/ChatLab.tsx`, not to be confused with the Lab panel) run through the app's real
@@ -311,6 +324,10 @@ progress from the old ids, once, behind `localStorage` `studyllm.course.order`.)
   "Ask permission" only counts hand-set permissions on non-OAuth servers (Google tools default to `ask`).
 - **Progress** lives in SQLite table `course_progress(task_id, status, note, updated_at)` — **migration
   v9**. "Copy report" builds a Markdown report (`lib/course/report.ts`) for the students' written memoria.
+- **Module 9 (RAG)** is the longest lesson: why RAG exists → 5-step pipeline → with/without → **`ChunkingPlayground`**
+  (`course/ChunkingPlayground.tsx`, no key needed, runs the real `chunkText`, highlights the overlap; task
+  `m9.chunking`) → an `explore` block on what an embedding is → Library upload task → a tour of the Library's
+  new views → Retrieval explorer → grounding comparison → an `explore` block on why RAG fails → quiz.
 - **Other demos:** `KeyGuide` (key links straight from the provider manifest), `PromptBuilder` (model-facing
   scaffolding is English by the i18n rule; see `lib/course/promptBuilder.ts`), `VramEstimator` and
   `CostEstimator` (`lib/course/estimates.ts`; the cost demo shows the history being
@@ -444,7 +461,7 @@ Fresh install → providers (Gemini only, failover with a dead/invalid-key/missi
 disabled, none), Lab presets/temperature/top-p/max-length, Deep Research (all five modes + the gate),
 MCP (curated research servers, filesystem incl. path-escape attempt, Notion start, allow/ask/deny
 approval), library RAG (txt/PDF/empty/oversized, grounded and out-of-document questions), Course
-(tour, quiz/number/lab tasks), EN/ES parity, double-Enter, Stop, reload mid-stream, rename/delete.
+(tour, quiz/lab tasks), EN/ES parity, double-Enter, Stop, reload mid-stream, rename/delete.
 **Not exercised:** the wizard's success path with a real key, Google OAuth consent, OmniRoute start
 (hundreds of MB download), native folder picker, scanned-PDF OCR.
 
@@ -478,8 +495,12 @@ approval), library RAG (txt/PDF/empty/oversized, grounded and out-of-document qu
   thousands. Requires a Gemini or Mistral key.
 - The retrieved-sources card is **session-ephemeral** (absent after reload). Persisting citation
   records is a noted follow-up.
-- Playground visualizations are live-only, not persisted; the 2D map is a PCA approximation (a teaching
-  lens, not a precise metric).
+- Playground visualizations are live-only, not persisted; the 2D maps (retrieval and Library) are a PCA
+  approximation (a teaching lens, not a precise metric). The Library map projects every stored chunk in the
+  webview, so it will get slow in the thousands.
+- ⚠️ The new Library/Map/fingerprint UI and module 9 were verified by typecheck, lint and unit tests
+  (`ragInsights.test.ts`) only — **not yet clicked through in the running app with real documents**. The module-9
+  screenshots in `public/course/` predate the Library redesign.
 - Scanned-image PDFs need OCR (not implemented).
 
 **Provider-side, not app bugs** (the router degrades around all of these)

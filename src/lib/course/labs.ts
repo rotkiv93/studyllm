@@ -50,20 +50,3 @@ export type RunLab = (
   signal: AbortSignal,
 ) => Promise<void>;
 
-/** A numeric answer the student works out with the estimators, accepted inside `[min, max]`. */
-export interface NumberSpec {
-  min: number;
-  max: number;
-  /** Short unit shown beside the input ("GB", "tokens", "USD"). Not localized — it's a symbol. */
-  unit: string;
-}
-
-/** Checks a typed number against its range. `low`/`high` tell the student which way to adjust. */
-export function judgeNumber(spec: NumberSpec, raw: string): "ok" | "low" | "high" | "invalid" {
-  // Accept a decimal comma as well as a point, since the course is in Spanish too.
-  const value = Number(raw.trim().replace(",", "."));
-  if (raw.trim() === "" || !Number.isFinite(value)) return "invalid";
-  if (value < spec.min) return "low";
-  if (value > spec.max) return "high";
-  return "ok";
-}

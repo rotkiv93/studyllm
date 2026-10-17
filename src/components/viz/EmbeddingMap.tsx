@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { projectTo2D } from "../../lib/projection";
+import { fitToView } from "../../lib/ragInsights";
 import type { ExplainedChunk } from "../../lib/rag";
 import { useT } from "../../lib/i18n";
 
@@ -38,28 +39,9 @@ export function EmbeddingMap({
     [queryVector, scored],
   );
 
-  const placed = useMemo(() => {
-    if (points.length === 0) return null;
-    const xs = points.map((p) => p[0]);
-    const ys = points.map((p) => p[1]);
-    const minX = Math.min(...xs);
-    const maxX = Math.max(...xs);
-    const minY = Math.min(...ys);
-    const maxY = Math.max(...ys);
-    const spanX = maxX - minX || 1;
-    const spanY = maxY - minY || 1;
-    const span = Math.max(spanX, spanY); // uniform scale keeps distances honest
-    const cx = (minX + maxX) / 2;
-    const cy = (minY + maxY) / 2;
-    const mid = VIEW / 2;
-    const scale = (VIEW - 2 * PAD) / span;
-    return points.map(([x, y]) => ({
-      x: mid + (x - cx) * scale,
-      y: mid - (y - cy) * scale, // flip: SVG y grows downward
-    }));
-  }, [points]);
+  const placed = useMemo(() => fitToView(points, VIEW, PAD), [points]);
 
-  if (!placed || placed.length < 2) return null;
+  if (placed.length < 2) return null;
   const cutoff = Math.min(k, scored.length);
   const [queryPt, ...chunkPts] = placed;
 
@@ -102,13 +84,13 @@ export function EmbeddingMap({
       </svg>
       <div className="embed-legend">
         <span className="embed-legend-item">
-          <span className="embed-legend-star">★</span> your question
+          <span className="embed-legend-star">★</span> {t("viz.legendQuery")}
         </span>
         <span className="embed-legend-item">
-          <span className="embed-legend-swatch embed-legend-kept" /> retrieved
+          <span className="embed-legend-swatch embed-legend-kept" /> {t("viz.legendRetrieved")}
         </span>
         <span className="embed-legend-item">
-          <span className="embed-legend-swatch" /> other passages
+          <span className="embed-legend-swatch" /> {t("viz.legendOther")}
         </span>
       </div>
     </div>

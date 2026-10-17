@@ -35,7 +35,89 @@ export function repairCuratedArgs(command: string, args: string[]): string[] | n
   return [...FETCH_SDK_PIN, ...args];
 }
 
+/** Emoji shown on each curated server's card, so they are easy to tell apart at a glance. */
+export const CURATED_ICONS: Record<string, string> = {
+  "curated:filesystem": "📁",
+  "curated:notion": "📓",
+  "curated:github": "🐙",
+  "curated:brave-search": "🔎",
+  "curated:fetch": "🌐",
+  "curated:wikipedia": "📖",
+  "curated:openalex": "🎓",
+  "curated:memory": "🧠",
+  "curated:duckduckgo": "🦆",
+  "curated:arxiv": "📄",
+  "curated:time": "🕐",
+};
+
+/** What a server asks of the student before it works — drives the badge on its Discover card. */
+export type CuratedNeeds = "none" | "folder" | "key";
+
+export interface CuratedMeta {
+  /** Locale key stem: `market.c.<slug>.does` / `.try`. */
+  slug: string;
+  /** `start` = works straight away; `account` = needs a token or key from another service. */
+  group: "start" | "account";
+  needs: CuratedNeeds;
+}
+
+/**
+ * How Discover presents the curated servers, **in display order**. Ordered for someone finding out
+ * what MCP can do: first the ones that show it off in a single question and need no account (a
+ * folder the assistant tidies, a web page it reads, the web it searches), then the research and
+ * utility ones, then the ones that need a token. The student-facing copy lives in the locale files.
+ */
+export const CURATED_META: Record<string, CuratedMeta> = {
+  "curated:filesystem": { slug: "filesystem", group: "start", needs: "folder" },
+  "curated:fetch": { slug: "fetch", group: "start", needs: "none" },
+  "curated:duckduckgo": { slug: "duckduckgo", group: "start", needs: "none" },
+  "curated:wikipedia": { slug: "wikipedia", group: "start", needs: "none" },
+  "curated:openalex": { slug: "openalex", group: "start", needs: "none" },
+  "curated:arxiv": { slug: "arxiv", group: "start", needs: "none" },
+  "curated:memory": { slug: "memory", group: "start", needs: "none" },
+  "curated:time": { slug: "time", group: "start", needs: "none" },
+  "curated:notion": { slug: "notion", group: "account", needs: "key" },
+  "curated:github": { slug: "github", group: "account", needs: "key" },
+  "curated:brave-search": { slug: "brave", group: "account", needs: "key" },
+};
+
+/** The curated entries in {@link CURATED_META} order, optionally limited to one group. */
+export function curatedInDisplayOrder(group?: CuratedMeta["group"]): CatalogEntry[] {
+  return Object.keys(CURATED_META)
+    .filter((id) => !group || CURATED_META[id].group === group)
+    .map((id) => CURATED_ENTRIES.find((e) => e.id === id))
+    .filter((e): e is CatalogEntry => !!e);
+}
+
+/** Icon for an installed server: matched by name against the curated list, then Google's, else a plug. */
+export function mcpServerIcon(name: string): string {
+  const n = name.trim().toLowerCase();
+  const curated = CURATED_ENTRIES.find((e) => e.name.toLowerCase() === n);
+  if (curated) return CURATED_ICONS[curated.id] ?? "🔌";
+  if (n.includes("gmail")) return "✉️";
+  if (n.includes("calendar")) return "📅";
+  if (n.includes("drive")) return "🗂️";
+  if (n.includes("tasks")) return "✅";
+  if (n.includes("filesystem")) return "📁";
+  return "🔌";
+}
+
 export const CURATED_ENTRIES: CatalogEntry[] = [
+  {
+    id: "curated:filesystem",
+    name: "Filesystem",
+    description:
+      "Let the assistant read and write files inside a folder you choose. You'll pick the folder " +
+      "when adding it.",
+    version: null,
+    repositoryUrl: "https://github.com/modelcontextprotocol/servers",
+    install: {
+      kind: "npx",
+      args: ["-y", "@modelcontextprotocol/server-filesystem"],
+      positionalArgs: [{ description: "Folder the assistant may access", default: null }],
+    },
+    requiredEnv: [],
+  },
   {
     id: "curated:notion",
     name: "Notion",
@@ -54,21 +136,6 @@ export const CURATED_ENTRIES: CatalogEntry[] = [
         default: null,
       },
     ],
-  },
-  {
-    id: "curated:filesystem",
-    name: "Filesystem",
-    description:
-      "Let the assistant read and write files inside a folder you choose. You'll pick the folder " +
-      "when adding it.",
-    version: null,
-    repositoryUrl: "https://github.com/modelcontextprotocol/servers",
-    install: {
-      kind: "npx",
-      args: ["-y", "@modelcontextprotocol/server-filesystem"],
-      positionalArgs: [{ description: "Folder the assistant may access", default: null }],
-    },
-    requiredEnv: [],
   },
   {
     id: "curated:github",
@@ -147,6 +214,44 @@ export const CURATED_ENTRIES: CatalogEntry[] = [
     version: null,
     repositoryUrl: "https://github.com/reetp14/openalex-mcp",
     install: { kind: "npx", args: ["-y", "openalex-mcp"], positionalArgs: [] },
+    requiredEnv: [],
+  },
+  {
+    id: "curated:memory",
+    name: "Memory",
+    description:
+      "Lets the assistant remember facts about you and your projects between conversations, " +
+      "stored locally on your computer. No account or key needed.",
+    version: null,
+    repositoryUrl: "https://github.com/modelcontextprotocol/servers/tree/main/src/memory",
+    install: { kind: "npx", args: ["-y", "@modelcontextprotocol/server-memory"], positionalArgs: [] },
+    requiredEnv: [],
+  },
+  {
+    id: "curated:duckduckgo",
+    name: "DuckDuckGo Search",
+    description: "Search the web with DuckDuckGo and read the pages it finds. No account or key needed.",
+    version: null,
+    repositoryUrl: "https://github.com/nickclyde/duckduckgo-mcp-server",
+    install: { kind: "uvx", args: ["duckduckgo-mcp-server"], positionalArgs: [] },
+    requiredEnv: [],
+  },
+  {
+    id: "curated:arxiv",
+    name: "arXiv",
+    description: "Search and read scientific preprints on arXiv. No account or key needed.",
+    version: null,
+    repositoryUrl: "https://github.com/blazickjp/arxiv-mcp-server",
+    install: { kind: "uvx", args: ["arxiv-mcp-server"], positionalArgs: [] },
+    requiredEnv: [],
+  },
+  {
+    id: "curated:time",
+    name: "Time",
+    description: "Tell the current time anywhere and convert between time zones. No account or key needed.",
+    version: null,
+    repositoryUrl: "https://github.com/modelcontextprotocol/servers/tree/main/src/time",
+    install: { kind: "uvx", args: ["mcp-server-time"], positionalArgs: [] },
     requiredEnv: [],
   },
 ];

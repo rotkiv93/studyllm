@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { IconSearch, IconLoader } from "./icons";
 import { SimilarityRanking } from "./viz/SimilarityRanking";
 import { EmbeddingMap } from "./viz/EmbeddingMap";
+import { Fingerprint } from "./viz/Fingerprint";
 import { embedderErrorText, resolveEmbedder, retrieveExplained, type RetrievalExplanation } from "../lib/rag";
 import type { ProviderRow, RagDocumentRow } from "../lib/db";
 import { useT, type TranslateFn } from "../lib/i18n";
@@ -254,6 +255,24 @@ export function RetrievalExplorer({
             </p>
 
             <div className="passage-dialog-body">{selectedChunk.text}</div>
+
+            <div className="passage-dialog-prints">
+              <div className="passage-dialog-print">
+                <span>{t("retrieval.fingerprintQuery")}</span>
+                <Fingerprint
+                  vector={result.queryVector}
+                  label={t("library.fingerprintLabel", { dims: result.queryVector.length })}
+                />
+              </div>
+              <div className="passage-dialog-print">
+                <span>{t("retrieval.fingerprintPassage")}</span>
+                <Fingerprint
+                  vector={selectedChunk.vector}
+                  label={t("library.fingerprintLabel", { dims: selectedChunk.vector.length })}
+                />
+              </div>
+              <p className="passage-dialog-caption">{t("retrieval.fingerprintNote")}</p>
+            </div>
 
             <div className="passage-dialog-nav">
               <button

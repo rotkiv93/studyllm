@@ -11,7 +11,7 @@
  * n8n is intentionally not covered.
  */
 import { lessonLocaleKeys } from "./lessons";
-import type { LabSpec, NumberSpec } from "./labs";
+import type { LabSpec } from "./labs";
 
 /** Where a task's "open it" shortcut leads. */
 export type CourseTarget = "providers" | "mcp" | "plugins" | "library" | "chat";
@@ -20,12 +20,11 @@ export type CourseTarget = "providers" | "mcp" | "plugins" | "library" | "chat";
  * - `check`   — the app verifies it from real state (a provider exists, a tool ran…).
  * - `do`      — the student does it right in the lesson with an embedded tool; the tool reports back.
  * - `lab`     — try it in a chat embedded in the lesson (optionally confirm what you noticed).
- * - `number`  — work something out with the estimators and type the answer.
  * - `manual`  — the student does something outside the app's sight and ticks it off.
  * - `quiz`    — one multiple-choice question with an explanation.
  * - `reflect` — a short free-text answer saved with the progress report.
  */
-export type TaskKind = "check" | "do" | "lab" | "number" | "manual" | "quiz" | "reflect";
+export type TaskKind = "check" | "do" | "lab" | "manual" | "quiz" | "reflect";
 
 /** What the app can verify about the student's setup. Evaluated by `evaluateCheck`. */
 export type CheckId =
@@ -50,6 +49,7 @@ export type EmbedId =
   | "tokens"
   | "cost"
   | "system"
+  | "chunking"
   | "retrieval"
   | "librarySetup"
   | "grounding"
@@ -71,8 +71,6 @@ export interface CourseTask {
   embed?: EmbedId;
   /** For `kind: "lab"`: how the embedded chat behaves. */
   lab?: LabSpec;
-  /** For `kind: "number"`: the accepted range. */
-  number?: NumberSpec;
   /** For `kind: "quiz"`: index of the right option (the question has three). */
   correct?: number;
 }
@@ -147,8 +145,6 @@ export const COURSE_MODULES: CourseModule[] = [
   {
     n: 6,
     tasks: [
-      { id: "m6.split", kind: "number", number: { min: 700, max: 900, unit: "tokens" } },
-      { id: "m6.cost", kind: "number", number: { min: 0.0036, max: 0.0044, unit: "USD" } },
       { id: "m6.context", kind: "lab", lab: { mode: "chat", suggestions: 3, runs: 3, contextMeter: true } },
       quiz(6, 2),
     ],
@@ -160,7 +156,6 @@ export const COURSE_MODULES: CourseModule[] = [
   {
     n: 8,
     tasks: [
-      { id: "m8.estimate", kind: "number", number: { min: 14, max: 17.5, unit: "GB" } },
       { id: "m8.ollama", kind: "manual", optional: true, open: "providers" },
       quiz(8, 0),
     ],
@@ -168,6 +163,7 @@ export const COURSE_MODULES: CourseModule[] = [
   {
     n: 9,
     tasks: [
+      { id: "m9.chunking", kind: "do", embed: "chunking" },
       { id: "m9.addDoc", kind: "do", embed: "librarySetup", check: "documentAdded", open: "library" },
       { id: "m9.compare", kind: "do", embed: "grounding" },
       quiz(9, 0),
@@ -286,7 +282,6 @@ export function moduleLocaleKeys(mod: CourseModule): string[] {
     keys.push(c.title, c.desc);
     if (task.kind !== "reflect") keys.push(c.goal);
     if (task.lab) keys.push(...labLocaleKeys(taskPrefix(task), task.lab));
-    if (task.kind === "number") keys.push(`${taskPrefix(task)}.hint`, `${taskPrefix(task)}.why`);
   }
   return keys;
 }

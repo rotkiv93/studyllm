@@ -63,10 +63,6 @@ export const courseEs = {
   "course.shot.close": "Cerrar",
 
   // ── Calculation tasks ──────────────────────────────────────────────
-  "course.number.placeholder": "Tu resultado",
-  "course.number.invalid": "Escribe un número, por ejemplo 12,5.",
-  "course.number.low": "Te has quedado corto. Revisa la cuenta.",
-  "course.number.high": "Te has pasado. Revisa la cuenta.",
 
   // ── Interactive chat (labs) ────────────────────────────────────────
   "course.lab.needProvider": "Para probarlo necesitas al menos un proveedor conectado (módulo 1).",

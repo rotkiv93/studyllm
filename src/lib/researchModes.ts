@@ -100,7 +100,7 @@ export const RESEARCH_MODES: ResearchMode[] = [
 export const DEFAULT_RESEARCH_MODE = RESEARCH_MODES[0];
 
 /** Curated keyless MCP servers that power Deep Research (installable with no API key). */
-export const RESEARCH_TOOL_CATALOG_IDS = ["curated:fetch", "curated:wikipedia", "curated:openalex"];
+export const RESEARCH_TOOL_CATALOG_IDS = ["curated:fetch", "curated:duckduckgo", "curated:wikipedia", "curated:openalex"];
 
 /**
  * Personal / workspace connectors that expose "search"-shaped tools (drive_search_files,

@@ -126,7 +126,6 @@ describe("course structure", () => {
     for (const task of COURSE_MODULES.flatMap((m) => m.tasks)) {
       if (task.kind === "check") expect(task.check).toBeDefined();
       if (task.kind === "lab") expect(task.lab).toBeDefined();
-      if (task.kind === "number") expect(task.number).toBeDefined();
       if (task.kind === "do") expect(task.embed).toBeDefined();
     }
   });

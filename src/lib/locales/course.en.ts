@@ -59,10 +59,6 @@ export const courseEn: Record<keyof typeof courseEs, string> = {
   "course.shot.close": "Close",
 
   // ── Calculation tasks ──────────────────────────────────────────────
-  "course.number.placeholder": "Your result",
-  "course.number.invalid": "Type a number, for example 12.5.",
-  "course.number.low": "That's too low. Check the calculation.",
-  "course.number.high": "That's too high. Check the calculation.",
 
   // ── Interactive chat (labs) ────────────────────────────────────────
   "course.lab.needProvider": "To try this you need at least one connected provider (module 1).",

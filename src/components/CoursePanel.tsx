@@ -4,6 +4,7 @@ import { TaskCard } from "./course/TaskCard";
 import { TokenExplorer } from "./TokenExplorer";
 import { PromptPlayground } from "./PromptPlayground";
 import { RetrievalExplorer } from "./RetrievalExplorer";
+import { ChunkingPlayground } from "./course/ChunkingPlayground";
 import { GroundingContrast } from "./GroundingContrast";
 import { McpToolExplorer, type ExplorerServer } from "./McpToolExplorer";
 import { ResearchTrace } from "./ResearchTrace";
@@ -548,6 +549,8 @@ function renderEmbed(id: EmbedId, p: CoursePanelProps, state: CourseState, onDon
       return <CostEstimator />;
     case "system":
       return <PromptPlayground hasProviders={p.hasProviders} onRunAnswer={p.onRunAnswer} onRan={onDone} />;
+    case "chunking":
+      return <ChunkingPlayground onRan={onDone} />;
     case "retrieval":
       return <RetrievalExplorer providers={p.providers} documents={p.documents} onOpenLibrary={() => p.onOpen("library")} />;
     case "librarySetup":
