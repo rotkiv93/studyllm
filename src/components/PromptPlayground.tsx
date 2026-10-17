@@ -24,7 +24,7 @@ import { useT, type MessageKey } from "../lib/i18n";
 
 /**
  * Preset **labels** are localized (`prompt.preset.*`); the prompt `text` deliberately is not — it's
- * model-facing and lands in the editable textarea, same rule as `studyTemplates.ts`'s `promptSeed`.
+ * model-facing and lands in the editable textarea, same rule as every other prompt in the app.
  * The student can rewrite it in any language before running.
  */
 const PRESETS: { labelKey: MessageKey; text: string }[] = [
@@ -57,8 +57,11 @@ interface Run {
 export function PromptPlayground({
   hasProviders,
   onRunAnswer,
+  onRan,
 }: {
   hasProviders: boolean;
+  /** Called after a run that used a system prompt finished without error (the Course counts it). */
+  onRan?: () => void;
   onRunAnswer: (
     question: string,
     system: string | undefined,
@@ -94,6 +97,7 @@ export function PromptPlayground({
     const patch = (fn: (r: Run) => Run) =>
       setRuns((prev) => prev.map((r) => (r.id === id ? fn(r) : r)));
 
+    let failed = false;
     try {
       await onRunAnswer(
         user.trim(),
@@ -101,6 +105,7 @@ export function PromptPlayground({
         (e) => {
           if (e.type === "chunk") patch((r) => ({ ...r, answer: r.answer + e.text }));
           else if (e.type === "error") {
+            failed = true;
             setError(e.message);
             patch((r) => ({ ...r, status: "error" }));
           }
@@ -108,6 +113,7 @@ export function PromptPlayground({
         controller.signal,
       );
       patch((r) => (r.status === "error" ? r : { ...r, status: "done" }));
+      if (!failed && sys) onRan?.();
     } catch (err) {
       if (!controller.signal.aborted) {
         setError(err instanceof Error ? err.message : t("prompt.failed"));

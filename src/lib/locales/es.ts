@@ -3,6 +3,8 @@
  * Keys are namespaced by surface (e.g. `sidebar.*`, `onboarding.*`).
  * Placeholders use `{name}` syntax and are filled by `t(key, { name })`.
  */
+import { courseEs } from "./course.es";
+
 export const es = {
   // ── Common / shared ────────────────────────────────────────────────
   "common.close": "Cerrar",
@@ -66,7 +68,6 @@ export const es = {
   "nav.providers": "Proveedores",
   "nav.mcp": "Herramientas y conexiones",
   "nav.plugins": "Cuentas (Plugins)",
-  "nav.explore": "Descubre cómo funciona",
   "nav.diagnostics": "Diagnóstico",
 
   // ── Tool call block ────────────────────────────────────────────────
@@ -83,42 +84,16 @@ export const es = {
   "sources.match": "{percent}% de coincidencia",
 
   // ── Study modes / starter prompts ──────────────────────────────────
-  "study.browseAll": "Ver todo",
-  "study.showFewer": "Ver menos",
-  "study.topic.reading": "Lectura y análisis",
-  "study.topic.writing": "Escritura y redacción",
-  "study.topic.research": "Investigación y citas",
-  "study.topic.study": "Estudio y repaso",
 
-  "study.tpl.summarize.label": "Resumir un documento",
-  "study.tpl.summarize.description": "Condensa un informe, tratado o lectura larga en puntos clave estructurados.",
 
-  "study.tpl.explain-treaty.label": "Explicar un tratado o acuerdo",
-  "study.tpl.explain-treaty.description": "Desglosa a qué compromete realmente un tratado o acuerdo a sus partes.",
 
-  "study.tpl.extract-entities.label": "Extraer datos y entidades clave",
-  "study.tpl.extract-entities.description": "Extrae personas, lugares, fechas y organizaciones de una fuente.",
 
-  "study.tpl.translate-summarize.label": "Traducir y resumir una fuente",
-  "study.tpl.translate-summarize.description": "Traduce una fuente en otro idioma al inglés y la resume.",
 
-  "study.tpl.policy-brief.label": "Redactar un informe de políticas",
-  "study.tpl.policy-brief.description": "Convierte tus notas en un informe de políticas o documento de posición estructurado.",
 
-  "study.tpl.compare-positions.label": "Comparar las posturas de dos actores",
-  "study.tpl.compare-positions.description": "Comparación lado a lado de la postura de dos países o actores sobre un tema.",
 
-  "study.tpl.lit-review-outline.label": "Esquema de revisión bibliográfica",
-  "study.tpl.lit-review-outline.description": "Convierte un tema y unas cuantas fuentes en un esquema estructurado de revisión bibliográfica.",
 
-  "study.tpl.bibliography.label": "Formatear una bibliografía",
-  "study.tpl.bibliography.description": "Formatea referencias en estilo APA, MLA o Chicago.",
 
-  "study.tpl.catalog-metadata.label": "Catalogar un documento (metadatos)",
-  "study.tpl.catalog-metadata.description": "Genera metadatos archivísticos descriptivos para un documento.",
 
-  "study.tpl.flashcards.label": "Crear fichas o cuestionario",
-  "study.tpl.flashcards.description": "Genera fichas de estudio o un cuestionario breve a partir de un documento o tema.",
 
   // ── Onboarding wizard ──────────────────────────────────────────────
   "onboarding.title": "Bienvenido a StudyLLM",
@@ -144,28 +119,9 @@ export const es = {
   "onboarding.mcpFailed": "No se pudo añadir el acceso a archivos: {error}",
   "onboarding.chooseFolder": "Elegir carpeta…",
   "onboarding.adding": "Añadiendo…",
-  "onboarding.featuresHint":
-    "Dos cosas que StudyLLM puede hacer más allá de un chat normal; puedes activar cada una desde las casillas justo encima del campo de mensaje, cuando las necesites:",
-  "onboarding.featureResearch": "Investigación profunda",
-  "onboarding.featureResearchDesc":
-    "haz una pregunta amplia y el asistente busca en la web en varios pasos, lee las fuentes y escribe una respuesta con citas.",
-  "onboarding.featureDocs": "Chatea con tus documentos",
-  "onboarding.featureDocsDesc":
-    "añade tus propios apuntes, PDFs o artículos, y el asistente responde usando solo esos, señalando los pasajes exactos que utilizó.",
   "onboarding.seeHowItWorks": "Ver cómo funciona",
-  "onboarding.continue": "Continuar",
   "onboarding.doneHint": "¡Todo listo! Empieza a chatear cuando quieras.",
   "onboarding.startChatting": "Empezar a chatear",
-
-  // ── Explore panel ──────────────────────────────────────────────────
-  "explore.title": "Descubre cómo funciona",
-  "explore.tab.lessons": "Lecciones",
-  "explore.tab.tokens": "Tokens",
-  "explore.tab.system": "Prompt del sistema",
-  "explore.tab.retrieval": "Tus documentos (RAG)",
-  "explore.tab.grounding": "Adivinar vs. fundamentado",
-  "explore.tab.tools": "Herramientas (MCP)",
-  "explore.tab.research": "Proceso de investigación",
 
   // ── Provider free-tier notes ───────────────────────────────────────
   "provider.freeTier.gemini": "~1.500 solicitudes/día · llamada a herramientas nativa",
@@ -177,10 +133,10 @@ export const es = {
   "provider.freeTier.cerebras": "rápido · algunos modelos requieren plan de pago",
   "provider.freeTier.github-models": "cuota diaria baja",
   "provider.freeTier.sambanova": "solo créditos de prueba",
+  "provider.freeTier.omniroute": "se ejecuta en tu ordenador · junta tus propias claves gratuitas",
 
   // ── Chat / main panel ──────────────────────────────────────────────
   "chat.newChat": "Nuevo chat",
-  "chat.emptyTitle": "¿Con qué puedo ayudarte a estudiar?",
   "chat.you": "Tú",
   "chat.assistant": "Asistente",
   "chat.via": "vía {provider}",
@@ -210,13 +166,6 @@ export const es = {
   "composer.chatWithDocs": "Chatea con tus documentos",
   "composer.chatWithDocsOn": "Responder usando solo tus propios documentos (RAG)",
   "composer.chatWithDocsOff": "Añade documentos primero y después responderá a partir de ellos",
-  "composer.chatLab": "Laboratorio de chat",
-  "composer.chatLabTitle":
-    "Define un prompt de sistema y los ajustes del modelo (temperatura, top-p, tokens máximos) para este chat",
-  "composer.howDoesThisWork": "¿Cómo funciona esto?",
-  "composer.yourDocuments": "Tus documentos",
-  "composer.yourDocumentsCaption":
-    "el asistente responde solo a partir de los archivos de tu biblioteca y cita los pasajes que utilizó.",
 
   // Tool approval
   "approval.title": "Una herramienta necesita tu aprobación",
@@ -358,6 +307,12 @@ export const es = {
   "providers.removeFailed": "No se pudo eliminar el proveedor: {error}",
   "providers.updateFailed": "No se pudo actualizar el proveedor: {error}",
   "providers.reorderFailed": "No se pudieron reordenar los proveedores: {error}",
+  "providers.routerUrl": "Dirección del router (URL)",
+  "providers.localRouterHint":
+    "OmniRoute es un router de IA que se ejecuta en tu ordenador y junta tus claves gratuitas en una sola dirección. Arráncalo antes (módulo 1 del Curso). Es opcional.",
+  "providers.routerKeyOptional": "Clave de OmniRoute (opcional)",
+  "providers.routerKeyPlaceholder": "Déjalo en blanco si tu OmniRoute no pide clave",
+  "providers.routerDocsLink": "Cómo instalar OmniRoute",
 
   // Model field
   "model.label": "Modelo",
@@ -371,22 +326,15 @@ export const es = {
     "No se pudieron cargar los modelos con esta clave — se muestran sugerencias. Puedes escribir cualquier id de modelo.",
   "model.unavailable":
     "No se pudo acceder a la lista de modelos — se muestran sugerencias. Puedes escribir cualquier id de modelo.",
+  "model.unavailableLocal":
+    "No se pudo contactar con el router. ¿Está OmniRoute arrancado y la dirección es correcta? Puedes escribir «auto» o cualquier id de modelo.",
   "model.enterKey": "Introduce una clave de API para cargar la lista de modelos de este proveedor.",
 
   // ── Chat lab ───────────────────────────────────────────────────────
   "chatLab.title": "Laboratorio de chat",
-  "chatLab.subtitle":
-    "Dirige esta conversación como lo haría un ingeniero: una instrucción permanente y los ajustes del modelo. Se aplica a tus mensajes reales y se guarda con este chat.",
   "chatLab.close": "Cerrar el laboratorio de chat",
-  "chatLab.standingInstructions": "Instrucciones permanentes",
-  "chatLab.systemPromptTerm": "(prompt de sistema)",
-  "chatLab.tokens": "{count} tokens",
-  "chatLab.clear": "Borrar",
   "chatLab.systemPlaceholder":
     "p. ej. Eres un tutor paciente. Explica de forma sencilla y comprueba que se ha entendido.",
-  "chatLab.systemExplain":
-    "Instrucciones ocultas que el modelo sigue antes de ver tu mensaje: su personalidad y sus reglas.",
-  "chatLab.default": "por defecto",
   "chatLab.preset.tutor": "Tutor cercano",
   "chatLab.preset.pirate": "Habla como un pirata",
   "chatLab.preset.oneWord": "Solo una palabra",
@@ -394,16 +342,66 @@ export const es = {
   "chatLab.preset.eli10": "Explícamelo como si tuviera 10 años",
   "chatLab.knob.creativity": "Creatividad",
   "chatLab.knob.creativityTerm": "temperatura",
-  "chatLab.knob.creativityExplain":
-    "Bajo = centrado y repetible. Alto = más sorprendente y variado (y más propenso a divagar).",
-  "chatLab.knob.variety": "Variedad de palabras",
-  "chatLab.knob.varietyTerm": "top-p",
-  "chatLab.knob.varietyExplain":
-    "Limita la elección de palabras a las opciones más probables. Más bajo = más seguro y predecible.",
-  "chatLab.knob.length": "Límite de longitud de respuesta",
   "chatLab.knob.lengthTerm": "tokens máximos",
-  "chatLab.knob.lengthExplain":
-    "Un tope estricto de cuánto puede escribir el modelo. Si lo pones bajo, las respuestas largas se cortan a mitad de frase.",
+  "lab.addDocs": "Añadir documentos",
+  "lab.creativity.precise": "Precisa",
+  "lab.creativity.creative": "Creativa",
+  "lab.length.label": "Longitud",
+  "lab.reset": "Restablecer todo",
+  "omni.title": "OmniRoute (router local)",
+  "mode.providers": "Cómo usas los proveedores",
+  "mode.own": "Mis proveedores",
+  "mode.ownHint": "Tus claves, con cambio automático entre ellas",
+  "mode.omni": "OmniRoute",
+  "mode.omniHint": "Un router local gestiona las claves por ti",
+  "error.omniFailed": "OmniRoute no ha podido contestar: {message}. Comprueba que tiene claves en Proveedores → OmniRoute.",
+  "error.omniNotReady": "OmniRoute aún se está iniciando o está apagado. Mira su estado en Ajustes → Proveedores.",
+  "error.omniNoKeys": "OmniRoute no tiene ninguna clave activa, así que no puede responder. Añade una en Ajustes → Proveedores → OmniRoute.",
+  "omni.start": "Iniciar",
+  "omni.password": "OmniRoute tiene otra contraseña de panel. Escríbela para que la app pueda gestionar sus claves.",
+  "omni.passwordLabel": "Contraseña de OmniRoute",
+  "omni.signIn": "Entrar",
+  "omni.keys": "Claves en OmniRoute",
+  "omni.noKeys": "OmniRoute aún no tiene ninguna clave, así que no tiene a quién enviar tus mensajes y el chat fallará. Añade al menos una.",
+  "omni.keyOk": "✓ Funciona",
+  "omni.keyBad": "No funciona",
+  "omni.test": "Probar",
+  "omni.addKey": "Añadir una clave",
+  "omni.add": "Añadir",
+  "omni.pausedOwn": "Mientras uses OmniRoute, tus proveedores propios quedan en pausa (no se borran).",
+  "omni.pausedOmni": "Mientras uses tus proveedores, OmniRoute está apagado.",
+  "omni.state.off": "Apagado",
+  "omni.state.starting": "Iniciando…",
+  "omni.state.running": "En marcha",
+  "omni.state.external": "En marcha (lo arrancaste tú)",
+  "omni.state.error": "Se ha detenido",
+  "omni.starting": "Preparándolo. La primera vez descarga unos cientos de MB y puede tardar hasta 10 minutos; las veces siguientes, un par de minutos.",
+  "omni.crashed": "No ha podido seguir en marcha.",
+  "omni.dashboard": "Abrir el panel (añade tus claves)",
+  "omni.log": "Ver registro",
+  "lab.autoProvider": "Automático (orden de tu lista)",
+  "lab.provider": "Proveedor",
+  "lab.loadingModels": "Cargando modelos…",
+  "lab.usingOmni": "Usando OmniRoute (router local)",
+  "lab.template": "Plantilla…",
+  "lab.model": "Modelo",
+  "lab.modelTitle": "El proveedor que responde primero. Si falla, la app pasa al siguiente de tu lista.",
+  "lab.noModel": "Sin proveedor",
+  "lab.system": "Instrucciones del sistema",
+  "lab.temperature": "Creatividad (temperatura)",
+  "lab.tools": "Herramientas",
+  "lab.advanced": "Ajustes avanzados",
+  "lab.tokens": "{count} tokens",
+  "lab.topP": "Variedad de palabras",
+  "lab.auto": "Auto",
+  "lab.useDefault": "Volver al valor por defecto",
+  "lab.title": "Laboratorio",
+  "lab.expand": "Abrir el Laboratorio",
+  "lab.collapse": "Minimizar el Laboratorio",
+  "lab.personaPlaceholder": "Cómo debe comportarse la IA. Por ejemplo: eres un tutor paciente…",
+  "lab.docs": "Tus documentos",
+  "chat.emptyTitle": "Escribe tu primer mensaje",
+  "chat.emptySubtitle": "Pregunta lo que quieras o arrastra un archivo. Los ajustes de la IA están en la barra de la derecha.",
 
   "plugins.setup.note":
     "¿Ya te habías conectado antes? Estos permisos se han ampliado hace poco: desconecta y vuelve a conectar una vez para conceder el nuevo acceso. Las acciones que envían o eliminan (enviar un correo, mover un mensaje a la papelera, borrar un evento o una tarea) piden tu aprobación cada vez; puedes cambiarlo por herramienta en el panel de Herramientas.",
@@ -444,6 +442,7 @@ export const es = {
   "mcp.start": "Iniciar",
   "mcp.starting": "Iniciando…",
   "mcp.stop": "Detener",
+  "mcp.more": "Más acciones",
   "mcp.tools": "Herramientas",
   "mcp.toolsWithCount": "Herramientas ({count})",
   "mcp.toolsDisabledTitle": "Inicia el servidor para ver sus herramientas",
@@ -665,40 +664,6 @@ export const es = {
   "token.example.otherLang": "Otro idioma",
   "token.example.otherLangText": "Artificial intelligence learns from a great many examples.",
 
-  // ── Lessons (LessonsPanel) ─────────────────────────────────────────
-  "lessons.intro":
-    "Seis lecciones cortas y prácticas sobre cómo funciona de verdad la IA moderna — cada una abre un laboratorio en vivo con el que puedes trastear. Van bien de arriba abajo, por tu cuenta o delante de una clase. Sin programar y sin jerga sin explicar.",
-  "lessons.1.title": "Lo que la IA lee en realidad",
-  "lessons.1.term": "tokens",
-  "lessons.1.body":
-    "Un modelo de IA nunca ve tus letras: primero trocea el texto en piezas llamadas tokens. Verlo explica por qué cuenta mal las letras y por qué tiene límites de tamaño.",
-  "lessons.1.cta": "Divide un texto en tokens",
-  "lessons.2.title": "Cómo lo guías con instrucciones",
-  "lessons.2.term": "prompt de sistema",
-  "lessons.2.body":
-    "Detrás de cada chatbot hay una instrucción oculta que moldea su personalidad y sus reglas. Mira el prompt exacto que recibe el modelo, cámbialo y observa cómo cambia su respuesta.",
-  "lessons.2.cta": "Experimenta con un prompt de sistema",
-  "lessons.3.title": "Por qué a veces se inventa cosas",
-  "lessons.3.term": "alucinación",
-  "lessons.3.body":
-    "Por su cuenta, un modelo responde desde una memoria difusa y puede inventar datos que suenan muy convincentes. Haz una pregunta de dos formas y mira cómo una respuesta inventada se convierte en una con fuentes.",
-  "lessons.3.cta": "Compara una suposición con una respuesta fundamentada",
-  "lessons.4.title": "Cómo encuentra el pasaje correcto",
-  "lessons.4.term": "RAG / recuperación",
-  "lessons.4.body":
-    "«Chatear con tus documentos» funciona convirtiendo el significado en números y buscando los pasajes más cercanos a tu pregunta. Observa la búsqueda real ordenando todos los pasajes de tu biblioteca.",
-  "lessons.4.cta": "Mira cómo se ordenan tus documentos",
-  "lessons.5.title": "Cómo usa herramientas reales",
-  "lessons.5.term": "MCP",
-  "lessons.5.body":
-    "Una herramienta es solo una función que el modelo puede pedir: leer un archivo, buscar en la web. Mira las entradas de una herramienta y luego cómo el modelo elige una y rellena los huecos.",
-  "lessons.5.cta": "Mira al modelo usar una herramienta",
-  "lessons.6.title": "Cómo investiga una pregunta amplia",
-  "lessons.6.term": "investigación agéntica",
-  "lessons.6.body":
-    "Dale a un modelo herramientas y un objetivo y puede trabajar por pasos: descomponer la pregunta, buscar, leer fuentes y escribir una respuesta con citas. Observa una ejecución completa en vivo.",
-  "lessons.6.cta": "Ejecuta una investigación en vivo",
-
   // ── Visualizations (viz/*) ─────────────────────────────────────────
   "viz.embeddingSpace": "Espacio de significados",
   "viz.embeddingSpaceAria": "Mapa del espacio de significados",
@@ -709,4 +674,6 @@ export const es = {
   "viz.rankingCaption":
     "Todos los pasajes de tu biblioteca, puntuados frente a tu pregunta. Los {count} que quedan por encima de la línea son de los que respondería el asistente. Haz clic en cualquier barra para leer el pasaje completo.",
   "viz.cutoff": "los {count} primeros · recuperados",
+  // ── Course (own file: it is long) ─────────────────────────────────
+  ...courseEs,
 } as const;

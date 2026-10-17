@@ -44,10 +44,12 @@ All five original phases are ✅ **done**. Current capabilities:
 | Per-tool permissions (`allow`/`ask`/`deny`), editable server configs, logs | Done |
 | Live provider model lists + tool-capability badges/filter | Done |
 | Google Workspace (Gmail/Calendar/Tasks/Drive/Docs/Sheets, ~30 tools) | Done |
-| Study modes, chat export, file attachments (text/PDF/docx) | Done |
+| Chat export, file attachments (text/PDF/docx) | Done |
 | RAG "chat with your documents" | Done |
 | Deep Research (system-prompt + step-budget layer over the tool loop) | Done |
-| "Explore how it works" visualization playground | Done |
+| **Course** — 11 interactive modules: each lesson is one flow of visual blocks, annotated screenshots of the app and task cards that *are* the exercise (embedded chats, setup forms, calculators, quizzes); progress persists; replaced the old Explore panel | Done |
+| **Lab bar** — always-visible right-hand bar (minimized rail ⇄ expanded) laid out like Google AI Studio's run settings: provider + model pickers, system instructions, temperature slider, tools, advanced; replaced the in-composer Chat Lab and mode chips | Done |
+| **OmniRoute mode** — the app downloads, starts, stops and manages OmniRoute (and the provider keys inside it); an either/or switch against your own provider keys | Done |
 | CI + release pipeline (unsigned installers, draft release) | Done by design |
 | Onboarding wizard, crash log, marketing site (ES/EN) | Done |
 
@@ -89,6 +91,47 @@ hides only *known*-incompatible models. `pickBestModel()` auto-selects a tool-ca
 Provider set (`src/lib/providers.ts`) is curated for free-tier tool calling, ordered best-first with
 `recommended` flags and `freeTierNote` strings. SambaNova is `deprecated` — hidden from new selection
 via `SELECTABLE_PROVIDER_TYPES` but still routes for saved rows.
+
+**OmniRoute (`type: "omniroute"`, `local: true`)** is still just an OpenAI-compatible provider row as far as the
+router is concerned (third-party, MIT, `v3.8.x`, needs Node ≥22.22 or ≥24 — the app's portable Node satisfies
+it). Integration surface: default `baseURL` `http://localhost:20128/v1`, key stored as
+`LOCAL_ROUTER_PLACEHOLDER_KEY` (the keychain can't hold an empty secret), live model list from `<baseURL>/models`,
+kept out of the first-run wizard; the CSP's `connect-src` allows `http://localhost:*` / `http://127.0.0.1:*`. How
+it is *run and used* is the "OmniRoute mode" section below. The models.dev capability catalog has no entry for
+it, so its models are unbadged. Do not auto-enable its subscription/`tos: avoid` routes.
+
+### OmniRoute mode (`omniroute.rs`, `lib/omniroute.ts`, `components/OmniRouteView.tsx`)
+
+Providers is **either/or**: a switch at the top of the Providers panel (and in Course module 1) chooses
+**My providers** (your own keys, with automatic failover) or **OmniRoute**. Persisted in `localStorage`
+`studyllm.provider.mode`; the router (`refreshProviders`) is configured only with the rows of the active mode
+(`activeProviders` in `App.tsx`), so the other mode's providers stay saved but paused.
+
+- **Managed process.** Choosing OmniRoute makes the Rust side run `npx omniroute@3.8.48 serve --no-open
+  --no-tray --port 20128` (reusing `ensure_npx`, so no manual Node install), bound to **127.0.0.1 only**
+  (`OMNIROUTE_SERVER_HOST`). It keeps the last log lines for the UI and kills the whole process tree (OmniRoute's
+  CLI supervises a separate server process) on switching away, via `omniroute_stop`, and when the app quits
+  (`RunEvent::Exit`). The version is pinned on purpose. It auto-starts with the app while in OmniRoute mode.
+- **Slow first run.** The first start downloads ~hundreds of MB through npm and took ~10 minutes in testing;
+  later starts take a couple of minutes (the first request is slow while it warms up). The UI says so and shows
+  the live log line.
+- **Keys live inside OmniRoute.** OmniRoute answers `/v1/models` without a key, but **chat only works once it
+  holds at least one upstream key** — with none, a request spends minutes failing across ~50 upstreams and
+  returns "Maximum combo retry limit reached". `OmniRouteView` therefore manages them: list / add / test /
+  switch off / remove, through the Rust command `omniroute_api` (signs in to the dashboard API with the default
+  password `CHANGEME`, keeps the session cookie, only allows `/api/providers…` paths; if the student changed
+  the password the panel asks for it, `omniroute_set_password`). Our provider types map to OmniRoute ids in
+  `OMNI_PROVIDER_IDS` (`github-models` → `github`; the ids for the other hosted types were not all verified
+  against OmniRoute's catalog — only `groq` was exercised end to end).
+- **Chat guard.** In OmniRoute mode `runSend` first checks the router answers and has an active key, and says
+  what to fix instead of hanging. A router failure is also surfaced with its own message (`routerFailure` on the
+  `exhausted` event) and is never cooled down / auth-disabled, since the student is about to add a key.
+- **Default model** is OmniRoute's own `auto/best-chat` combo (the old plain `auto` is not a valid id).
+- **Not verified:** a successful chat answer through OmniRoute — that needs a valid upstream key, and none was
+  added during development. Everything up to the request reaching OmniRoute and being routed was exercised.
+- The old manual "connect to a local router" form and the standalone OmniRoute provider entry in the add grid
+  are gone; a router the student launched themselves on port 20128 is still detected ("running — you started
+  it yourself").
 
 ### MCP tool wiring (`App.tsx`)
 
@@ -136,25 +179,39 @@ the key is resolved from the keychain at call time.
 
 ### UI shell
 
-Claude-desktop-style: persistent left `Sidebar.tsx` (conversation history, "Conversations" label,
-prominent Library button, and a collapsible **Settings** disclosure holding Providers / Tools &
-Connections / Accounts (Plugins) / Explore / Diagnostics) + a right-hand main chat panel. The
-collapsed icon rail keeps every destination flat via the shared `configItems` array.
+One top bar (`AppTopBar` in `components/AppTopBar.tsx`) spans the app: on the left the **sidebar
+toggle and the app name together**, in the centre the **Chat | Course mode switch** (with a Course
+progress badge), and an empty balancing cell on the right so the switch stays truly centred. The toggle
+collapses whichever left bar is showing, using one shared `sidebarCollapsed` state (persisted in
+`localStorage` `sidebarCollapsed`).
+
+- **Chat mode** — Claude-desktop-style: left `Sidebar.tsx` (conversation history, prominent Library
+  button, a collapsible **Settings** disclosure holding Providers / Tools & Connections / Accounts
+  (Plugins) / Diagnostics) + the chat panel. The collapsed icon rail keeps every config destination flat
+  via the shared `configItems` array.
+- **Course mode** — the chat sidebar is hidden and the left bar becomes the lesson list
+  (`CoursePanel` renders its own `<aside className="sidebar course-sidebar">` + `<main>`); collapsed, it
+  shrinks to a rail of lesson numbers. The last mode is remembered in `localStorage` `studyllm.mode`.
+- Switching modes **never unmounts the chat**: the Sidebar and the chat `<main>` get `hidden`, so a reply
+  that is still streaming keeps going and half-typed state survives. `.sidebar[hidden]` /
+  `.main-panel[hidden]` need their own `display: none` rules (the base rules set `display: flex`).
 
 Empty chat screen is deliberately **minimal**: a greeting plus one compact row of `featured` starter
 prompts, with "Browse all ▾" expanding the full topic-grouped library. Explainer cards were
-removed on purpose — the Explore panel demonstrates the same concepts live. Don't re-add them.
+removed on purpose — the Course teaches the same concepts live. Don't re-add them.
 
 `McpPanel` has `Installed`/`Discover` tabs; `McpMarketplace` is inline tab content, not its own
 overlay. Its install-confirmation step is the one remaining true nested modal.
 
 **Interface language (`src/lib/i18n.tsx`, `src/lib/locales/`)** — ES/EN toggle, Spanish default,
 persisted in `localStorage` under `studyllm.lang`. Components read strings via `useT()`.
-**Coverage is complete: every user-facing surface is localized** — 557 keys, `es`/`en` at exact
-parity (same key set, same `{placeholder}` names in both). This includes the panels that were
+**Coverage is complete: every user-facing surface is localized** — `es`/`en` at exact
+parity (same key set, same `{placeholder}` names in both; enforced by the `en: Messages` type and by a
+parity test in `lib/course/checks.test.ts`). The Course copy lives in its own files,
+`locales/course.es.ts` / `course.en.ts`, spread into `es`/`en`. This includes the panels that were
 missed in the first pass: `McpPanel` (tabs, server cards, status words, tool-permission dropdown,
-edit form, error strings), `McpMarketplace`, and all seven Explore tab *bodies* — `LessonsPanel`,
-`TokenExplorer`, `PromptPlayground`, `RetrievalExplorer`, `GroundingContrast`, `McpToolExplorer`,
+edit form, error strings), `McpMarketplace`, and all the playground bodies — `TokenExplorer`,
+`PromptPlayground`, `RetrievalExplorer`, `GroundingContrast`, `McpToolExplorer`,
 `ResearchTrace` — plus `viz/SimilarityRanking.tsx` and `viz/EmbeddingMap.tsx`.
 `ResearchTrace` now renders research-mode names through `researchModeKeys()` (the keys existed but
 went unused). `mcpCatalog.ts` exposes `trustTierLabelKey()` / `trustTierTooltipKey()` returning
@@ -163,9 +220,9 @@ went unused). `mcpCatalog.ts` exposes `trustTierLabelKey()` / `trustTierTooltipK
 > **i18n is interface-level only. It must never reach the model.** No UI-language directive is
 > injected into any system prompt, and no model-facing string is localized. Things that stay
 > hardcoded English *in code*, deliberately: research-mode `systemPrompt`s (`researchModes.ts`), the
-> RAG grounding block (`buildRagSystemBlock`), Chat Lab preset `text` (`ChatLab.tsx`), Prompt
-> Playground preset `text` + `DEFAULT_USER` (`PromptPlayground.tsx`), study-template `promptSeed`s
-> (`studyTemplates.ts`), and the tool-probe system prompt (`App.tsx`). Chip labels,
+> RAG grounding block (`buildRagSystemBlock`), Lab preset `text` (`PlaygroundPanel.tsx`), Prompt
+> Playground preset `text` + `DEFAULT_USER` (`PromptPlayground.tsx`), and the tool-probe system prompt
+> (`App.tsx`). Chip labels,
 > tooltips, and descriptions around them *are* localized — the split is label vs. prompt. The one
 > deliberate exception: `TokenExplorer`'s sample texts *are* localized, because they're UI demo
 > content that never reaches a model and what tokenizes interestingly is language-specific.
@@ -173,8 +230,117 @@ went unused). `mcpCatalog.ts` exposes `trustTierLabelKey()` / `trustTierTooltipK
 > in whatever language they like and the model answers in kind; switching the UI to English does not
 > change a Spanish conversation.
 
-`ExplorePanel.tsx` is a seven-tab playground (Lessons, Tokens, System prompt, Retrieval, Grounding,
-Tools, Research process). The two most visualization-heavy: **Retrieval** (`RetrievalExplorer.tsx` + `viz/
+### Course (`CoursePanel.tsx`, `src/lib/course/`)
+
+A full-page learning path (it replaced the old seven-tab Explore modal) built from the class slides
+(`IA_Advanced_completo.pdf`, `01-IA_MCP_simpl.pdf`). **n8n is deliberately out of scope.** Eleven modules in four
+groups (`COURSE_GROUPS` in `modules.ts`; headings in the lesson list, group name in each lesson banner):
+**First steps** — 1 free access (API keys, failover, optional OmniRoute), 2 what a chat AI really is, 3 who makes
+what; **Talk to the AI** — 4 prompting, 5 steering (system prompt, temperature), 6 tokens/cost/context; **How it
+works inside** — 7 how the app talks to the model (REST), 8 cloud vs local (GPU/Ollama); **Give it superpowers** —
+9 RAG, 10 MCP, 11 agents & responsible automation. Access comes *first* because every later lesson has a chat
+that needs a provider. (The modules were renumbered once; `migrateCourseModuleOrder` in `db.ts` moves saved
+progress from the old ids, once, behind `localStorage` `studyllm.course.order`.)
+
+- **Structure vs copy.** `lib/course/modules.ts` holds each module's tasks (kind, auto-check, embedded tool,
+  lab spec, accepted number range, quiz answer index); `lib/course/lessons.ts` holds each lesson's **layout**
+  as an ordered list of blocks, *including where each task appears* (a test proves every task is placed
+  exactly once and the quiz comes last). Every string is a locale key — lesson text in
+  `locales/course.lessons.*.ts`, module headers/tasks/quizzes/suggested prompts in `course.modules.*.ts`,
+  shell/labs/setup/demos in `course.es.ts` / `course.en.ts`. A test proves every key exists in both languages.
+- **A lesson is one flow, not a page plus a task list.** `components/course/LessonBlocks.tsx` renders a hero
+  banner, then typed blocks — concept `cards`, numbered `steps`, `timeline`, `compare`, weak/strong prompt
+  `example`s, `callout`s, **`explore`** (tiles you click for a longer explanation, a copyable example prompt
+  and a link to the real thing — used for model families, image/audio/video models, study tools, the parts of
+  a prompt, MCP), **`shots`** (annotated screenshots, click to enlarge), **`embed`** (an interactive tool in the
+  flow) and **`task`** (an interactive task card). Every section title is a button that folds the section. A "Your mission" checklist under the banner
+  scrolls to each card. Key scheme for each block kind: header of `lessons.ts`.
+- **Task kinds** (`TaskCard.tsx`): `check` (auto-verified from real state by `evaluateCheck`), `do` (an
+  embedded tool that reports back when really used — `onRan` on the reused playgrounds), `lab` (a chat in
+  the lesson; optional "what did you notice?" confirmation), `number` (calculate with the estimators; range
+  tolerance, `judgeNumber` in `lib/course/labs.ts`, hint after a miss), `manual`, `quiz`, `reflect`. `check`
+  works on any kind and a pass is persisted the first time. Optional tasks (router, Ollama, Gmail) never
+  hold a module back. After "Reset progress" still-detected checks re-complete by design.
+- **Embedded chats** (`course/ChatLab.tsx`, not to be confused with the Lab panel) run through the app's real
+  router via `runCourseLab` in `App.tsx` and persist nothing. Four modes: `chat` (history re-sent each turn,
+  optional context meter), `samples` (same prompt N times, optional temperature), `compare` (one prompt, two
+  providers — a throwaway `ProviderRouter` pinned to one provider), `ab` (two prompts side by side).
+  Side-by-side labs add a short English system hint so answers stay comparable.
+- **Setup inside the lesson:** `course/ProviderSetup.tsx` (`ProviderSetup`: pick a free provider, paste a key,
+  verified like the first-run wizard; `RouterSetup` for OmniRoute), `FilesystemSetup.tsx` (native folder
+  picker → `handleAddFilesystemServer`), `LibrarySetup.tsx` (own file or a built-in sample document so there
+  is always something to ask about), `RequestInspector` (live request + a real send), `PromptBuilder` ("Try
+  it here").
+- **Screenshots** live in `public/course/<lang>/<theme>/<name>.png` — Spanish and English, **light and dark** (⚠ the panel/tour/sidebar shots predate the Lab and sidebar redesign and are re-captured on request):
+  the lesson picks the set that matches the OS colour scheme (`useColorScheme` in `LessonBlocks.tsx`, live)
+  and a missing image simply isn't drawn. They are captured from the real app over CDP (dark via
+  `page.emulateMedia({ colorScheme: "dark" })`) with numbered orange markers drawn into the DOM before each
+  shot; personal data (folder paths, conversation titles) is masked first. The capture script was throwaway
+  and is not in the repo: after UI changes, re-capture the same names (listed in `lessons.ts`,
+  `kind: "shots"`) in all four sets. The lessons teach the chat interface itself: module 2 tours the chat
+  screen and the Lab bar, module 8 shows Personality/Answer, module 9 the documents switch, module 11 the
+  Deep Research switch.
+- **Folding.** Task cards and lesson sections both fold (chevron / click the title); a "Hide finished / Show
+  all" button in the mission bar folds all done tasks of the module. Fold state is remembered
+  (`localStorage` `studyllm.course.folded`); a folded task card's body stays mounted (`hidden`, with an explicit
+  `display:none` because the flex rules would otherwise win), so a chat or form keeps its state.
+- **Progress persists in SQLite**, so it survives closing the app (verified against the real app: marked
+  tasks, full close, cold relaunch). "Continue where you left off" jumps to the first module with a
+  required task open; finished modules and the whole course show completion states.
+- **State the checks read:** `App.tsx` supplies providers / running MCP servers / Gmail connection / RAG
+  document count (`CourseAppState`); `CoursePanel` queries assistant-message and tool-call counts
+  (`countAssistantMessages`, `countToolCalls`) and whether a configured OmniRoute answers `/models`.
+  "Ask permission" only counts hand-set permissions on non-OAuth servers (Google tools default to `ask`).
+- **Progress** lives in SQLite table `course_progress(task_id, status, note, updated_at)` — **migration
+  v9**. "Copy report" builds a Markdown report (`lib/course/report.ts`) for the students' written memoria.
+- **Other demos:** `KeyGuide` (key links straight from the provider manifest), `PromptBuilder` (model-facing
+  scaffolding is English by the i18n rule; see `lib/course/promptBuilder.ts`), `VramEstimator` and
+  `CostEstimator` (`lib/course/estimates.ts`; the cost demo shows the history being
+  re-sent every turn). The reused playgrounds are unchanged: `TokenExplorer`, `PromptPlayground`,
+  `RetrievalExplorer`, `GroundingContrast`, `McpToolExplorer`, `ResearchTrace`.
+- **The chat stays mounted** (`<main hidden>`) while the Course is open, so an in-flight reply isn't lost.
+- Callbacks the playgrounds need (`runExploreAnswer`, `runToolProbe`, `runResearchTrace`, `runCourseLab`) are
+  in `App.tsx`.
+
+### Lab bar (`PlaygroundPanel.tsx`)
+
+A bar on the right of the chat that is **always there**: a narrow rail by default (four icons — System
+instructions, Creativity, Tools, Advanced — each with a dot when something in it is on) and expanded with the
+chevron at the very top (state in `localStorage` `studyllm.lab.open`; floats over the chat below 70rem when
+expanded). The expanded layout follows Google AI Studio's "Run settings": the **model** on top (the provider
+that answers first — read-only, failover is automatic), then collapsible sections — **System instructions**
+(preset chips + textarea + token count), **Creativity (temperature)** (a real 0–1 slider with a numeric box),
+**Tools** (Deep Research switch + depth, Your documents (RAG) switch) and **Advanced settings** (top-p slider,
+max-length slider). Every setting is opt-in: untouched shows "Auto" (stored as `null`, so the provider keeps
+its own default); the small arrow next to a value returns to Auto, the arrow in the header resets everything.
+No explanatory prose — the Course teaches what each setting does. Settings apply to the real chat and are
+saved per conversation. Hidden in Course mode with the rest of the chat. It replaced the in-composer "Chat
+lab" *and* the mode chips, "How does this work?" link and mode captions that used to sit above the composer.
+
+Also removed from the chat as redundant with the Course: the study-mode starter chips
+(`studyTemplates.ts`/`StudyModes.tsx`) and the onboarding "features" step. The empty chat just says "Write
+your first message".
+
+### Settings panels (Providers, Tools, Accounts)
+
+Simplified so each fits on screen without scrolling. **Providers** (own mode): the mode switch, then a compact
+"add a provider" row (provider dropdown — only providers *not* on the list yet — key field, button; the key is
+verified by asking the provider for its models and the best tool-capable free one is picked; use "Edit" to change
+the model) **above** a one-line-per-provider list (the free-tier note is a tooltip). **Tools and connections
+(MCP)**: one list (no pinned/all split, no trust legend — the legend text is each badge's tooltip, no intro
+paragraph, search only past 6 servers), one row per server with Start and Tools, everything else (logs,
+auto-start, edit, remove) under a "⋯" menu. **Accounts (Plugins)**: one row per account — description clamped to
+two lines, a chip per connected service, one Connect/Disconnect button; the Google setup guide stays collapsed.
+
+### Chat layout
+
+Header, messages and composer share one column width (`--chat-column`). Assistant replies are plain text on the
+page (no card); yours is a soft accent bubble on the right with its edit/copy buttons under it; the composer is
+one rounded card holding the paperclip, the text and send. Each side bar collapses with its **own** chevron at
+its top (`.sidebar-head` in the chat bar and in the Course bar), exactly like the Lab on the right — the top bar
+now holds only the app name and the Chat | Course switch (centred on the window).
+
+The two most visualization-heavy playgrounds: **Retrieval** (`RetrievalExplorer.tsx` + `viz/
 SimilarityRanking.tsx`, `viz/EmbeddingMap.tsx` — hand-rolled inline SVG, no charting lib; hover
 cross-highlights, click opens a full-passage dialog with Prev/Next and Escape-to-close) and
 **Research process** (`ResearchTrace.tsx` — 6-stage stepper, step-budget bar, sources list, live
@@ -284,7 +450,7 @@ any future OAuth remote-HTTP server, even though Google no longer uses that path
   thousands. Requires a Gemini or Mistral key.
 - The retrieved-sources card is **session-ephemeral** (absent after reload). Persisting citation
   records is a noted follow-up.
-- Explore visualizations are live-only, not persisted; the 2D map is a PCA approximation (a teaching
+- Playground visualizations are live-only, not persisted; the 2D map is a PCA approximation (a teaching
   lens, not a precise metric).
 - Scanned-image PDFs need OCR (not implemented).
 
@@ -325,13 +491,13 @@ any future OAuth remote-HTTP server, even though Google no longer uses that path
 - `src/lib/db.ts` — all SQLite CRUD. `src/lib/mcp.ts` / `mcpCatalog.ts` — MCP wrappers, types, trust
   tiers, cache-aware search. `src/lib/credentials.ts`, `oauth.ts`, `crashlog.ts` — Rust wrappers.
 - `src/lib/rag.ts`, `chunking.ts`, `embeddings.ts`, `projection.ts`, `researchModes.ts`,
-  `toolSchema.ts`, `attachments.ts`, `exportChat.ts`, `studyTemplates.ts`, `curatedMcp.ts`,
+  `toolSchema.ts`, `attachments.ts`, `exportChat.ts`, `curatedMcp.ts`,
   `googleConnectors.ts` — the pure/near-pure logic modules, most unit-tested.
 - `src/components/` — `Sidebar.tsx`, `icons.tsx` (inline SVG set, no icon library), `McpPanel.tsx`,
   `McpMarketplace.tsx`, `ProvidersPanel.tsx`, `AppSettingsPanel.tsx` (Diagnostics/crash log),
-  `PluginsPanel.tsx`, `LibraryPanel.tsx`, `ExplorePanel.tsx` + `RetrievalExplorer.tsx` /
+  `PluginsPanel.tsx`, `LibraryPanel.tsx`, `PlaygroundPanel.tsx`, `CoursePanel.tsx` + `course/*` + `RetrievalExplorer.tsx` /
   `ResearchTrace.tsx` / `viz/*`, `ToolCallBlock.tsx`, `Markdown.tsx`, `MessageAttachments.tsx`,
-  `RetrievedSources.tsx`, `StudyModes.tsx`, `OnboardingWizard.tsx`.
+  `RetrievedSources.tsx`, `OnboardingWizard.tsx`.
 
 **Rust**
 - `src-tauri/src/mcp/` — `host.rs` (running-server registry, `start`/`start_remote`/`start_native` →
@@ -362,3 +528,12 @@ any future OAuth remote-HTTP server, even though Google no longer uses that path
   `connectOverCDP`. Reading code for correctness has repeatedly missed real bugs that this catches.
 - Playwright against plain `npm run dev` validates CSS/layout only — Tauri `invoke` no-ops outside
   the native shell, so nothing data-dependent is exercised.
+  To exercise data-dependent UI in a plain browser anyway, inject a tiny in-memory
+  `window.__TAURI_INTERNALS__.invoke` mock via Playwright `addInitScript` (answer `plugin:sql|load` /
+  `select` / `execute`); it is enough to drive the Course end to end. Real persistence still needs the
+  native app.
+- The native build needs the **Rust toolchain** (`winget install Rustlang.Rustup`) plus the MSVC Build
+  Tools; the first `tauri dev` compile takes ~6 minutes, later ones under a minute. If `cargo` is "not
+  found" in a shell, refresh `PATH` from the Machine/User environment first.
+- Driving the real app over CDP overwrites the maintainer's real `studyllm.db` — undo test data (e.g.
+  Course "Reset progress") when done.

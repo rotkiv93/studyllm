@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { McpServerRow } from "../lib/db";
 import type { OAuthConnector } from "../lib/googleConnectors";
 import { onOAuthProgress, type OAuthProgressPhase } from "../lib/oauth";
-import { IconCheck, IconPlug } from "./icons";
+import { IconPlug } from "./icons";
 import { useT, type MessageKey } from "../lib/i18n";
 
 interface Props {
@@ -116,9 +116,7 @@ export function PluginsPanel({ connectors, servers, onConnect, onDisconnect, onC
           </button>
         </div>
 
-        <p className="settings-hint">{t("plugins.hint")}</p>
-
-        <ul className="marketplace-grid">
+        <ul className="plugin-list">
           {connectors.map((connector) => {
             const connectedTargets = connector.targets.filter((target) =>
               servers.some((s) => s.id === target.serverId),
@@ -130,57 +128,48 @@ export function PluginsPanel({ connectors, servers, onConnect, onDisconnect, onC
             const hasError = !isBusy && (phase === "error" || !!errorMessage);
 
             return (
-              <li key={connector.id} className="marketplace-card">
-                <div className="marketplace-card-head">
-                  <span className="marketplace-card-avatar avatar-c0">
-                    <IconPlug size={16} />
-                  </span>
+              <li key={connector.id} className="marketplace-card plugin-row">
+                <span className="marketplace-card-avatar avatar-c0">
+                  <IconPlug size={16} />
+                </span>
+                <div className="plugin-row-main">
                   <div className="marketplace-card-title">
                     <strong>{connector.displayName}</strong>
                     <span className="trust-badge trust-official">{t("plugins.official")}</span>
                   </div>
+                  <p className="plugin-row-desc" title={t(connectorDescriptionKey(connector.id))}>
+                    {t(connectorDescriptionKey(connector.id))}
+                  </p>
+
+                  {isConnected && (
+                    <div className="plugin-chips">
+                      {connectedTargets.map((target) => (
+                        <span key={target.serverId} className={`plugin-chip${hasError ? " plugin-chip-bad" : ""}`}>
+                          {hasError ? "✕" : "✓"} {target.name}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {isBusy && phase && <p className="settings-hint">{t(PHASE_LABEL_KEY[phase])}</p>}
+                  {hasError && <p className="error">{errorMessage || t("plugins.connectFailed")}</p>}
+                  {connector.id === "google" && <GoogleSetupInstructions />}
                 </div>
-                <p className="marketplace-card-desc">{t(connectorDescriptionKey(connector.id))}</p>
-
-                {connector.id === "google" && <GoogleSetupInstructions />}
-
-                {isConnected && (
-                  <div className="plugin-connected-list">
-                    {connectedTargets.map((target) => (
-                      <span
-                        key={target.serverId}
-                        className={`mcp-status mcp-status-${hasError ? "error" : "running"}`}
-                      >
-                        {target.name}:{" "}
-                        {hasError ? t("plugins.errorLower") : t("plugins.connectedLower")}
-                      </span>
-                    ))}
-                  </div>
-                )}
-
-                {isBusy && phase && <p className="settings-hint">{t(PHASE_LABEL_KEY[phase])}</p>}
-                {hasError && <p className="error">{errorMessage || t("plugins.connectFailed")}</p>}
-
-                <div className="marketplace-card-footer">
+                <div className="plugin-row-action">
                   {isConnected ? (
-                    <>
-                      <span className="marketplace-added">
-                        <IconCheck size={14} /> {t("plugins.connected")}
-                      </span>
-                      <button
-                        type="button"
-                        className="btn btn-danger btn-sm"
-                        disabled={isBusy}
-                        onClick={() =>
-                          handleDisconnect(
-                            connector,
-                            connectedTargets.map((target) => target.serverId),
-                          )
-                        }
-                      >
-                        {t("plugins.disconnect")}
-                      </button>
-                    </>
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      disabled={isBusy}
+                      onClick={() =>
+                        handleDisconnect(
+                          connector,
+                          connectedTargets.map((target) => target.serverId),
+                        )
+                      }
+                    >
+                      {t("plugins.disconnect")}
+                    </button>
                   ) : (
                     <button
                       type="button"

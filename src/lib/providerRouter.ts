@@ -23,6 +23,13 @@ export interface StreamOptions {
   topP?: number;
   /** Hard cap on the tokens the model may generate this turn. Undefined = provider/model default. */
   maxOutputTokens?: number;
+  /**
+   * Try this provider first (the Lab's provider picker). If it fails or runs out, the router still
+   * falls back down the list, so a pinned choice never leaves the student with no answer.
+   */
+  providerId?: string;
+  /** With `providerId`: use this model instead of the one saved for that provider. */
+  model?: string;
 }
 
 const DEFAULT_MAX_STEPS = 8;
@@ -40,7 +47,13 @@ export interface ConfiguredProvider {
 export type RouterEvent =
   | { kind: "switched"; fromLabel: string; toLabel: string; reason: string }
   | { kind: "auth-error"; providerId: string; providerLabel: string }
-  | { kind: "exhausted"; retryInSeconds: number; toolsUnsupported: boolean };
+  | {
+      kind: "exhausted";
+      retryInSeconds: number;
+      toolsUnsupported: boolean;
+      /** OmniRoute refused or failed: its own message, so the UI can say what to fix (usually "no keys"). */
+      routerFailure?: string;
+    };
 
 export type StreamEvent =
   | { type: "chunk"; text: string }
@@ -219,15 +232,19 @@ export class ProviderRouter {
     const toolsAttached = !!tools && Object.keys(tools).length > 0;
     let attempted = 0;
     let toolsUnsupportedSeen = false;
+    let routerFailure: string | undefined;
     const maxAttempts = Math.max(1, this.providers.length);
 
     while (attempted < maxAttempts) {
-      const candidate = this.candidates(toolsAttached)[0];
+      const pool = this.candidates(toolsAttached);
+      const pinned = options?.providerId ? pool.find((p) => p.id === options.providerId) : undefined;
+      const first = pinned ?? pool[0];
+      const candidate = first && pinned && options?.model ? { ...first, model: options.model } : first;
       if (!candidate) {
         const retryInSeconds = this.shortestCooldownRemainingSeconds();
         yield {
           type: "router",
-          event: { kind: "exhausted", retryInSeconds, toolsUnsupported: toolsUnsupportedSeen },
+          event: { kind: "exhausted", retryInSeconds, toolsUnsupported: toolsUnsupportedSeen, routerFailure },
         };
         return;
       }
@@ -324,7 +341,13 @@ export class ProviderRouter {
         const statusCode = APICallError.isInstance(effectiveError) ? effectiveError.statusCode : undefined;
         let reason: string;
 
-        if (isToolsUnsupportedError(effectiveError, toolsAttached)) {
+        if (candidate.type === "omniroute") {
+          // The local router is one provider wrapping many keys. If it fails, the useful answer is
+          // *its* message (e.g. "no keys"), and it must not be cooled down or disabled: the student is
+          // about to add a key and retry.
+          routerFailure = effectiveError instanceof Error ? effectiveError.message : String(effectiveError);
+          reason = ROUTER_REASONS.requestFailed;
+        } else if (isToolsUnsupportedError(effectiveError, toolsAttached)) {
           // It's the model, not the provider — don't cool it down (it stays usable for
           // tool-free turns), just remember it can't do tools this session.
           this.toolIncompatible.add(`${candidate.id}:${candidate.model}`);

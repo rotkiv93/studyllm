@@ -1,16 +1,16 @@
 import { useState } from "react";
 import type { ConversationRow } from "../lib/db";
 import { useT } from "../lib/i18n";
-import { IconBook, IconChevronDown, IconCompass, IconEdit, IconKey, IconMenu, IconMessage, IconPlug, IconPlus, IconSettings, IconTool, IconTrash } from "./icons";
+import { IconBook, IconChevronDown, IconChevronsLeft, IconChevronsRight, IconEdit, IconKey, IconMessage, IconPlug, IconPlus, IconSettings, IconTool, IconTrash } from "./icons";
 
 interface Props {
   conversations: ConversationRow[];
   activeConversationId: string | null;
   collapsed: boolean;
+  onToggleCollapsed: () => void;
   disabled: boolean;
   mcpRunningCount: number;
   activeProviderCount: number;
-  onToggleCollapsed: () => void;
   onNewChat: () => void;
   onSelectConversation: (id: string) => void;
   onDeleteConversation: (id: string) => void;
@@ -18,21 +18,23 @@ interface Props {
   onOpenProviders: () => void;
   onOpenMcp: () => void;
   onOpenLibrary: () => void;
-  onOpenExplore: () => void;
   onOpenPlugins: () => void;
   onOpenAppSettings: () => void;
   /** Number of documents in the RAG library — shown as a badge on the Library button. */
   libraryDocCount: number;
+  /** Course mode swaps this whole bar for the lesson list. Hidden (not unmounted) so the open
+   *  Settings group and any half-typed rename survive a trip to the Course and back. */
+  hidden: boolean;
 }
 
 export function Sidebar({
   conversations,
   activeConversationId,
   collapsed,
+  onToggleCollapsed,
   disabled,
   mcpRunningCount,
   activeProviderCount,
-  onToggleCollapsed,
   onNewChat,
   onSelectConversation,
   onDeleteConversation,
@@ -40,10 +42,10 @@ export function Sidebar({
   onOpenProviders,
   onOpenMcp,
   onOpenLibrary,
-  onOpenExplore,
   onOpenPlugins,
   onOpenAppSettings,
   libraryDocCount,
+  hidden,
 }: Props) {
   const t = useT();
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -56,7 +58,6 @@ export function Sidebar({
     { key: "providers", icon: IconKey, label: t("nav.providers"), onClick: onOpenProviders, dot: activeProviderCount === 0, badge: 0 },
     { key: "mcp", icon: IconTool, label: t("nav.mcp"), onClick: onOpenMcp, dot: false, badge: mcpRunningCount },
     { key: "plugins", icon: IconPlug, label: t("nav.plugins"), onClick: onOpenPlugins, dot: false, badge: 0 },
-    { key: "explore", icon: IconCompass, label: t("nav.explore"), onClick: onOpenExplore, dot: false, badge: 0 },
     { key: "diagnostics", icon: IconSettings, label: t("nav.diagnostics"), onClick: onOpenAppSettings, dot: false, badge: 0 },
   ];
   // Surface the most important config status on the collapsed group gear so nothing hides.
@@ -75,33 +76,35 @@ export function Sidebar({
     setRenamingId(null);
   }
   return (
-    <aside className={`sidebar${collapsed ? " sidebar-collapsed" : ""}`}>
-      <div className="sidebar-top">
+    <aside className={`sidebar${collapsed ? " sidebar-collapsed" : ""}`} hidden={hidden}>
+      <header className="side-head">
+        <strong>{t("sidebar.conversations")}</strong>
         <button
           type="button"
-          className="btn btn-icon btn-ghost sidebar-toggle"
+          className="btn btn-ghost btn-icon sidebar-toggle"
           onClick={onToggleCollapsed}
           title={collapsed ? t("sidebar.expand") : t("sidebar.collapse")}
+          aria-label={collapsed ? t("sidebar.expand") : t("sidebar.collapse")}
+          aria-expanded={!collapsed}
         >
-          <IconMenu size={18} />
+          {collapsed ? <IconChevronsRight size={16} /> : <IconChevronsLeft size={16} />}
         </button>
-        {!collapsed && <span className="sidebar-brand">StudyLLM</span>}
-      </div>
+      </header>
 
-      <button
-        type="button"
-        className="sidebar-new-chat"
-        onClick={onNewChat}
-        disabled={disabled}
-        title={t("sidebar.newChat")}
-      >
-        <IconPlus size={16} />
-        {!collapsed && <span>{t("sidebar.newChat")}</span>}
-      </button>
+      <div className="sidebar-body">
+        <button
+          type="button"
+          className="sidebar-new-chat"
+          onClick={onNewChat}
+          disabled={disabled}
+          title={t("sidebar.newChat")}
+        >
+          <IconPlus size={16} />
+          {!collapsed && <span>{t("sidebar.newChat")}</span>}
+        </button>
 
       {!collapsed && (
         <nav className="conversation-list" aria-label={t("sidebar.conversationHistory")}>
-          <span className="sidebar-section-label">{t("sidebar.conversations")}</span>
           {conversations.length === 0 && (
             <p className="conversation-empty">{t("sidebar.empty")}</p>
           )}
@@ -159,6 +162,8 @@ export function Sidebar({
           )}
         </nav>
       )}
+
+      </div>
 
       <div className="sidebar-footer">
         {/* Library is a workspace surface (your documents), kept prominent above the config group. */}

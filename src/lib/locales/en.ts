@@ -2,6 +2,7 @@
  * English translations. Must mirror the keys in `es.ts` (the source of truth).
  */
 import type { Messages } from "../i18n";
+import { courseEn } from "./course.en";
 
 export const en: Messages = {
   // ── Common / shared ────────────────────────────────────────────────
@@ -66,7 +67,6 @@ export const en: Messages = {
   "nav.providers": "Providers",
   "nav.mcp": "Tools & Connections",
   "nav.plugins": "Accounts (Plugins)",
-  "nav.explore": "Explore how it works",
   "nav.diagnostics": "Diagnostics",
 
   // ── Tool call block ────────────────────────────────────────────────
@@ -83,42 +83,16 @@ export const en: Messages = {
   "sources.match": "{percent}% match",
 
   // ── Study modes / starter prompts ──────────────────────────────────
-  "study.browseAll": "Browse all",
-  "study.showFewer": "Show fewer",
-  "study.topic.reading": "Reading & analysis",
-  "study.topic.writing": "Writing & drafting",
-  "study.topic.research": "Research & citations",
-  "study.topic.study": "Study & revision",
 
-  "study.tpl.summarize.label": "Summarize a document",
-  "study.tpl.summarize.description": "Condense a long report, treaty, or reading into structured key points.",
 
-  "study.tpl.explain-treaty.label": "Explain a treaty / agreement",
-  "study.tpl.explain-treaty.description": "Break down what a treaty or agreement actually commits its parties to.",
 
-  "study.tpl.extract-entities.label": "Extract key facts & entities",
-  "study.tpl.extract-entities.description": "Pull out people, places, dates, and organizations from a source.",
 
-  "study.tpl.translate-summarize.label": "Translate & summarize a source",
-  "study.tpl.translate-summarize.description": "Translate a foreign-language source into English and summarize it.",
 
-  "study.tpl.policy-brief.label": "Draft a policy brief",
-  "study.tpl.policy-brief.description": "Turn your notes into a structured policy brief / position paper.",
 
-  "study.tpl.compare-positions.label": "Compare two actors' positions",
-  "study.tpl.compare-positions.description": "Side-by-side comparison of two countries' or actors' stances on an issue.",
 
-  "study.tpl.lit-review-outline.label": "Literature-review outline",
-  "study.tpl.lit-review-outline.description": "Turn a topic and a few sources into a structured literature-review outline.",
 
-  "study.tpl.bibliography.label": "Format a bibliography",
-  "study.tpl.bibliography.description": "Format references in APA, MLA, or Chicago style.",
 
-  "study.tpl.catalog-metadata.label": "Catalog a document (metadata)",
-  "study.tpl.catalog-metadata.description": "Produce descriptive archival metadata for a document.",
 
-  "study.tpl.flashcards.label": "Make flashcards / quiz",
-  "study.tpl.flashcards.description": "Generate study flashcards or a short quiz from a document or topic.",
 
   // ── Onboarding wizard ──────────────────────────────────────────────
   "onboarding.title": "Welcome to StudyLLM",
@@ -144,28 +118,9 @@ export const en: Messages = {
   "onboarding.mcpFailed": "Couldn't add filesystem access: {error}",
   "onboarding.chooseFolder": "Choose folder…",
   "onboarding.adding": "Adding…",
-  "onboarding.featuresHint":
-    "Two things StudyLLM can do beyond a normal chat — you can turn each on from the boxes just above the message field, whenever you need them:",
-  "onboarding.featureResearch": "Deep Research",
-  "onboarding.featureResearchDesc":
-    "ask a big question and the assistant searches the web across several steps, reads sources, and writes an answer with citations.",
-  "onboarding.featureDocs": "Chat with your documents",
-  "onboarding.featureDocsDesc":
-    "add your own notes, PDFs, or papers, and the assistant answers using only those, pointing to the exact passages it used.",
   "onboarding.seeHowItWorks": "See how it works",
-  "onboarding.continue": "Continue",
   "onboarding.doneHint": "You're all set! Start chatting whenever you're ready.",
   "onboarding.startChatting": "Start chatting",
-
-  // ── Explore panel ──────────────────────────────────────────────────
-  "explore.title": "Explore how it works",
-  "explore.tab.lessons": "Lessons",
-  "explore.tab.tokens": "Tokens",
-  "explore.tab.system": "System prompt",
-  "explore.tab.retrieval": "Your documents (RAG)",
-  "explore.tab.grounding": "Guessing vs. grounded",
-  "explore.tab.tools": "Tools (MCP)",
-  "explore.tab.research": "Research process",
 
   // ── Provider free-tier notes ───────────────────────────────────────
   "provider.freeTier.gemini": "~1,500 req/day · native tool calling",
@@ -177,10 +132,10 @@ export const en: Messages = {
   "provider.freeTier.cerebras": "fast · some models need a paid tier",
   "provider.freeTier.github-models": "low daily quota",
   "provider.freeTier.sambanova": "trial credits only",
+  "provider.freeTier.omniroute": "runs on your computer · pools your own free keys",
 
   // ── Chat / main panel ──────────────────────────────────────────────
   "chat.newChat": "New chat",
-  "chat.emptyTitle": "What can I help you study?",
   "chat.you": "You",
   "chat.assistant": "Assistant",
   "chat.via": "via {provider}",
@@ -210,13 +165,6 @@ export const en: Messages = {
   "composer.chatWithDocs": "Chat with your documents",
   "composer.chatWithDocsOn": "Answer using only your own documents (RAG)",
   "composer.chatWithDocsOff": "Add documents first, then answer from them",
-  "composer.chatLab": "Chat lab",
-  "composer.chatLabTitle":
-    "Set a system prompt and the model's dials (temperature, top-p, max tokens) for this chat",
-  "composer.howDoesThisWork": "How does this work?",
-  "composer.yourDocuments": "Your documents",
-  "composer.yourDocumentsCaption":
-    "the assistant answers only from the files in your library and cites the passages it used.",
 
   // Tool approval
   "approval.title": "Tool call needs approval",
@@ -358,6 +306,12 @@ export const en: Messages = {
   "providers.removeFailed": "Couldn't remove provider: {error}",
   "providers.updateFailed": "Couldn't update provider: {error}",
   "providers.reorderFailed": "Couldn't reorder providers: {error}",
+  "providers.routerUrl": "Router address (URL)",
+  "providers.localRouterHint":
+    "OmniRoute is an AI router that runs on your computer and pools your free keys behind one address. Start it first (Course module 1). It's optional.",
+  "providers.routerKeyOptional": "OmniRoute key (optional)",
+  "providers.routerKeyPlaceholder": "Leave blank if your OmniRoute doesn't ask for a key",
+  "providers.routerDocsLink": "How to install OmniRoute",
 
   // Model field
   "model.label": "Model",
@@ -371,22 +325,15 @@ export const en: Messages = {
     "Couldn't load live models with this key — showing suggestions. You can still type any model id.",
   "model.unavailable":
     "Couldn't reach the live model list — showing suggestions. You can still type any model id.",
+  "model.unavailableLocal":
+    "Couldn't reach the router. Is OmniRoute running and the address correct? You can type \"auto\" or any model id.",
   "model.enterKey": "Enter an API key to load this provider's live model list.",
 
   // ── Chat lab ───────────────────────────────────────────────────────
   "chatLab.title": "Chat lab",
-  "chatLab.subtitle":
-    "Steer this conversation like an engineer would — a standing instruction and the model's dials. Applies to your real messages and is saved with this chat.",
   "chatLab.close": "Close chat lab",
-  "chatLab.standingInstructions": "Standing instructions",
-  "chatLab.systemPromptTerm": "(system prompt)",
-  "chatLab.tokens": "{count} tokens",
-  "chatLab.clear": "Clear",
   "chatLab.systemPlaceholder":
     "e.g. You are a patient tutor. Explain simply and check understanding.",
-  "chatLab.systemExplain":
-    "Hidden instructions the model follows before it sees your message — its persona and rules.",
-  "chatLab.default": "default",
   "chatLab.preset.tutor": "Friendly tutor",
   "chatLab.preset.pirate": "Talk like a pirate",
   "chatLab.preset.oneWord": "One word only",
@@ -394,16 +341,66 @@ export const en: Messages = {
   "chatLab.preset.eli10": "Explain like I'm 10",
   "chatLab.knob.creativity": "Creativity",
   "chatLab.knob.creativityTerm": "temperature",
-  "chatLab.knob.creativityExplain":
-    "Low = focused and repeatable. High = more surprising and varied (and more likely to wander).",
-  "chatLab.knob.variety": "Word variety",
-  "chatLab.knob.varietyTerm": "top-p",
-  "chatLab.knob.varietyExplain":
-    "Limits word choice to the most likely options. Lower = safer, more predictable wording.",
-  "chatLab.knob.length": "Response length limit",
   "chatLab.knob.lengthTerm": "max tokens",
-  "chatLab.knob.lengthExplain":
-    "A hard cap on how much the model may write. Set it low and long answers get cut off mid-sentence.",
+  "lab.addDocs": "Add documents",
+  "lab.creativity.precise": "Precise",
+  "lab.creativity.creative": "Creative",
+  "lab.length.label": "Length",
+  "lab.reset": "Reset everything",
+  "omni.title": "OmniRoute (local router)",
+  "mode.providers": "How you use providers",
+  "mode.own": "My providers",
+  "mode.ownHint": "Your keys, with automatic switching between them",
+  "mode.omni": "OmniRoute",
+  "mode.omniHint": "A local router manages the keys for you",
+  "error.omniFailed": "OmniRoute couldn't answer: {message}. Check that it has keys under Providers → OmniRoute.",
+  "error.omniNotReady": "OmniRoute is still starting or switched off. Check its status under Settings → Providers.",
+  "error.omniNoKeys": "OmniRoute has no active key, so it can't answer. Add one under Settings → Providers → OmniRoute.",
+  "omni.start": "Start",
+  "omni.password": "OmniRoute has a different dashboard password. Type it so the app can manage its keys.",
+  "omni.passwordLabel": "OmniRoute password",
+  "omni.signIn": "Sign in",
+  "omni.keys": "Keys in OmniRoute",
+  "omni.noKeys": "OmniRoute has no key yet, so it has nowhere to send your messages and chat will fail. Add at least one.",
+  "omni.keyOk": "✓ Works",
+  "omni.keyBad": "Doesn't work",
+  "omni.test": "Test",
+  "omni.addKey": "Add a key",
+  "omni.add": "Add",
+  "omni.pausedOwn": "While you use OmniRoute, your own providers are paused (not deleted).",
+  "omni.pausedOmni": "While you use your own providers, OmniRoute is switched off.",
+  "omni.state.off": "Off",
+  "omni.state.starting": "Starting…",
+  "omni.state.running": "Running",
+  "omni.state.external": "Running (you started it yourself)",
+  "omni.state.error": "Stopped",
+  "omni.starting": "Getting it ready. The first time it downloads a few hundred MB and can take up to 10 minutes; after that, a couple of minutes.",
+  "omni.crashed": "It couldn't keep running.",
+  "omni.dashboard": "Open the dashboard (add your keys)",
+  "omni.log": "Show log",
+  "lab.autoProvider": "Automatic (your list order)",
+  "lab.provider": "Provider",
+  "lab.loadingModels": "Loading models…",
+  "lab.usingOmni": "Using OmniRoute (local router)",
+  "lab.template": "Template…",
+  "lab.model": "Model",
+  "lab.modelTitle": "The provider that answers first. If it fails, the app moves on to the next one on your list.",
+  "lab.noModel": "No provider",
+  "lab.system": "System instructions",
+  "lab.temperature": "Creativity (temperature)",
+  "lab.tools": "Tools",
+  "lab.advanced": "Advanced settings",
+  "lab.tokens": "{count} tokens",
+  "lab.topP": "Word variety",
+  "lab.auto": "Auto",
+  "lab.useDefault": "Back to the default value",
+  "lab.title": "Lab",
+  "lab.expand": "Open the Lab",
+  "lab.collapse": "Minimize the Lab",
+  "lab.personaPlaceholder": "How the AI should behave. For example: you are a patient tutor…",
+  "lab.docs": "Your documents",
+  "chat.emptyTitle": "Write your first message",
+  "chat.emptySubtitle": "Ask anything or drag in a file. The AI's settings are in the bar on the right.",
 
   "plugins.setup.note":
     "Already connected before? These permissions were recently broadened — Disconnect then Connect once more to grant the new access. Actions that send or delete (send email, trash a message, delete an event or task) ask for your approval each time; you can change that per tool in the Tools panel.",
@@ -443,6 +440,7 @@ export const en: Messages = {
   "mcp.start": "Start",
   "mcp.starting": "Starting…",
   "mcp.stop": "Stop",
+  "mcp.more": "More actions",
   "mcp.tools": "Tools",
   "mcp.toolsWithCount": "Tools ({count})",
   "mcp.toolsDisabledTitle": "Start the server to see its tools",
@@ -660,40 +658,6 @@ export const en: Messages = {
   "token.example.otherLang": "Another language",
   "token.example.otherLangText": "La inteligencia artificial aprende de muchísimos ejemplos.",
 
-  // ── Lessons (LessonsPanel) ─────────────────────────────────────────
-  "lessons.intro":
-    "Six short, hands-on lessons on how modern AI actually works — each opens a live playground you can poke at. Great to walk through top to bottom, on your own or in front of a class. No coding, no jargon left unexplained.",
-  "lessons.1.title": "What the AI actually reads",
-  "lessons.1.term": "tokens",
-  "lessons.1.body":
-    "An AI model never sees your letters — it first chops text into chunks called tokens. Seeing this explains why it counts letters badly and why it has size limits.",
-  "lessons.1.cta": "Split some text into tokens",
-  "lessons.2.title": "How you steer it with instructions",
-  "lessons.2.term": "system prompt",
-  "lessons.2.body":
-    "Behind every chatbot is a hidden instruction that shapes its persona and rules. See the exact prompt the model receives, then change the instruction and watch its answer change.",
-  "lessons.2.cta": "Experiment with a system prompt",
-  "lessons.3.title": "Why it sometimes makes things up",
-  "lessons.3.term": "hallucination",
-  "lessons.3.body":
-    "On its own, a model answers from fuzzy memory and can invent confident-sounding facts. Ask one question two ways and watch a made-up answer become a sourced one.",
-  "lessons.3.cta": "Compare a guess vs. a grounded answer",
-  "lessons.4.title": "How it finds the right passage",
-  "lessons.4.term": "RAG / retrieval",
-  "lessons.4.body":
-    "“Chat with your documents” works by turning meaning into numbers and finding the closest passages to your question. Watch the real search rank every passage in your library.",
-  "lessons.4.cta": "Watch retrieval rank your documents",
-  "lessons.5.title": "How it uses real tools",
-  "lessons.5.term": "MCP",
-  "lessons.5.body":
-    "A tool is just a function the model is allowed to ask for — read a file, search the web. See a tool’s inputs, then watch the model choose one and fill in the blanks.",
-  "lessons.5.cta": "Watch the model use a tool",
-  "lessons.6.title": "How it researches a big question",
-  "lessons.6.term": "agentic research",
-  "lessons.6.body":
-    "Give a model tools and a goal and it can work in steps: break the question down, search, read sources, and write a cited answer. Watch a full run unfold live.",
-  "lessons.6.cta": "Run a live research trace",
-
   // ── Visualizations (viz/*) ─────────────────────────────────────────
   "viz.embeddingSpace": "Embedding space",
   "viz.embeddingSpaceAria": "Embedding space map",
@@ -704,4 +668,6 @@ export const en: Messages = {
   "viz.rankingCaption":
     "Every passage in your library, scored against your question. The {count} above the line are the ones the assistant would answer from. Click any bar to read the full passage.",
   "viz.cutoff": "top {count} · retrieved",
+  // ── Course (own file: it is long) ─────────────────────────────────
+  ...courseEn,
 };

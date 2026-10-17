@@ -515,3 +515,84 @@ export async function deleteRagDocument(id: string): Promise<void> {
   await db.execute("DELETE FROM rag_chunks WHERE document_id = $1", [id]);
   await db.execute("DELETE FROM rag_documents WHERE id = $1", [id]);
 }
+
+/** One row per course task the student has finished (or written a reflection for). */
+export interface CourseProgressRow {
+  task_id: string;
+  status: "done";
+  note: string | null;
+  updated_at: number;
+}
+
+export async function listCourseProgress(): Promise<CourseProgressRow[]> {
+  const db = await getDb();
+  return db.select<CourseProgressRow[]>("SELECT * FROM course_progress");
+}
+
+/** Marks a task done, optionally saving the student's reflection text with it. */
+export async function markCourseTaskDone(taskId: string, note: string | null): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    `INSERT INTO course_progress (task_id, status, note, updated_at) VALUES ($1, 'done', $2, $3)
+     ON CONFLICT(task_id) DO UPDATE SET status = 'done', note = $2, updated_at = $3`,
+    [taskId, note, Date.now()],
+  );
+}
+
+export async function unmarkCourseTask(taskId: string): Promise<void> {
+  const db = await getDb();
+  await db.execute("DELETE FROM course_progress WHERE task_id = $1", [taskId]);
+}
+
+const COURSE_ORDER_FLAG = "studyllm.course.order";
+const COURSE_ORDER_VERSION = "2";
+
+/**
+ * The Course was reordered (getting a free key now comes first, "what is an AI" second, and so on), which
+ * renumbered the modules. This moves progress saved under the old numbers to the new ones, once. Two
+ * passes through a temporary prefix, because swapping ids in place would collide on the primary key.
+ */
+export async function migrateCourseModuleOrder(): Promise<void> {
+  try {
+    if (localStorage.getItem(COURSE_ORDER_FLAG) === COURSE_ORDER_VERSION) return;
+  } catch {
+    return;
+  }
+  const db = await getDb();
+  // old → new: 1→2, 2→1, 5→7, 6→8, 7→6, 8→5 (the rest keep their number)
+  await db.execute(
+    `UPDATE course_progress SET task_id = 'z' || CASE substr(task_id, 1, instr(task_id, '.') - 1)
+       WHEN 'm1' THEN '2' WHEN 'm2' THEN '1' WHEN 'm5' THEN '7' WHEN 'm6' THEN '8'
+       WHEN 'm7' THEN '6' WHEN 'm8' THEN '5'
+       ELSE substr(task_id, 2, instr(task_id, '.') - 2) END || substr(task_id, instr(task_id, '.'))`,
+  );
+  await db.execute("UPDATE course_progress SET task_id = 'm' || substr(task_id, 2) WHERE task_id LIKE 'z%'");
+  try {
+    localStorage.setItem(COURSE_ORDER_FLAG, COURSE_ORDER_VERSION);
+    localStorage.removeItem("studyllm.course.folded");
+    localStorage.setItem("studyllm.course.module", "1");
+  } catch {
+    /* non-fatal */
+  }
+}
+
+export async function resetCourseProgress(): Promise<void> {
+  const db = await getDb();
+  await db.execute("DELETE FROM course_progress");
+}
+
+/** Assistant replies across every conversation — lets the Course confirm "you've talked to the AI". */
+export async function countAssistantMessages(): Promise<number> {
+  const db = await getDb();
+  const rows = await db.select<{ n: number }[]>(
+    "SELECT COUNT(*) AS n FROM messages WHERE role = 'assistant'",
+  );
+  return rows[0]?.n ?? 0;
+}
+
+/** Tool calls the model has made across every conversation — lets the Course confirm MCP was used. */
+export async function countToolCalls(): Promise<number> {
+  const db = await getDb();
+  const rows = await db.select<{ n: number }[]>("SELECT COUNT(*) AS n FROM tool_calls");
+  return rows[0]?.n ?? 0;
+}

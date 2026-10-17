@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
+  ONBOARDING_PROVIDER_TYPES,
   PROVIDER_MANIFEST,
-  SELECTABLE_PROVIDER_TYPES,
   freeTierNoteKey,
   type ProviderType,
 } from "../lib/providers";
@@ -19,16 +19,16 @@ interface Props {
   onAddProvider: (draft: ProviderDraft) => Promise<void>;
   onAddFilesystem: (scopedPath: string) => Promise<void>;
   onClose: () => void;
-  onOpenExplore: () => void;
+  onOpenCourse: () => void;
 }
 
-type Step = "provider" | "key" | "mcp" | "features" | "done";
+type Step = "provider" | "key" | "mcp" | "done";
 
 function describeError(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-export function OnboardingWizard({ onAddProvider, onAddFilesystem, onClose, onOpenExplore }: Props) {
+export function OnboardingWizard({ onAddProvider, onAddFilesystem, onClose, onOpenCourse }: Props) {
   const t = useT();
   const [step, setStep] = useState<Step>("provider");
   const [type, setType] = useState<ProviderType>("gemini");
@@ -91,7 +91,7 @@ export function OnboardingWizard({ onAddProvider, onAddFilesystem, onClose, onOp
     setError(null);
     try {
       await onAddFilesystem(picked);
-      setStep("features");
+      setStep("done");
     } catch (err) {
       setError(t("onboarding.mcpFailed", { error: describeError(err) }));
     } finally {
@@ -113,7 +113,7 @@ export function OnboardingWizard({ onAddProvider, onAddFilesystem, onClose, onOp
           <>
             <p className="settings-hint">{t("onboarding.providerHint")}</p>
             <div className="onboarding-provider-grid">
-              {SELECTABLE_PROVIDER_TYPES.map((pt) => (
+              {ONBOARDING_PROVIDER_TYPES.map((pt) => (
                 <button
                   key={pt}
                   type="button"
@@ -190,7 +190,7 @@ export function OnboardingWizard({ onAddProvider, onAddFilesystem, onClose, onOp
             <p className="settings-hint">{t("onboarding.mcpHint")}</p>
             {error && <p className="error">{error}</p>}
             <div className="provider-edit-actions">
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setStep("features")} disabled={mcpBusy}>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setStep("done")} disabled={mcpBusy}>
                 {t("common.skip")}
               </button>
               <button type="button" className="btn btn-primary btn-sm" onClick={handlePickFolder} disabled={mcpBusy}>
@@ -200,32 +200,13 @@ export function OnboardingWizard({ onAddProvider, onAddFilesystem, onClose, onOp
           </>
         )}
 
-        {step === "features" && (
-          <>
-            <p className="settings-hint">{t("onboarding.featuresHint")}</p>
-            <ul className="onboarding-features">
-              <li>
-                <strong>{t("onboarding.featureResearch")}</strong> — {t("onboarding.featureResearchDesc")}
-              </li>
-              <li>
-                <strong>{t("onboarding.featureDocs")}</strong> — {t("onboarding.featureDocsDesc")}
-              </li>
-            </ul>
-            <div className="provider-edit-actions">
-              <button type="button" className="btn btn-ghost btn-sm" onClick={onOpenExplore}>
-                {t("onboarding.seeHowItWorks")}
-              </button>
-              <button type="button" className="btn btn-primary btn-sm" onClick={() => setStep("done")}>
-                {t("onboarding.continue")}
-              </button>
-            </div>
-          </>
-        )}
-
         {step === "done" && (
           <>
             <p className="settings-hint">{t("onboarding.doneHint")}</p>
             <div className="provider-edit-actions">
+              <button type="button" className="btn btn-ghost" onClick={onOpenCourse}>
+                {t("onboarding.seeHowItWorks")}
+              </button>
               <button type="button" className="btn btn-primary" onClick={onClose}>
                 {t("onboarding.startChatting")}
               </button>

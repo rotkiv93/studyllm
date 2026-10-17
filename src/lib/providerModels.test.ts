@@ -42,6 +42,9 @@ describe("providerSupportsLiveModels / providerModelsNeedApiKey", () => {
     expect(providerModelsNeedApiKey("cohere")).toBe(true);
     // SambaNova was dropped from the live-catalog sources.
     expect(providerSupportsLiveModels("sambanova")).toBe(false);
+    // The local router lists models without a key, so it never waits for one.
+    expect(providerSupportsLiveModels("omniroute")).toBe(true);
+    expect(providerModelsNeedApiKey("omniroute")).toBe(false);
   });
 });
 
@@ -60,6 +63,24 @@ describe("fetchProviderModels", () => {
     });
     const result = await fetchProviderModels("groq", "key");
     expect(result).toEqual([{ id: "llama-3.1-8b" }]);
+  });
+
+  it("lists a local OmniRoute's models without a key, from its own base URL", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ id: "auto" }, { id: "gemini/gemini-2.5-flash" }] }),
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+    const result = await fetchProviderModels("omniroute", "", "http://localhost:3000/v1/");
+    expect(fetchSpy).toHaveBeenCalledWith("http://localhost:3000/v1/models", { headers: {} });
+    expect(result).toEqual([{ id: "auto" }, { id: "gemini/gemini-2.5-flash" }]);
+  });
+
+  it("falls back to OmniRoute's default address and returns null when it isn't running", async () => {
+    const fetchSpy = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    vi.stubGlobal("fetch", fetchSpy);
+    expect(await fetchProviderModels("omniroute", "")).toBeNull();
+    expect(fetchSpy).toHaveBeenCalledWith("http://localhost:20128/v1/models", { headers: {} });
   });
 
   it("keeps only :free-suffixed models for openrouter", async () => {

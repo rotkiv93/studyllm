@@ -9,7 +9,8 @@ export type ProviderType =
   | "cohere"
   | "cerebras"
   | "github-models"
-  | "sambanova";
+  | "sambanova"
+  | "omniroute";
 
 export interface ProviderManifestEntry {
   type: ProviderType;
@@ -30,6 +31,11 @@ export interface ProviderManifestEntry {
   freeTierNote: string;
   /** When true, hidden from the add/onboarding pickers but still renders for already-saved rows. */
   deprecated?: boolean;
+  /**
+   * A router the student runs on their own machine (OmniRoute) rather than a hosted free tier.
+   * Its URL is editable, its key is optional, and it's left out of the first-run wizard.
+   */
+  local?: boolean;
 }
 
 /**
@@ -139,6 +145,19 @@ export const PROVIDER_MANIFEST: Record<ProviderType, ProviderManifestEntry> = {
     freeTierNote: "trial credits only",
     deprecated: true,
   },
+  omniroute: {
+    type: "omniroute",
+    label: "OmniRoute (local router)",
+    baseURL: "http://localhost:20128/v1",
+    docsUrl: "https://www.omniroute.online/es/",
+    apiKeyUrl: "https://github.com/diegosouzapw/OmniRoute",
+    // OmniRoute's own "auto" combos pick the upstream provider/model from the keys it holds.
+    defaultModel: "auto/best-chat",
+    suggestedModels: ["auto/best-chat", "auto/best-fast", "auto/best-coding"],
+    recommended: false,
+    freeTierNote: "runs on your computer · pools your own free keys",
+    local: true,
+  },
 };
 
 export const PROVIDER_TYPES = Object.keys(PROVIDER_MANIFEST) as ProviderType[];
@@ -158,3 +177,11 @@ export function freeTierNoteKey(type: ProviderType): MessageKey {
 export const SELECTABLE_PROVIDER_TYPES = PROVIDER_TYPES.filter(
   (t) => !PROVIDER_MANIFEST[t].deprecated,
 );
+
+/** Hosted free tiers offered by the first-run wizard — the local router is an advanced extra. */
+export const ONBOARDING_PROVIDER_TYPES = SELECTABLE_PROVIDER_TYPES.filter(
+  (t) => !PROVIDER_MANIFEST[t].local,
+);
+
+/** Key stored for a local router that doesn't need one (the keychain entry can't be empty). */
+export const LOCAL_ROUTER_PLACEHOLDER_KEY = "local";

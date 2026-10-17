@@ -28,8 +28,11 @@ export function GroundingContrast({
   documents,
   onOpenLibrary,
   onRunAnswer,
+  onRan,
 }: {
   providers: ProviderRow[];
+  /** Called after both answers (plain and grounded) finished without error. */
+  onRan?: () => void;
   documents: RagDocumentRow[];
   onOpenLibrary: () => void;
   onRunAnswer: (
@@ -67,6 +70,7 @@ export function GroundingContrast({
     const controller = new AbortController();
     abortRef.current = controller;
     const q = question.trim();
+    let failed = false;
 
     try {
       // 1) Plain — the model's own memory, no documents.
@@ -76,7 +80,10 @@ export function GroundingContrast({
         undefined,
         (e) => {
           if (e.type === "chunk") setPlainText((t) => t + e.text);
-          else if (e.type === "error") setError(e.message);
+          else if (e.type === "error") {
+            failed = true;
+            setError(e.message);
+          }
         },
         controller.signal,
       );
@@ -93,11 +100,15 @@ export function GroundingContrast({
         system,
         (e) => {
           if (e.type === "chunk") setGroundedText((t) => t + e.text);
-          else if (e.type === "error") setError(e.message);
+          else if (e.type === "error") {
+            failed = true;
+            setError(e.message);
+          }
         },
         controller.signal,
       );
       setPhase("done");
+      if (!failed && !controller.signal.aborted) onRan?.();
     } catch (err) {
       if (!controller.signal.aborted) {
         setError(err instanceof Error ? err.message : t("grounding.failed"));

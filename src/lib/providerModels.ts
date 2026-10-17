@@ -12,8 +12,10 @@ export interface ModelInfo {
 }
 
 interface ModelsSource {
-  /** Absolute URL to GET. */
+  /** Absolute URL to GET (the default; a local router's URL is derived from the saved base URL). */
   url: string;
+  /** True for a router on the student's machine whose `/models` lives under their own base URL. */
+  usesBaseURL?: boolean;
   /** False for registries that are public (no key needed to list models). */
   requiresApiKey: boolean;
   /** Extracts models from the parsed JSON body — shapes differ per provider. */
@@ -126,7 +128,20 @@ const MODELS_SOURCE: Partial<Record<ProviderType, ModelsSource>> = {
             .map((id) => ({ id }))
         : [],
   },
+  omniroute: {
+    // OmniRoute serves an OpenAI-style catalog from the router the student runs locally. The key is
+    // optional (a fresh local install may not enforce one), so listing never waits for it.
+    url: "http://localhost:20128/v1/models",
+    usesBaseURL: true,
+    requiresApiKey: false,
+    parse: openAiStyle,
+  },
 };
+
+/** Joins a base URL and a path without doubling or dropping the slash between them. */
+export function joinUrl(base: string, path: string): string {
+  return `${base.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`;
+}
 
 export function providerSupportsLiveModels(type: ProviderType): boolean {
   return type in MODELS_SOURCE;
@@ -147,6 +162,8 @@ export function providerModelsNeedApiKey(type: ProviderType): boolean {
 export async function fetchProviderModels(
   type: ProviderType,
   apiKey: string,
+  /** Saved/edited base URL — only consulted for a local router (OmniRoute), whose port can differ. */
+  baseURL?: string,
 ): Promise<ModelInfo[] | null> {
   const source = MODELS_SOURCE[type];
   if (!source) return null;
@@ -155,7 +172,8 @@ export async function fetchProviderModels(
   try {
     const headers: Record<string, string> = {};
     if (apiKey.trim()) headers.Authorization = `Bearer ${apiKey.trim()}`;
-    const res = await fetch(source.url, { headers });
+    const url = source.usesBaseURL && baseURL?.trim() ? joinUrl(baseURL.trim(), "models") : source.url;
+    const res = await fetch(url, { headers });
     if (!res.ok) return null;
     const body: unknown = await res.json();
 

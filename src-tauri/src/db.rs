@@ -163,5 +163,18 @@ pub fn migrations() -> Vec<Migration> {
             "#,
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 9,
+            description: "course progress: one row per completed/noted task",
+            sql: r#"
+                CREATE TABLE course_progress (
+                    task_id TEXT PRIMARY KEY,
+                    status TEXT NOT NULL,
+                    note TEXT,
+                    updated_at INTEGER NOT NULL
+                );
+            "#,
+            kind: MigrationKind::Up,
+        },
     ]
 }

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { dynamicTool, jsonSchema, type ToolSet } from "ai";
 import {
   ProviderRouter,
@@ -7,7 +7,8 @@ import {
   type ConfiguredProvider,
   type StreamEvent,
 } from "./lib/providerRouter";
-import { PROVIDER_MANIFEST } from "./lib/providers";
+import { LOCAL_ROUTER_PLACEHOLDER_KEY, PROVIDER_MANIFEST } from "./lib/providers";
+import { fetchProviderModels } from "./lib/providerModels";
 import { setCredential, getCredential, deleteCredential } from "./lib/credentials";
 import {
   listProviders,
@@ -33,6 +34,11 @@ import {
   deleteMessagesFrom,
   listRagDocuments,
   deleteRagDocument,
+  listCourseProgress,
+  migrateCourseModuleOrder,
+  markCourseTaskDone,
+  unmarkCourseTask,
+  resetCourseProgress,
   type ConversationRow,
   type ProviderRow,
   type McpServerRow,
@@ -46,14 +52,18 @@ import { type ResolvedInstall } from "./components/McpMarketplace";
 import { PluginsPanel } from "./components/PluginsPanel";
 import { OnboardingWizard } from "./components/OnboardingWizard";
 import { Sidebar } from "./components/Sidebar";
-import { StudyModes } from "./components/StudyModes";
 import { LibraryPanel } from "./components/LibraryPanel";
-import { ExplorePanel } from "./components/ExplorePanel";
+import { CoursePanel, type CourseAppState } from "./components/CoursePanel";
+import { AppTopBar, type AppMode } from "./components/AppTopBar";
+import { courseProgress } from "./lib/course/checks";
+import { COURSE_MODULES, type CourseTarget } from "./lib/course/modules";
+import type { LabRequest } from "./lib/course/labs";
+import { listOmniConnections, omniStart, omniStop, probeOmniRoute } from "./lib/omniroute";
+import type { ProviderMode } from "./components/OmniRouteView";
 import { RetrievedSources } from "./components/RetrievedSources";
 import { ToolCallBlock } from "./components/ToolCallBlock";
 import { Markdown } from "./components/Markdown";
 import {
-  IconBook,
   IconCheck,
   IconCopy,
   IconDownload,
@@ -61,24 +71,19 @@ import {
   IconLoader,
   IconPaperclip,
   IconRefresh,
-  IconSearch,
   IconSend,
-  IconSettings,
   IconStop,
   IconX,
 } from "./components/icons";
 import {
-  ChatLab,
+  PlaygroundPanel,
   DEFAULT_CHAT_SETTINGS,
   isChatSettingsActive,
   type ChatSettings,
-} from "./components/ChatLab";
+} from "./components/PlaygroundPanel";
 import {
-  RESEARCH_MODES,
-  DEFAULT_RESEARCH_MODE,
   RESEARCH_TOOL_CATALOG_IDS,
   isResearchServer,
-  researchModeKeys,
   type ResearchMode,
 } from "./lib/researchModes";
 import { CURATED_ENTRIES, repairCuratedArgs } from "./lib/curatedMcp";
@@ -130,6 +135,12 @@ import { appendCrashLog } from "./lib/crashlog";
 import { CONNECTORS, DESTRUCTIVE_GOOGLE_TOOLS, type OAuthConnector } from "./lib/googleConnectors";
 import { useT } from "./lib/i18n";
 import "./App.css";
+
+/** localStorage key remembering whether the app was last left in Chat or Course mode. */
+const APP_MODE_STORAGE_KEY = "studyllm.mode";
+const LAB_OPEN_STORAGE_KEY = "studyllm.lab.open";
+const PROVIDER_MODE_STORAGE_KEY = "studyllm.provider.mode";
+const LAB_TARGET_STORAGE_KEY = "studyllm.lab.target";
 
 function newId(): string {
   return crypto.randomUUID();
@@ -243,7 +254,17 @@ export default function App() {
   const [showProviders, setShowProviders] = useState(false);
   const [showMcp, setShowMcp] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
-  const [showExplore, setShowExplore] = useState(false);
+  // Chat mode vs Course mode. Remembered across launches so a student resumes where they were.
+  const [showCourse, setShowCourse] = useState(() => {
+    try {
+      return localStorage.getItem(APP_MODE_STORAGE_KEY) === "course";
+    } catch {
+      return false;
+    }
+  });
+  // Course progress: finished task ids + the reflections saved with them.
+  const [courseDone, setCourseDone] = useState<Set<string>>(new Set());
+  const [courseNotes, setCourseNotes] = useState<Record<string, string>>({});
   const [showPlugins, setShowPlugins] = useState(false);
   const [showAppSettings, setShowAppSettings] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -254,7 +275,45 @@ export default function App() {
   // Chat lab: per-conversation system prompt + decoding knobs the student controls, plus whether
   // the control panel is open. Hydrated from the conversation row on select, reset on new chat.
   const [chatSettings, setChatSettings] = useState<ChatSettings>(DEFAULT_CHAT_SETTINGS);
-  const [showChatLab, setShowChatLab] = useState(false);
+  // The Lab bar on the right is always there; this is whether it is expanded or a narrow rail.
+  // Which provider (and model) the student pinned in the Lab; null provider = automatic, in list order.
+  const [labTarget, setLabTargetState] = useState<{ providerId: string | null; model: string | null }>(() => {
+    try {
+      const raw = JSON.parse(localStorage.getItem(LAB_TARGET_STORAGE_KEY) ?? "null");
+      if (raw && typeof raw === "object") {
+        return {
+          providerId: typeof raw.providerId === "string" ? raw.providerId : null,
+          model: typeof raw.model === "string" ? raw.model : null,
+        };
+      }
+    } catch {
+      /* start automatic */
+    }
+    return { providerId: null, model: null };
+  });
+  const setLabTarget = useCallback((next: { providerId: string | null; model: string | null }) => {
+    setLabTargetState(next);
+    try {
+      localStorage.setItem(LAB_TARGET_STORAGE_KEY, JSON.stringify(next));
+    } catch {
+      /* non-fatal */
+    }
+  }, []);
+  const [labExpanded, setLabExpandedState] = useState(() => {
+    try {
+      return localStorage.getItem(LAB_OPEN_STORAGE_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const setLabExpanded = useCallback((next: boolean) => {
+    setLabExpandedState(next);
+    try {
+      localStorage.setItem(LAB_OPEN_STORAGE_KEY, next ? "1" : "0");
+    } catch {
+      /* non-fatal: the bar just won't be remembered */
+    }
+  }, []);
   const [ragDocuments, setRagDocuments] = useState<RagDocumentRow[]>([]);
   const [embeddingConfig, setEmbeddingConfig] = useState<EmbeddingConfig | null>(() =>
     loadEmbeddingConfig(),
@@ -295,7 +354,19 @@ export default function App() {
     input: unknown;
   } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  // Own provider keys, or OmniRoute handling them — one or the other (persisted).
+  const [providerMode, setProviderModeState] = useState<ProviderMode>(() => {
+    try {
+      return localStorage.getItem(PROVIDER_MODE_STORAGE_KEY) === "omniroute" ? "omniroute" : "own";
+    } catch {
+      return "own";
+    }
+  });
+  const providerModeRef = useRef<ProviderMode>(providerMode);
+  const [providerModeBusy, setProviderModeBusy] = useState(false);
   const routerRef = useRef<ProviderRouter>(new ProviderRouter([]));
+  /** The last list handed to the router, so a Course lab can answer with one provider only. */
+  const configuredProvidersRef = useRef<ConfiguredProvider[]>([]);
   const abortControllerRef = useRef<AbortController | null>(null);
   const conversationIdRef = useRef<string | null>(null);
   const approvalResolvers = useRef<Map<string, (approved: boolean) => void>>(new Map());
@@ -311,6 +382,20 @@ export default function App() {
     })();
     refreshConversations();
     refreshRagDocuments();
+    // In OmniRoute mode the router starts with the app.
+    if (providerModeRef.current === "omniroute") void omniStart().catch(() => {});
+    migrateCourseModuleOrder()
+      .catch(() => {})
+      .then(() => listCourseProgress())
+      .then((rows) => {
+        setCourseDone(new Set(rows.map((r) => r.task_id)));
+        setCourseNotes(
+          Object.fromEntries(rows.filter((r) => r.note).map((r) => [r.task_id, r.note as string])),
+        );
+      })
+      .catch(() => {
+        // Progress is a convenience; a failed read just starts the Course from the top.
+      });
     (async () => {
       const rows = await repairStoredMcpArgs(await listMcpServers());
       setMcpServers(rows);
@@ -347,6 +432,14 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    try {
+      localStorage.setItem(APP_MODE_STORAGE_KEY, showCourse ? "course" : "chat");
+    } catch {
+      /* non-fatal: the app just reopens in Chat mode */
+    }
+  }, [showCourse]);
+
+  useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [messages]);
 
@@ -354,6 +447,120 @@ export default function App() {
     const rows = await listMcpServers();
     setMcpServers(rows);
   }
+
+  // Stable identities: the Course's auto-check effect depends on `onMark`.
+  const handleCourseMark = useCallback(async (taskId: string, note?: string | null) => {
+    await markCourseTaskDone(taskId, note ?? null);
+    setCourseDone((prev) => (prev.has(taskId) ? prev : new Set(prev).add(taskId)));
+    if (note) setCourseNotes((prev) => ({ ...prev, [taskId]: note }));
+  }, []);
+
+  const handleCourseUnmark = useCallback(async (taskId: string) => {
+    await unmarkCourseTask(taskId);
+    setCourseDone((prev) => {
+      if (!prev.has(taskId)) return prev;
+      const next = new Set(prev);
+      next.delete(taskId);
+      return next;
+    });
+    setCourseNotes((prev) => {
+      if (!(taskId in prev)) return prev;
+      const next = { ...prev };
+      delete next[taskId];
+      return next;
+    });
+  }, []);
+
+  const handleCourseReset = useCallback(async () => {
+    await resetCourseProgress();
+    setCourseDone(new Set());
+    setCourseNotes({});
+  }, []);
+
+  /** Where a task's shortcut button leads. The overlays open on top of the Course page. */
+  function handleCourseOpen(target: CourseTarget) {
+    if (target === "chat") setShowCourse(false);
+    else if (target === "providers") setShowProviders(true);
+    else if (target === "mcp") setShowMcp(true);
+    else if (target === "plugins") setShowPlugins(true);
+    else setShowLibrary(true);
+  }
+
+  /** The Prompt Builder hands its text to the chat composer, ready to send. */
+  function handleCourseUsePrompt(prompt: string) {
+    setInput(prompt);
+    setShowCourse(false);
+  }
+
+  /** The providers the chat actually uses right now: the OmniRoute one, or everything but it. */
+  const activeProviders = providers.filter((p) =>
+    providerMode === "omniroute" ? p.type === "omniroute" : p.type !== "omniroute",
+  );
+
+  /** Switches between your own keys and OmniRoute; OmniRoute starts when chosen and stops when left. */
+  async function handleProviderMode(next: ProviderMode) {
+    if (next === providerModeRef.current) return;
+    setProviderModeBusy(true);
+    try {
+      providerModeRef.current = next;
+      setProviderModeState(next);
+      try {
+        localStorage.setItem(PROVIDER_MODE_STORAGE_KEY, next);
+      } catch {
+        /* non-fatal */
+      }
+      if (next === "omniroute") {
+        const existing = providers.find((p) => p.type === "omniroute");
+        const manifest = PROVIDER_MANIFEST.omniroute;
+        if (!existing) {
+          await handleAddProvider({
+            type: "omniroute",
+            label: manifest.label,
+            model: manifest.defaultModel,
+            apiKey: LOCAL_ROUTER_PLACEHOLDER_KEY,
+            baseURL: manifest.baseURL,
+          });
+        } else if (!existing.enabled) {
+          await updateProvider(existing.id, { enabled: 1 });
+        }
+        void omniStart().catch(() => {});
+      } else {
+        await omniStop().catch(() => {});
+      }
+      await refreshProviders();
+    } finally {
+      setProviderModeBusy(false);
+    }
+  }
+
+  /** Live model ids for one provider, for the Lab's model picker. null when the provider can't list them. */
+  async function loadProviderModels(providerId: string): Promise<string[] | null> {
+    const row = providers.find((p) => p.id === providerId);
+    if (!row) return null;
+    const apiKey = (await getCredential(row.secret_ref)) ?? "";
+    const list = await fetchProviderModels(row.type, apiKey, row.base_url_override ?? undefined);
+    return list ? list.map((m) => m.id) : null;
+  }
+
+  const toggleSidebar = () =>
+    setSidebarCollapsed((v) => {
+      const next = !v;
+      localStorage.setItem("sidebarCollapsed", next ? "1" : "0");
+      return next;
+    });
+
+  /** The slice of Course state the app already holds; the panel adds the values that need a query. */
+  const courseAppState: CourseAppState = {
+    enabledProviderCount: providers.filter((p) => p.enabled && p.type !== "omniroute").length,
+    hasOmniroute: providers.some((p) => p.type === "omniroute"),
+    runningServerNames: mcpServers.filter((s) => s.id in mcpToolsByServer).map((s) => s.name.toLowerCase()),
+    // Gmail & co. default their destructive tools to "ask", so only hand-set permissions count here.
+    hasAskPermission: mcpServers.some(
+      (s) => !s.oauth_provider && Object.values(parseToolPermissions(s.tool_permissions_json)).includes("ask"),
+    ),
+    googleConnected: mcpServers.some((s) => s.oauth_provider === "google"),
+    ragDocumentCount: ragDocuments.length,
+  };
 
   async function refreshConversations() {
     const rows = await listConversations();
@@ -675,6 +882,26 @@ export default function App() {
     }
   }
 
+  /**
+   * Course labs: one practice model call. Normally the whole failover router answers; with a
+   * `providerId` only that provider does (the comparison lab). Persists nothing.
+   */
+  async function runCourseLab(
+    request: LabRequest,
+    onEvent: (e: StreamEvent) => void,
+    signal: AbortSignal,
+  ): Promise<void> {
+    const router = request.providerId
+      ? new ProviderRouter(configuredProvidersRef.current.filter((p) => p.id === request.providerId))
+      : routerRef.current;
+    for await (const event of router.streamReply(request.history, undefined, signal, {
+      system: request.system,
+      temperature: request.temperature,
+    })) {
+      onEvent(event);
+    }
+  }
+
   async function handleAddLibraryFiles(files: File[]) {
     setLibraryError(null);
     const resolved = await resolveEmbedder(providers);
@@ -896,9 +1123,10 @@ export default function App() {
   async function refreshProviders() {
     const rows = await listProviders();
     setProviders(rows);
+    const inMode = (r: ProviderRow) => (providerModeRef.current === "omniroute" ? r.type === "omniroute" : r.type !== "omniroute");
     const configured: ConfiguredProvider[] = await Promise.all(
       rows
-        .filter((r) => r.enabled)
+        .filter((r) => r.enabled && inMode(r))
         .map(async (r) => {
           const apiKey = (await getCredential(r.secret_ref)) ?? "";
           return {
@@ -912,6 +1140,7 @@ export default function App() {
           };
         }),
     );
+    configuredProvidersRef.current = configured;
     routerRef.current.updateProviders(configured);
   }
 
@@ -924,7 +1153,7 @@ export default function App() {
       type: draft.type,
       label: draft.label,
       model: draft.model,
-      base_url_override: null,
+      base_url_override: draft.baseURL?.trim() || null,
       priority: providers.length,
       enabled: 1,
       secret_ref: secretRef,
@@ -946,7 +1175,11 @@ export default function App() {
   }
 
   async function handleEditProvider(id: string, draft: ProviderEditDraft) {
-    await updateProvider(id, { label: draft.label, model: draft.model });
+    await updateProvider(id, {
+      label: draft.label,
+      model: draft.model,
+      ...(draft.baseURL !== undefined ? { base_url_override: draft.baseURL || null } : {}),
+    });
     if (draft.apiKey) {
       const row = providers.find((p) => p.id === id);
       if (row) await setCredential(row.secret_ref, draft.apiKey);
@@ -968,9 +1201,27 @@ export default function App() {
 
   async function runSend(text: string) {
     if (!text.trim() || isStreaming) return;
-    if (providers.filter((p) => p.enabled).length === 0) {
+    if (activeProviders.filter((p) => p.enabled).length === 0) {
       setError(t("error.addProviderFirst"));
       return;
+    }
+
+    // OmniRoute can't answer without a key of its own, and with none it spends minutes failing
+    // upstream before it gives up — so say so up front instead of leaving the chat hanging.
+    if (providerModeRef.current === "omniroute") {
+      if ((await probeOmniRoute()) === null) {
+        setError(t("error.omniNotReady"));
+        return;
+      }
+      try {
+        const keys = await listOmniConnections();
+        if (!keys.some((k) => k.isActive)) {
+          setError(t("error.omniNoKeys"));
+          return;
+        }
+      } catch {
+        /* can't tell (e.g. a changed dashboard password): let the request try */
+      }
     }
 
     setError(null);
@@ -1075,6 +1326,10 @@ export default function App() {
         temperature: chatSettings.temperature ?? undefined,
         topP: chatSettings.topP ?? undefined,
         maxOutputTokens: chatSettings.maxTokens ?? undefined,
+        // Only honour a pinned provider that still exists and is switched on.
+        ...(labTarget.providerId && activeProviders.some((p) => p.id === labTarget.providerId && p.enabled)
+          ? { providerId: labTarget.providerId, model: labTarget.model ?? undefined }
+          : {}),
       })) {
         if (event.type === "chunk") {
           assistantText += event.text;
@@ -1144,9 +1399,11 @@ export default function App() {
             await refreshProviders();
           } else if (ev.kind === "exhausted") {
             setError(
-              ev.toolsUnsupported
-                ? t("error.toolsUnsupported")
-                : ev.retryInSeconds > 0
+              ev.routerFailure
+                ? t("error.omniFailed", { message: ev.routerFailure })
+                : ev.toolsUnsupported
+                  ? t("error.toolsUnsupported")
+                  : ev.retryInSeconds > 0
                   ? t("error.allProvidersRateLimited", { seconds: ev.retryInSeconds })
                   : t("error.allProvidersFailed"),
             );
@@ -1218,12 +1475,6 @@ export default function App() {
   async function sendMessage(e: React.FormEvent) {
     e.preventDefault();
     await submitComposer();
-  }
-
-  /** Seed the composer from a study-mode chip and focus it so the student can fill in placeholders. */
-  function handlePickStudyMode(seed: string) {
-    setInput(seed);
-    composerInputRef.current?.focus();
   }
 
   /** Parse dropped/picked files into text attachments that ride along with the next message. */
@@ -1369,21 +1620,21 @@ export default function App() {
   const activeTitle = conversations.find((c) => c.id === activeConversationId)?.title;
 
   return (
-    <div className="app-shell">
+    <div className="app-frame">
+      <AppTopBar
+        mode={showCourse ? "course" : "chat"}
+        onChange={(mode: AppMode) => setShowCourse(mode === "course")}
+        courseProgressPercent={courseProgress(COURSE_MODULES, courseDone).percent}
+      />
+      <div className="app-shell">
       <Sidebar
         conversations={conversations}
         activeConversationId={activeConversationId}
         collapsed={sidebarCollapsed}
+        onToggleCollapsed={toggleSidebar}
         disabled={isStreaming}
         mcpRunningCount={Object.keys(mcpToolsByServer).length}
-        activeProviderCount={providers.filter((p) => p.enabled).length}
-        onToggleCollapsed={() =>
-          setSidebarCollapsed((v) => {
-            const next = !v;
-            localStorage.setItem("sidebarCollapsed", next ? "1" : "0");
-            return next;
-          })
-        }
+        activeProviderCount={activeProviders.filter((p) => p.enabled).length}
         onNewChat={handleNewChat}
         onSelectConversation={handleSelectConversation}
         onDeleteConversation={handleDeleteConversation}
@@ -1391,13 +1642,56 @@ export default function App() {
         onOpenProviders={() => setShowProviders(true)}
         onOpenMcp={() => setShowMcp(true)}
         onOpenLibrary={() => setShowLibrary(true)}
-        onOpenExplore={() => setShowExplore(true)}
         onOpenPlugins={() => setShowPlugins(true)}
         onOpenAppSettings={() => setShowAppSettings(true)}
         libraryDocCount={ragDocuments.length}
+        hidden={showCourse}
       />
 
-      <main className="main-panel">
+      {showCourse && (
+        <>
+          <CoursePanel
+            providers={providers}
+            documents={ragDocuments}
+            collapsed={sidebarCollapsed}
+            onToggleCollapsed={toggleSidebar}
+            appState={courseAppState}
+            done={courseDone}
+            notes={courseNotes}
+            onMark={handleCourseMark}
+            onUnmark={handleCourseUnmark}
+            onReset={handleCourseReset}
+            onOpen={handleCourseOpen}
+            onUsePrompt={handleCourseUsePrompt}
+            onRunLab={runCourseLab}
+            onAddProvider={handleAddProvider}
+            providerMode={providerMode}
+            onProviderMode={(m) => void handleProviderMode(m)}
+            providerModeBusy={providerModeBusy}
+            onAddFilesystem={handleAddFilesystemServer}
+            onAddLibraryFiles={handleAddLibraryFiles}
+            libraryBusy={libraryBusy}
+            libraryError={libraryError}
+            hasProviders={activeProviders.some((p) => p.enabled)}
+            hasResearchTools={hasResearchTools()}
+            installingResearchTools={installingResearchTools}
+            onInstallResearchTools={handleInstallResearchTools}
+            toolServers={Object.entries(mcpToolsByServer)
+              .filter(([, tools]) => tools.length > 0)
+              .map(([id, tools]) => ({
+                id,
+                name: mcpServers.find((s) => s.id === id)?.name ?? t("mcp.defaultServerName"),
+                tools,
+              }))}
+            onRunToolProbe={runToolProbe}
+            onRunAnswer={runExploreAnswer}
+            onRunResearch={runResearchTrace}
+          />
+        </>
+      )}
+
+      {/* The chat stays mounted while the Course is open so an in-flight reply isn't lost. */}
+      <main className="main-panel" hidden={showCourse}>
         <header className="app-header">
           <h1>{activeTitle || t("chat.newChat")}</h1>
           {messages.length > 0 && (
@@ -1439,7 +1733,7 @@ export default function App() {
           {messages.length === 0 && (
             <div className="empty-state">
               <h2 className="empty-state-title">{t("chat.emptyTitle")}</h2>
-              <StudyModes onPick={handlePickStudyMode} />
+              <p className="empty-state-sub">{t("chat.emptySubtitle")}</p>
             </div>
           )}
           {messages.map((m, i) => {
@@ -1525,109 +1819,6 @@ export default function App() {
             void addFiles(Array.from(e.dataTransfer.files));
           }}
         >
-          <div className="composer-modes">
-            <button
-              type="button"
-              className={`composer-mode-toggle${researchMode ? " composer-mode-toggle-on" : ""}`}
-              onClick={() => setResearchMode((m) => (m ? null : DEFAULT_RESEARCH_MODE))}
-              disabled={isStreaming}
-              title={t("composer.deepResearchTitle")}
-              aria-pressed={!!researchMode}
-            >
-              <IconSearch size={13} />
-              {t("composer.deepResearch")}
-            </button>
-            {researchMode && (
-              <>
-                <select
-                  className="composer-mode-select"
-                  value={researchMode.id}
-                  onChange={(e) =>
-                    setResearchMode(RESEARCH_MODES.find((r) => r.id === e.currentTarget.value) ?? null)
-                  }
-                  disabled={isStreaming}
-                  title={t(researchModeKeys(researchMode.id).description)}
-                >
-                  {RESEARCH_MODES.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {t(researchModeKeys(r.id).label)}
-                    </option>
-                  ))}
-                </select>
-                {!hasResearchTools() && (
-                  <button
-                    type="button"
-                    className="composer-mode-install"
-                    onClick={() => void handleInstallResearchTools()}
-                    disabled={installingResearchTools}
-                  >
-                    {installingResearchTools ? <IconLoader size={12} /> : null}
-                    {t("composer.setUpResearchTools")}
-                  </button>
-                )}
-              </>
-            )}
-            <button
-              type="button"
-              className={`composer-mode-toggle${useLibrary ? " composer-mode-toggle-on" : ""}`}
-              onClick={() => (ragDocuments.length > 0 ? setUseLibrary((v) => !v) : setShowLibrary(true))}
-              disabled={isStreaming}
-              title={
-                ragDocuments.length > 0
-                  ? t("composer.chatWithDocsOn")
-                  : t("composer.chatWithDocsOff")
-              }
-              aria-pressed={useLibrary}
-            >
-              <IconBook size={13} />
-              {t("composer.chatWithDocs")}
-              <span className="composer-mode-term">(RAG)</span>
-              {ragDocuments.length > 0 && <span className="composer-mode-count">{ragDocuments.length}</span>}
-            </button>
-            <button
-              type="button"
-              className={`composer-mode-toggle${showChatLab || isChatSettingsActive(chatSettings) ? " composer-mode-toggle-on" : ""}`}
-              onClick={() => setShowChatLab((v) => !v)}
-              disabled={isStreaming}
-              title={t("composer.chatLabTitle")}
-              aria-pressed={showChatLab}
-            >
-              <IconSettings size={13} />
-              {t("composer.chatLab")}
-              {isChatSettingsActive(chatSettings) && <span className="composer-mode-dot" aria-hidden="true" />}
-            </button>
-            <button
-              type="button"
-              className="composer-mode-help"
-              onClick={() => setShowExplore(true)}
-              disabled={isStreaming}
-            >
-              {t("composer.howDoesThisWork")}
-            </button>
-          </div>
-          {showChatLab && (
-            <ChatLab
-              settings={chatSettings}
-              onChange={handleChatSettingsChange}
-              onClose={() => setShowChatLab(false)}
-            />
-          )}
-          {(researchMode || useLibrary) && (
-            <p className="composer-mode-caption">
-              {researchMode && (
-                <span>
-                  <strong>{t("composer.deepResearch")}</strong> —{" "}
-                  {t(researchModeKeys(researchMode.id).description)}
-                </span>
-              )}
-              {researchMode && useLibrary && <span className="composer-mode-caption-sep">·</span>}
-              {useLibrary && (
-                <span>
-                  <strong>{t("composer.yourDocuments")}</strong> — {t("composer.yourDocumentsCaption")}
-                </span>
-              )}
-            </p>
-          )}
           {attachments.length > 0 && (
             <div className="attachment-chips">
               {attachments.map((a, i) => (
@@ -1711,6 +1902,29 @@ export default function App() {
         </div>
       </main>
 
+      {!showCourse && (
+        <PlaygroundPanel
+          providers={activeProviders}
+          target={labTarget}
+          onTarget={setLabTarget}
+          loadModels={loadProviderModels}
+          expanded={labExpanded}
+          onToggle={() => setLabExpanded(!labExpanded)}
+          settings={chatSettings}
+          onChange={handleChatSettingsChange}
+          researchMode={researchMode}
+          onResearchMode={setResearchMode}
+          hasResearchTools={hasResearchTools()}
+          installingResearchTools={installingResearchTools}
+          onInstallResearchTools={() => void handleInstallResearchTools()}
+          useLibrary={useLibrary}
+          onUseLibrary={setUseLibrary}
+          documentCount={ragDocuments.length}
+          onOpenLibrary={() => setShowLibrary(true)}
+          busy={isStreaming}
+        />
+      )}
+
       {showProviders && (
         <ProvidersPanel
           providers={providers}
@@ -1721,6 +1935,9 @@ export default function App() {
           onEdit={handleEditProvider}
           onOpenOnboarding={() => setShowOnboarding(true)}
           onClose={() => setShowProviders(false)}
+          mode={providerMode}
+          onMode={(m) => void handleProviderMode(m)}
+          modeBusy={providerModeBusy}
         />
       )}
 
@@ -1740,32 +1957,6 @@ export default function App() {
         />
       )}
 
-      {showExplore && (
-        <ExplorePanel
-          providers={providers}
-          documents={ragDocuments}
-          onOpenLibrary={() => {
-            setShowExplore(false);
-            setShowLibrary(true);
-          }}
-          onClose={() => setShowExplore(false)}
-          hasProviders={providers.some((p) => p.enabled)}
-          hasResearchTools={hasResearchTools()}
-          installingResearchTools={installingResearchTools}
-          onInstallResearchTools={handleInstallResearchTools}
-          toolServers={Object.entries(mcpToolsByServer)
-            .filter(([, tools]) => tools.length > 0)
-            .map(([id, tools]) => ({
-              id,
-              name: mcpServers.find((s) => s.id === id)?.name ?? t("mcp.defaultServerName"),
-              tools,
-            }))}
-          onRunToolProbe={runToolProbe}
-          onRunAnswer={runExploreAnswer}
-          onRunResearch={runResearchTrace}
-        />
-      )}
-
       {showOnboarding && (
         <OnboardingWizard
           onAddProvider={handleAddProvider}
@@ -1774,10 +1965,10 @@ export default function App() {
             localStorage.setItem("onboardingDismissed", "1");
             setShowOnboarding(false);
           }}
-          onOpenExplore={() => {
+          onOpenCourse={() => {
             localStorage.setItem("onboardingDismissed", "1");
             setShowOnboarding(false);
-            setShowExplore(true);
+            setShowCourse(true);
           }}
         />
       )}
@@ -1831,6 +2022,7 @@ export default function App() {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }

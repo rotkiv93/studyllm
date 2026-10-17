@@ -53,8 +53,11 @@ export function McpToolExplorer({
   servers,
   hasProviders,
   onRunToolProbe,
+  onRan,
 }: {
   servers: ExplorerServer[];
+  /** Called when the model finished a turn in which it called at least one tool. */
+  onRan?: () => void;
   hasProviders: boolean;
   onRunToolProbe: (
     question: string,
@@ -90,6 +93,8 @@ export function McpToolExplorer({
     abortRef.current = controller;
 
     const append = (item: TraceItem) => setTrace((prev) => mergeTrace(prev, item));
+    let calledTool = false;
+    let failed = false;
 
     try {
       await onRunToolProbe(
@@ -97,8 +102,10 @@ export function McpToolExplorer({
         selected.id,
         (e) => {
           if (e.type === "chunk") append({ kind: "text", text: e.text });
-          else if (e.type === "tool-call")
+          else if (e.type === "tool-call") {
+            calledTool = true;
             append({ kind: "call", id: e.toolCallId, tool: e.toolName, input: e.input });
+          }
           else if (e.type === "tool-result")
             append({ kind: "call", id: e.toolCallId, tool: e.toolName, input: undefined, output: e.output, isError: e.isError });
           else if (e.type === "router" && e.event.kind === "switched")
@@ -108,10 +115,14 @@ export function McpToolExplorer({
                 reason: t(routerReasonKey(e.event.reason)),
               }),
             });
-          else if (e.type === "error") setError(e.message);
+          else if (e.type === "error") {
+            failed = true;
+            setError(e.message);
+          }
         },
         controller.signal,
       );
+      if (calledTool && !failed) onRan?.();
     } catch (err) {
       if (!controller.signal.aborted) {
         setError(err instanceof Error ? err.message : t("toolExplorer.runFailed"));

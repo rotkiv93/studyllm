@@ -29,6 +29,8 @@ interface ResearchTraceProps {
     onEvent: (e: StreamEvent) => void,
     signal: AbortSignal,
   ) => Promise<void>;
+  /** Called when a run finished and read at least one source (the Course counts it). */
+  onRan?: () => void;
 }
 
 const STAGE_KEYS: MessageKey[] = [
@@ -78,6 +80,7 @@ export function ResearchTrace({
   installingTools,
   onInstallTools,
   onRun,
+  onRan,
 }: ResearchTraceProps) {
   const t = useT();
   const [query, setQuery] = useState("");
@@ -164,6 +167,7 @@ export function ResearchTrace({
     abortRef.current = ctrl;
     try {
       await onRun(query.trim(), mode, handleEvent, ctrl.signal);
+      if (sawResult.current && !ctrl.signal.aborted) onRan?.();
     } catch (e) {
       if (!ctrl.signal.aborted) {
         setError(e instanceof Error ? e.message : t("researchTrace.failed"));

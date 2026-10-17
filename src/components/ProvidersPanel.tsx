@@ -14,6 +14,7 @@ import {
 } from "../lib/providerModels";
 import { fetchModelCatalog, lookupToolSupport, type ModelCatalog } from "../lib/modelCatalog";
 import type { ProviderRow } from "../lib/db";
+import { OmniRouteView, ProviderModeSwitch, type ProviderMode } from "./OmniRouteView";
 import { useT } from "../lib/i18n";
 
 export interface ProviderDraft {
@@ -21,6 +22,8 @@ export interface ProviderDraft {
   label: string;
   model: string;
   apiKey: string;
+  /** Only set for a local router (OmniRoute) whose address the student can change. */
+  baseURL?: string;
 }
 
 export interface ProviderEditDraft {
@@ -28,6 +31,8 @@ export interface ProviderEditDraft {
   model: string;
   /** Empty string means "keep the existing key". */
   apiKey: string;
+  /** Only set for a local router; `undefined` leaves the saved address untouched. */
+  baseURL?: string;
 }
 
 interface Props {
@@ -39,6 +44,10 @@ interface Props {
   onEdit: (id: string, draft: ProviderEditDraft) => Promise<void>;
   onOpenOnboarding: () => void;
   onClose: () => void;
+  /** Own provider keys, or OmniRoute handling them — one or the other. */
+  mode: ProviderMode;
+  onMode: (mode: ProviderMode) => void;
+  modeBusy: boolean;
 }
 
 /**
@@ -51,6 +60,7 @@ interface Props {
 function ModelField({
   type,
   apiKey,
+  baseURL,
   model,
   onChange,
   idPrefix,
@@ -58,6 +68,8 @@ function ModelField({
 }: {
   type: ProviderType;
   apiKey: string;
+  /** Router address, for the local-router type (its model list lives under it). */
+  baseURL?: string;
   model: string;
   onChange: (model: string) => void;
   idPrefix: string;
@@ -120,7 +132,7 @@ function ModelField({
     const requestId = ++modelsRequestId.current;
     const delay = providerModelsNeedApiKey(type) ? 500 : 0;
     const timer = setTimeout(async () => {
-      const models = await fetchProviderModels(type, apiKey);
+      const models = await fetchProviderModels(type, apiKey, baseURL);
       if (modelsRequestId.current !== requestId) return; // superseded by a newer request
       if (models && models.length > 0) {
         setLiveModels(models);
@@ -129,9 +141,10 @@ function ModelField({
         setLiveModels(null);
         setModelsStatus("unavailable");
       }
-    }, delay);
+      // A typed router address is debounced like a typed key, so we don't probe on every keystroke.
+    }, delay || (PROVIDER_MANIFEST[type].local ? 500 : 0));
     return () => clearTimeout(timer);
-  }, [type, apiKey]);
+  }, [type, apiKey, baseURL]);
 
   const baseOptions: ModelInfo[] =
     liveModels ?? PROVIDER_MANIFEST[type].suggestedModels.map((id) => ({ id }));
@@ -209,9 +222,11 @@ function ModelField({
               provider: PROVIDER_MANIFEST[type].label,
             })}
           {modelsStatus === "unavailable" &&
-            (providerModelsNeedApiKey(type)
-              ? t("model.unavailableWithKey")
-              : t("model.unavailable"))}
+            (PROVIDER_MANIFEST[type].local
+              ? t("model.unavailableLocal")
+              : providerModelsNeedApiKey(type)
+                ? t("model.unavailableWithKey")
+                : t("model.unavailable"))}
           {modelsStatus === "idle" && providerModelsNeedApiKey(type) && t("model.enterKey")}
         </p>
       )}
@@ -232,6 +247,10 @@ function EditProviderRow({
   const [label, setLabel] = useState(provider.label);
   const [model, setModel] = useState(provider.model);
   const [apiKey, setApiKey] = useState("");
+  const isLocal = !!PROVIDER_MANIFEST[provider.type]?.local;
+  const [baseURL, setBaseURL] = useState(
+    provider.base_url_override ?? PROVIDER_MANIFEST[provider.type].baseURL,
+  );
   const [busy, setBusy] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
 
@@ -240,7 +259,12 @@ function EditProviderRow({
     setBusy(true);
     setEditError(null);
     try {
-      await onSave({ label: label.trim(), model: model.trim(), apiKey: apiKey.trim() });
+      await onSave({
+        label: label.trim(),
+        model: model.trim(),
+        apiKey: apiKey.trim(),
+        ...(isLocal ? { baseURL: baseURL.trim() } : {}),
+      });
     } catch (err) {
       setEditError(err instanceof Error ? err.message : String(err));
       setBusy(false);
@@ -257,9 +281,16 @@ function EditProviderRow({
           {t("providers.label")}
           <input value={label} onChange={(e) => setLabel(e.currentTarget.value)} />
         </label>
+        {isLocal && (
+          <label>
+            {t("providers.routerUrl")}
+            <input value={baseURL} onChange={(e) => setBaseURL(e.currentTarget.value)} />
+          </label>
+        )}
         <ModelField
           type={provider.type}
           apiKey={apiKey}
+          baseURL={isLocal ? baseURL : undefined}
           model={model}
           onChange={setModel}
           idPrefix={`edit-${provider.id}`}
@@ -295,37 +326,49 @@ export function ProvidersPanel({
   onEdit,
   onOpenOnboarding,
   onClose,
+  mode,
+  onMode,
+  modeBusy,
 }: Props) {
   const t = useT();
   const [type, setType] = useState<ProviderType>("gemini");
   const [apiKey, setApiKey] = useState("");
-  const [model, setModel] = useState(PROVIDER_MANIFEST["gemini"].defaultModel);
   const [busy, setBusy] = useState(false);
+  const [unverified, setUnverified] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
-
-  function handleTypeChange(next: ProviderType) {
-    setType(next);
-    setModel(PROVIDER_MANIFEST[next].defaultModel);
-  }
+  // OmniRoute has its own view; this list is only the providers the student keyed in themselves.
+  const own = providers.filter((p) => p.type !== "omniroute");
+  // Only providers that aren't on the list yet can be added.
+  const addable = SELECTABLE_PROVIDER_TYPES.filter((pt) => !PROVIDER_MANIFEST[pt].local && !own.some((p) => p.type === pt));
+  const chosen: ProviderType = addable.includes(type) ? type : (addable[0] ?? type);
 
   function describeError(err: unknown): string {
     return err instanceof Error ? err.message : String(err);
   }
 
-  async function handleAdd(e: React.FormEvent) {
+  async function handleAdd(e: React.FormEvent, skipVerify = false) {
     e.preventDefault();
-    if (!apiKey.trim()) return;
+    const key = apiKey.trim();
+    if (!key) return;
     setBusy(true);
     setFormError(null);
+    let model = PROVIDER_MANIFEST[chosen].defaultModel;
     try {
-      await onAdd({
-        type,
-        label: PROVIDER_MANIFEST[type].label,
-        model: model.trim(),
-        apiKey: apiKey.trim(),
-      });
+      // Same check as the first-run wizard: ask the provider for its models with this key, and start
+      // from the best tool-capable free one. The model can be changed afterwards with "Edit".
+      if (!skipVerify && providerSupportsLiveModels(chosen) && providerModelsNeedApiKey(chosen)) {
+        const models = await fetchProviderModels(chosen, key);
+        if (!models || models.length === 0) {
+          setUnverified(true);
+          setFormError(t("onboarding.verifyFailed"));
+          return;
+        }
+        model = pickBestModel(chosen, models);
+      }
+      await onAdd({ type: chosen, label: PROVIDER_MANIFEST[chosen].label, model, apiKey: key });
       setApiKey("");
+      setUnverified(false);
     } catch (err) {
       setFormError(t("providers.addFailed", { error: describeError(err) }));
     } finally {
@@ -365,8 +408,6 @@ export function ProvidersPanel({
     setEditingId(null);
   }
 
-  const installedTypes = new Set(providers.map((p) => p.type));
-
   return (
     <div className="settings-overlay">
       <div className="settings-panel settings-panel-wide">
@@ -386,9 +427,64 @@ export function ProvidersPanel({
 
         {formError && <p className="error">{formError}</p>}
 
+        <ProviderModeSwitch mode={mode} onChange={onMode} busy={modeBusy} />
+
+        {mode === "omniroute" ? (
+          <>
+            <p className="settings-hint">{t("omni.pausedOwn")}</p>
+            <OmniRouteView />
+          </>
+        ) : (
+          <>
+        {addable.length > 0 && (
+        <form className="provider-add-compact" onSubmit={handleAdd}>
+          <h3 className="mcp-section-title">{t("providers.addProvider")}</h3>
+          <div className="omni-add">
+            <select
+              value={chosen}
+              onChange={(e) => {
+                setType(e.currentTarget.value as ProviderType);
+                setUnverified(false);
+                setFormError(null);
+              }}
+              aria-label={t("lab.provider")}
+            >
+              {addable.map((pt) => (
+                <option key={pt} value={pt}>
+                  {PROVIDER_MANIFEST[pt].label}
+                </option>
+              ))}
+            </select>
+            <input
+              type="password"
+              value={apiKey}
+              autoComplete="off"
+              placeholder={t("providers.pasteKey")}
+              onChange={(e) => {
+                setApiKey(e.currentTarget.value);
+                setUnverified(false);
+                setFormError(null);
+              }}
+            />
+            {unverified ? (
+              <button type="button" className="btn btn-secondary btn-sm" disabled={busy} onClick={(e) => void handleAdd(e, true)}>
+                {t("onboarding.addAnyway")}
+              </button>
+            ) : (
+              <button type="submit" className="btn btn-primary btn-sm" disabled={busy || !apiKey.trim()}>
+                {busy ? t("onboarding.verifyingShort") : t("providers.addProviderButton")}
+              </button>
+            )}
+          </div>
+          <a href={PROVIDER_MANIFEST[chosen].apiKeyUrl} target="_blank" rel="noreferrer" className="omni-getkey">
+            {t("providers.getKeyLink", { provider: PROVIDER_MANIFEST[chosen].label })}
+          </a>
+        </form>
+        )}
+
         <h3 className="mcp-section-title">{t("providers.yourProviders")}</h3>
         <ul className="provider-list">
-          {providers.map((p, i) =>
+          {own.map((p, i) =>
             editingId === p.id ? (
               <EditProviderRow
                 key={p.id}
@@ -398,17 +494,12 @@ export function ProvidersPanel({
               />
             ) : (
               <li key={p.id} className={p.enabled ? "" : "provider-disabled"}>
-                <div className="provider-row-main">
-                  <span className="provider-row-name">
-                    <strong>{p.label}</strong>
-                    {PROVIDER_MANIFEST[p.type]?.recommended && (
-                      <span className="provider-badge-recommended">{t("providers.recommended")}</span>
-                    )}
-                  </span>
+                <div
+                  className="provider-row-main"
+                  title={PROVIDER_MANIFEST[p.type]?.freeTierNote ? t(freeTierNoteKey(p.type)) : undefined}
+                >
+                  <strong>{p.label}</strong>
                   <span className="provider-model">{p.model}</span>
-                  {PROVIDER_MANIFEST[p.type]?.freeTierNote && (
-                    <span className="provider-free-note">{t(freeTierNoteKey(p.type))}</span>
-                  )}
                 </div>
                 <div className="provider-row-actions">
                   <button
@@ -425,7 +516,7 @@ export function ProvidersPanel({
                     type="button"
                     className="btn btn-icon btn-secondary btn-sm"
                     onClick={() => handleReorder(p.id, "down")}
-                    disabled={i === providers.length - 1}
+                    disabled={i === own.length - 1}
                     title={t("providers.moveDown")}
                     aria-label={t("providers.moveDown")}
                   >
@@ -453,60 +544,11 @@ export function ProvidersPanel({
               </li>
             ),
           )}
-          {providers.length === 0 && <li className="empty-state">{t("providers.none")}</li>}
+          {own.length === 0 && <li className="empty-state">{t("providers.none")}</li>}
         </ul>
 
-        <form className="add-provider-form" onSubmit={handleAdd}>
-          <h3 className="mcp-section-title">{t("providers.addProvider")}</h3>
-          <ul className="provider-type-grid">
-            {SELECTABLE_PROVIDER_TYPES.map((pt) => (
-              <li key={pt}>
-                <button
-                  type="button"
-                  className={`provider-type-card${type === pt ? " provider-type-card-selected" : ""}`}
-                  onClick={() => handleTypeChange(pt)}
-                  aria-pressed={type === pt}
-                >
-                  <span className="provider-type-card-name">
-                    {PROVIDER_MANIFEST[pt].label}
-                    {PROVIDER_MANIFEST[pt].recommended && (
-                      <span className="provider-badge-recommended">{t("providers.recommended")}</span>
-                    )}
-                  </span>
-                  {PROVIDER_MANIFEST[pt].freeTierNote && (
-                    <span className="provider-type-card-note">{t(freeTierNoteKey(pt))}</span>
-                  )}
-                  {installedTypes.has(pt) && (
-                    <span className="provider-type-card-configured">{t("providers.configured")}</span>
-                  )}
-                </button>
-              </li>
-            ))}
-          </ul>
-          <ModelField
-            type={type}
-            apiKey={apiKey}
-            model={model}
-            onChange={setModel}
-            idPrefix={`add-${type}`}
-            autoSelect
-          />
-          <label>
-            {t("providers.apiKey")}
-            <input
-              type="password"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.currentTarget.value)}
-              placeholder={t("providers.pasteKey")}
-            />
-          </label>
-          <a href={PROVIDER_MANIFEST[type].apiKeyUrl} target="_blank" rel="noreferrer">
-            {t("providers.getKeyLink", { provider: PROVIDER_MANIFEST[type].label })}
-          </a>
-          <button type="submit" className="btn btn-primary" disabled={busy || !apiKey.trim()}>
-            {t("providers.addProviderButton")}
-          </button>
-        </form>
+          </>
+        )}
       </div>
     </div>
   );

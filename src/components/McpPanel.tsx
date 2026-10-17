@@ -449,7 +449,10 @@ export function McpPanel({
         <div className="provider-row-main">
           <strong>
             {s.name}{" "}
-            <span className={`trust-badge trust-${s.trust_tier}`}>
+            <span
+              className={`trust-badge trust-${s.trust_tier}`}
+              title={t(`mcp.legend.${s.trust_tier}` as MessageKey)}
+            >
               {t(trustTierLabelKey(s.trust_tier as TrustTier))}
             </span>
           </strong>
@@ -490,6 +493,11 @@ export function McpPanel({
           >
             {tools ? t("mcp.toolsWithCount", { count: tools.length }) : t("mcp.tools")}
           </button>
+          <details className="mcp-more">
+            <summary className="btn btn-ghost btn-sm" aria-label={t("mcp.more")} title={t("mcp.more")}>
+              ⋯
+            </summary>
+            <div className="mcp-more-menu">
           <button
             type="button"
             className="btn btn-secondary btn-sm"
@@ -517,6 +525,8 @@ export function McpPanel({
           <button type="button" className="btn btn-danger btn-sm" onClick={() => handleRemove(s)}>
             {t("common.remove")}
           </button>
+            </div>
+          </details>
         </div>
 
         {managingToolsId === s.id && tools && tools.length > 0 && (
@@ -585,36 +595,21 @@ export function McpPanel({
 
         {tab === "installed" ? (
           <>
-            <p className="settings-hint">{t("mcp.intro")}</p>
-
-            <ul className="mcp-trust-legend">
-              <li>
-                <span className="trust-badge trust-official">{t("trust.official")}</span>
-                {t("mcp.legend.official")}
-              </li>
-              <li>
-                <span className="trust-badge trust-verified">{t("trust.verified")}</span>
-                {t("mcp.legend.verified")}
-              </li>
-              <li>
-                <span className="trust-badge trust-community">{t("trust.community")}</span>
-                {t("mcp.legend.community")}
-              </li>
-            </ul>
-
             {formError && <p className="error">{formError}</p>}
             {runtimeLog && <p className="notice">{runtimeLog}</p>}
 
-            <input
-              className="mcp-search"
-              placeholder={t("mcp.searchPlaceholder")}
-              value={search}
-              onChange={(e) => setSearch(e.currentTarget.value)}
-            />
+            {servers.length > 6 && (
+              <input
+                className="mcp-search"
+                placeholder={t("mcp.searchPlaceholder")}
+                value={search}
+                onChange={(e) => setSearch(e.currentTarget.value)}
+              />
+            )}
 
-            <h3 className="mcp-section-title">{t("mcp.section.pinned")}</h3>
             <ul className="provider-list mcp-card-list">
               {pinned.map(renderServerCard)}
+              {rest.map(renderServerCard)}
               {!hasFilesystem && !query && (
                 <li className="mcp-server-card mcp-server-card-empty">
                   <div className="provider-row-main">
@@ -626,20 +621,8 @@ export function McpPanel({
                   </button>
                 </li>
               )}
-              {pinned.length === 0 && (query || hasFilesystem) && (
-                <li className="empty-state">
-                  {query ? t("mcp.noPinnedMatch") : t("mcp.noPinned")}
-                </li>
-              )}
-            </ul>
-
-            <h3 className="mcp-section-title">{t("mcp.section.all")}</h3>
-            <ul className="provider-list mcp-card-list">
-              {rest.map(renderServerCard)}
-              {rest.length === 0 && (
-                <li className="empty-state">
-                  {query ? t("mcp.noServersMatch") : t("mcp.noOtherServers")}
-                </li>
+              {pinned.length + rest.length === 0 && hasFilesystem && (
+                <li className="empty-state">{query ? t("mcp.noServersMatch") : t("mcp.noOtherServers")}</li>
               )}
             </ul>
           </>

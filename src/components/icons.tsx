@@ -218,3 +218,21 @@ export function IconCompass(props: IconProps) {
     </Icon>
   );
 }
+
+export function IconChevronsLeft(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <polyline points="11 17 6 12 11 7" />
+      <polyline points="18 17 13 12 18 7" />
+    </Icon>
+  );
+}
+
+export function IconChevronsRight(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <polyline points="13 17 18 12 13 7" />
+      <polyline points="6 17 11 12 6 7" />
+    </Icon>
+  );
+}

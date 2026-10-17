@@ -3,9 +3,11 @@ mod credentials;
 mod db;
 mod mcp;
 mod oauth;
+mod omniroute;
 
 use crashlog::CrashLog;
 use mcp::McpHost;
+use omniroute::OmniRouteHost;
 use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -20,6 +22,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(McpHost::default())
         .manage(CrashLog::default())
+        .manage(OmniRouteHost::default())
         .setup(|app| {
             let handle = app.handle().clone();
             std::panic::set_hook(Box::new(move |info| {
@@ -44,7 +47,19 @@ pub fn run() {
             mcp::registry::mcp_registry_search,
             oauth::commands::oauth_connect,
             oauth::commands::oauth_reconnect,
+            omniroute::omniroute_status,
+            omniroute::omniroute_start,
+            omniroute::omniroute_stop,
+            omniroute::omniroute_api,
+            omniroute::omniroute_set_password,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            // Don't leave a router we started holding the port after the app closes.
+            if let tauri::RunEvent::Exit = event {
+                let host = app.state::<OmniRouteHost>().inner().clone();
+                tauri::async_runtime::block_on(host.stop_blocking());
+            }
+        });
 }

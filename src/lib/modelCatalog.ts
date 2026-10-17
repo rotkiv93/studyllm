@@ -35,6 +35,8 @@ const PROVIDER_TO_CATALOG_KEY: Record<ProviderType, string> = {
   mistral: "mistral",
   openrouter: "openrouter",
   sambanova: "sambanova",
+  // A router, not a model host — models.dev has no entry, so capability stays "unknown".
+  omniroute: "omniroute",
 };
 
 let inflight: Promise<ModelCatalog | null> | null = null;

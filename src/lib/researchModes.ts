@@ -6,7 +6,7 @@
  * loop in `providerRouter.ts` (each search/read shows up live as a `ToolCallBlock`), so there's no
  * new execution engine — only guidance and a higher `maxSteps`.
  *
- * Shape-first static data, same discipline as `studyTemplates.ts`. To add a mode, append an entry.
+ * Shape-first static data. To add a mode, append an entry.
  */
 
 import type { MessageKey } from "./i18n";
