@@ -341,6 +341,12 @@ export default function App() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // Notices are informational (saved, copied, failover…): clear them on their own.
+  useEffect(() => {
+    if (!notice) return;
+    const id = window.setTimeout(() => setNotice(null), 8000);
+    return () => window.clearTimeout(id);
+  }, [notice]);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [mcpServers, setMcpServers] = useState<McpServerRow[]>([]);

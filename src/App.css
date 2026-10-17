@@ -361,9 +361,11 @@ body {
 }
 
 /* Row actions overlay the title instead of reserving space, so the title
-   always spans the full row; they appear on hover or keyboard focus. */
-.conversation-item-delete,
-.conversation-item-rename {
+   always spans the full row; they appear on hover or keyboard focus.
+   The extra .conversation-item keeps this above `button:disabled`, which
+   would otherwise show them (opacity .5) while the sidebar is disabled. */
+.conversation-item .conversation-item-delete,
+.conversation-item .conversation-item-rename {
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
