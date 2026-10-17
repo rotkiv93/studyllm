@@ -1,3 +1,4 @@
+import { errorText } from "./lib/localizedError";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { dynamicTool, jsonSchema, type ToolSet } from "ai";
 import {
@@ -93,6 +94,8 @@ import {
   ingestDocument,
   retrieve,
   resolveEmbedder,
+  embedderErrorText,
+  LIBRARY_MAX_CHARS,
   buildRagSystemBlock,
   type RetrievedChunk,
 } from "./lib/rag";
@@ -368,6 +371,7 @@ export default function App() {
   /** The last list handed to the router, so a Course lab can answer with one provider only. */
   const configuredProvidersRef = useRef<ConfiguredProvider[]>([]);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const sendLockRef = useRef(false);
   const conversationIdRef = useRef<string | null>(null);
   const approvalResolvers = useRef<Map<string, (approved: boolean) => void>>(new Map());
 
@@ -399,9 +403,16 @@ export default function App() {
     (async () => {
       const rows = await repairStoredMcpArgs(await listMcpServers());
       setMcpServers(rows);
-      for (const server of rows.filter((s) => s.autostart)) {
+      for (const server of rows) {
         try {
-          await handleStartMcpServer(server);
+          // A webview reload (or dev hot-reload) leaves servers running in the Rust host but empties this
+          // tool state, so the chat would offer no tools while the panel says "running". Re-adopt them.
+          if (await isMcpServerRunning(server.id)) {
+            const tools = await listMcpTools(server.id);
+            setMcpToolsByServer((prev) => ({ ...prev, [server.id]: tools }));
+          } else if (server.autostart) {
+            await handleStartMcpServer(server);
+          }
         } catch {
           // Best-effort autostart; leave the server stopped and let the user retry from the panel.
         }
@@ -906,17 +917,23 @@ export default function App() {
     setLibraryError(null);
     const resolved = await resolveEmbedder(providers);
     if ("error" in resolved) {
-      setLibraryError(resolved.error);
+      setLibraryError(embedderErrorText(t, resolved));
       return;
     }
     setLibraryBusy(true);
     try {
+      const cut: string[] = [];
       for (const file of files) {
-        await ingestDocument(file, resolved.embedder);
+        const { truncated } = await ingestDocument(file, resolved.embedder);
+        if (truncated) cut.push(file.name);
       }
       await refreshRagDocuments();
+      if (cut.length > 0) {
+        setLibraryError(t("error.libraryTruncated", { names: cut.join(", "), max: LIBRARY_MAX_CHARS.toLocaleString() }));
+      }
     } catch (err) {
-      setLibraryError(err instanceof Error ? err.message : t("error.indexDocument"));
+      await refreshRagDocuments(); // earlier files in the batch were indexed before this one failed
+      setLibraryError(errorText(t, err, t("error.indexDocument")));
     } finally {
       setLibraryBusy(false);
     }
@@ -1199,10 +1216,28 @@ export default function App() {
     await refreshProviders();
   }
 
+  // `isStreaming` is state and lags a render behind, so a double Enter would otherwise start two sends.
   async function runSend(text: string) {
+    if (sendLockRef.current) return;
+    sendLockRef.current = true;
+    try {
+      await runSendUnlocked(text);
+    } finally {
+      sendLockRef.current = false;
+    }
+  }
+
+  async function runSendUnlocked(text: string) {
     if (!text.trim() || isStreaming) return;
     if (activeProviders.filter((p) => p.enabled).length === 0) {
-      setError(t("error.addProviderFirst"));
+      setError(t(activeProviders.length === 0 ? "error.addProviderFirst" : "error.enableProviderFirst"));
+      return;
+    }
+
+    // Deep Research without a running search/reader tool would still demand cited sources, so the model
+    // invents them. Refuse up front instead of producing confident, fabricated citations.
+    if (researchMode && !hasResearchTools()) {
+      setError(t("error.researchNeedsTools"));
       return;
     }
 
@@ -1285,7 +1320,7 @@ export default function App() {
     if (useLibrary && ragDocuments.length > 0) {
       const resolved = await resolveEmbedder(providers);
       if ("error" in resolved) {
-        setNotice(t("notice.librarySearchSkipped", { error: resolved.error }));
+        setNotice(t("notice.librarySearchSkipped", { error: embedderErrorText(t, resolved) }));
       } else {
         try {
           ragSources = await retrieve(userMessage.content, resolved.embedder);
@@ -1497,7 +1532,7 @@ export default function App() {
           const parsed = await parseAttachment(file);
           setAttachments((prev) => [...prev, parsed]);
         } catch (e) {
-          setError(e instanceof Error ? e.message : t("error.readFileFailed", { name: file.name }));
+          setError(errorText(t, e, t("error.readFileFailed", { name: file.name })));
         }
       }
       if (files.length > room) {

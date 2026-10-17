@@ -16,6 +16,12 @@
       "sourceType": "autoskills-registry",
       "computedHash": "82fb11a63fb1e35ee2469516ed02d54695f783115b1540c0e783197af4240a3a"
     },
+    "github-issues": {
+      "source": "github/awesome-copilot",
+      "sourceType": "github",
+      "skillPath": "skills/github-issues/SKILL.md",
+      "computedHash": "7c576643e9d3c622f18526a5554e8533410049dfc77e9bb10328081c4ea53d8c"
+    },
     "nodejs-backend-patterns": {
       "source": "wshobson/agents",
       "sourceType": "autoskills-registry",

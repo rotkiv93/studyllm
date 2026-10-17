@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { IconSearch, IconLoader } from "./icons";
 import { SimilarityRanking } from "./viz/SimilarityRanking";
 import { EmbeddingMap } from "./viz/EmbeddingMap";
-import { resolveEmbedder, retrieveExplained, type RetrievalExplanation } from "../lib/rag";
+import { embedderErrorText, resolveEmbedder, retrieveExplained, type RetrievalExplanation } from "../lib/rag";
 import type { ProviderRow, RagDocumentRow } from "../lib/db";
 import { useT, type TranslateFn } from "../lib/i18n";
 
@@ -88,7 +88,7 @@ export function RetrievalExplorer({
 
     const resolved = await resolveEmbedder(providers);
     if ("error" in resolved) {
-      setError(resolved.error);
+      setError(embedderErrorText(t, resolved));
       setRunning(false);
       return;
     }

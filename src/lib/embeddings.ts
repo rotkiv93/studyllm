@@ -20,7 +20,7 @@ import type { ProviderType } from "./providers";
  * absent here aren't offered for embeddings in the picker.
  */
 export const EMBEDDING_CAPABLE: Partial<Record<ProviderType, string>> = {
-  gemini: "text-embedding-004",
+  gemini: "gemini-embedding-001",
   mistral: "mistral-embed",
 };
 
@@ -41,6 +41,11 @@ export interface ResolvedEmbedder {
 }
 
 const CONFIG_KEY = "ragEmbeddingConfig";
+/** Embedding models the provider has switched off (the API now answers 404), mapped to their successor. */
+const RETIRED_EMBEDDING_MODELS: Record<string, string> = {
+  "text-embedding-004": "gemini-embedding-001",
+  "models/text-embedding-004": "gemini-embedding-001",
+};
 /** Batch size for embedding many chunks — keeps request bodies within provider limits. */
 const EMBED_BATCH = 64;
 
@@ -50,7 +55,7 @@ export function loadEmbeddingConfig(): EmbeddingConfig | null {
   try {
     const parsed = JSON.parse(raw) as EmbeddingConfig;
     if (parsed && typeof parsed.providerId === "string" && typeof parsed.model === "string") {
-      return parsed;
+      return { ...parsed, model: RETIRED_EMBEDDING_MODELS[parsed.model] ?? parsed.model };
     }
   } catch {
     /* fall through */

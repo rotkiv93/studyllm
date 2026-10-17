@@ -175,6 +175,13 @@ export const es = {
 
   // Errors / notices
   "error.addProviderFirst": "Añade al menos un proveedor en Ajustes primero.",
+  "error.researchNeedsTools": "La investigación profunda necesita herramientas de búsqueda en marcha. Pulsa «Configurar herramientas de investigación» en el Laboratorio o apaga el interruptor.",
+  "rag.error.noEmbedder": "Aún no has elegido un modelo de embeddings. Elige uno en Biblioteca → «Modelo de embeddings».",
+  "rag.error.embedderMissing": "El proveedor de embeddings no está o está desactivado. Elige otro en Biblioteca → «Modelo de embeddings».",
+  "rag.error.noKey": "No hay clave de API para {provider}. Vuelve a introducirla en Proveedores.",
+  "error.noReadableText": "«{name}» no tiene texto legible (puede ser una imagen escaneada).",
+  "error.libraryTruncated": "Se indexó solo el principio de: {names} (máx. {max} caracteres por documento).",
+  "error.enableProviderFirst": "Todos tus proveedores están desactivados. Activa al menos uno en Ajustes → Proveedores.",
   "error.responseFailed": "La respuesta del modelo falló: {message}",
   "error.somethingWentWrong": "Algo salió mal.",
   "error.toolsUnsupported":
@@ -198,7 +205,7 @@ export const es = {
     "Las herramientas de investigación se están iniciando — dales unos segundos la primera vez.",
   "notice.embeddingModelSaved": "Modelo de embeddings guardado.",
   "notice.librarySearchSkipped": "Búsqueda en la biblioteca omitida: {error}",
-  "notice.switchedProvider": "Se cambió a {to} ({from} {reason})",
+  "notice.switchedProvider": "Se cambió a {to} ({from}: {reason})",
   "notice.invalidKey": "La clave de {provider} parece no válida — se ha desactivado. Revisa Ajustes.",
   "notice.transcriptCopied": "Conversación copiada como Markdown.",
   "notice.savedToGoogleDocs": "Guardado en Google Docs.",

@@ -4,6 +4,7 @@ import type { OAuthConnector } from "../lib/googleConnectors";
 import { onOAuthProgress, type OAuthProgressPhase } from "../lib/oauth";
 import { IconPlug } from "./icons";
 import { useT, type MessageKey } from "../lib/i18n";
+import { useEscapeClose } from "../lib/useEscapeClose";
 
 interface Props {
   connectors: OAuthConnector[];
@@ -64,6 +65,7 @@ function GoogleSetupInstructions() {
 
 export function PluginsPanel({ connectors, servers, onConnect, onDisconnect, onClose }: Props) {
   const t = useT();
+  useEscapeClose(onClose);
   const [busyConnectorId, setBusyConnectorId] = useState<string | null>(null);
   const [phaseByConnector, setPhaseByConnector] = useState<Record<string, OAuthProgressPhase>>({});
   const [errorByConnector, setErrorByConnector] = useState<Record<string, string>>({});

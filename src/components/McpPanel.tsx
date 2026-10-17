@@ -16,6 +16,7 @@ import {
 import { McpMarketplace, type ResolvedInstall } from "./McpMarketplace";
 import { trustTierLabelKey, type TrustTier } from "../lib/mcpCatalog";
 import { useT, type MessageKey } from "../lib/i18n";
+import { useEscapeClose } from "../lib/useEscapeClose";
 
 const MAX_LOG_LINES_PER_SERVER = 300;
 
@@ -311,6 +312,7 @@ export function McpPanel({
   onClose,
 }: Props) {
   const t = useT();
+  useEscapeClose(onClose);
   const [tab, setTab] = useState<PanelTab>("installed");
   const [statuses, setStatuses] = useState<Record<string, Status>>({});
   const [statusMessages, setStatusMessages] = useState<Record<string, string>>({});

@@ -360,20 +360,40 @@ body {
   white-space: nowrap;
 }
 
+/* Row actions overlay the title instead of reserving space, so the title
+   always spans the full row; they appear on hover or keyboard focus. */
 .conversation-item-delete,
 .conversation-item-rename {
-  flex-shrink: 0;
-  margin-right: 0.2em;
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
   opacity: 0;
+  pointer-events: none;
   padding: 0.35em;
   box-shadow: none;
-  background: transparent;
+  background: var(--color-surface-hover);
   border: none;
 }
 
+.conversation-item-delete {
+  right: 0.2em;
+}
+
+.conversation-item-rename {
+  right: 2.2em;
+}
+
+.conversation-item-active .conversation-item-delete,
+.conversation-item-active .conversation-item-rename {
+  background: var(--color-accent-soft);
+}
+
 .conversation-item:hover .conversation-item-delete,
-.conversation-item:hover .conversation-item-rename {
+.conversation-item:hover .conversation-item-rename,
+.conversation-item:focus-within .conversation-item-delete,
+.conversation-item:focus-within .conversation-item-rename {
   opacity: 1;
+  pointer-events: auto;
 }
 
 .conversation-item-delete:hover {
@@ -5378,8 +5398,9 @@ li.marketplace-card:hover {
   background: var(--color-accent);
 }
 
-/* Narrow windows: the panel floats over the chat instead of squeezing it. */
-@media (max-width: 70rem) {
+/* Very narrow windows: the panel floats over the chat instead of squeezing it. Not wider than this:
+   floating hides the right-aligned message actions (edit / copy / retry) at the 1000px default window. */
+@media (max-width: 62rem) {
   .app-shell {
     position: relative;
   }

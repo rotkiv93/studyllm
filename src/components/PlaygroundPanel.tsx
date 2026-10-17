@@ -192,6 +192,9 @@ function SliderField({
   const t = useT();
   const auto = value == null;
   const clamp = (v: number) => Math.min(max, Math.max(min, v));
+  // What the student is typing, before it is a valid in-range number. Clamping every keystroke would
+  // turn "1200" into 64 → 642 → 4096 on the way; so out-of-range text waits and is clamped on blur.
+  const [draft, setDraft] = useState<string | null>(null);
   const slider = (
     <input
       className={`play-slider${auto ? " play-slider-auto" : ""}`}
@@ -222,12 +225,19 @@ function SliderField({
       min={min}
       max={max}
       step={step}
-      value={auto ? "" : value}
+      value={draft ?? (auto ? "" : value)}
       placeholder={t("lab.auto")}
       aria-label={label}
       onChange={(e) => {
         const raw = e.currentTarget.value;
-        onChange(raw === "" ? null : clamp(Number(raw)));
+        setDraft(raw);
+        if (raw === "") return onChange(null);
+        const n = Number(raw);
+        if (Number.isFinite(n) && n >= min && n <= max) onChange(n);
+      }}
+      onBlur={() => {
+        if (draft !== null && draft !== "" && Number.isFinite(Number(draft))) onChange(clamp(Number(draft)));
+        setDraft(null);
       }}
     />
   );

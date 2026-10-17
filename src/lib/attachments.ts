@@ -12,6 +12,7 @@
 
 // Same-origin worker asset URL (Vite resolves `?url` to a bundled path); just a string, safe to
 // import in the node test env since it doesn't load pdf.js itself.
+import { LocalizedError } from "./localizedError";
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
 /** Cap per file so a huge PDF can't blow the model's context; a note is appended when it trips. */
@@ -46,11 +47,11 @@ export function isSupportedAttachment(name: string): boolean {
 }
 
 /** Parse one file into text, throwing a friendly error for unsupported types. */
-export async function parseAttachment(file: File): Promise<ParsedAttachment> {
+export async function parseAttachment(file: File, maxChars = MAX_ATTACHMENT_CHARS): Promise<ParsedAttachment> {
   const ext = extensionOf(file.name);
   let text: string;
   if (PDF_EXTS.includes(ext)) {
-    text = await extractPdfText(file);
+    text = await extractPdfText(file, maxChars);
   } else if (DOCX_EXTS.includes(ext)) {
     text = await extractDocxText(file);
   } else if (TEXT_EXTS.includes(ext)) {
@@ -61,13 +62,17 @@ export async function parseAttachment(file: File): Promise<ParsedAttachment> {
     throw new Error(`Can't read ".${ext || "?"}" files yet — try a ${SUPPORTED_ATTACHMENT_HINT}.`);
   }
   text = text.replace(/\r\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
-  const truncated = text.length > MAX_ATTACHMENT_CHARS;
-  if (truncated) text = text.slice(0, MAX_ATTACHMENT_CHARS);
-  if (!text) throw new Error(`"${file.name}" had no readable text (it may be a scanned image).`);
+  const truncated = text.length > maxChars;
+  if (truncated) text = text.slice(0, maxChars);
+  if (!text) {
+    throw new LocalizedError(`"${file.name}" had no readable text (it may be a scanned image).`, "error.noReadableText", {
+      name: file.name,
+    });
+  }
   return { name: file.name, text, truncated };
 }
 
-async function extractPdfText(file: File): Promise<string> {
+async function extractPdfText(file: File, maxChars: number): Promise<string> {
   const pdfjs = await import("pdfjs-dist");
   pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
   const data = new Uint8Array(await file.arrayBuffer());
@@ -83,7 +88,7 @@ async function extractPdfText(file: File): Promise<string> {
         .join(" ");
       pages.push(pageText);
       total += pageText.length;
-      if (total > MAX_ATTACHMENT_CHARS) break; // stop early — parseAttachment will truncate anyway
+      if (total > maxChars) break; // stop early — parseAttachment will truncate anyway
     }
     return pages.join("\n\n");
   } finally {

@@ -174,6 +174,13 @@ export const en: Messages = {
 
   // Errors / notices
   "error.addProviderFirst": "Add at least one provider in Settings first.",
+  "error.researchNeedsTools": "Deep Research needs search tools running. Click \"Set up research tools\" in the Lab or switch it off.",
+  "rag.error.noEmbedder": "No embedding model chosen yet. Pick one in Library → \"Embedding model\".",
+  "rag.error.embedderMissing": "The embedding provider is missing or switched off. Pick another in Library → \"Embedding model\".",
+  "rag.error.noKey": "No API key found for {provider}. Re-enter it in Providers.",
+  "error.noReadableText": "\"{name}\" has no readable text (it may be a scanned image).",
+  "error.libraryTruncated": "Only the start of this was indexed: {names} (max {max} characters per document).",
+  "error.enableProviderFirst": "All your providers are switched off. Turn on at least one in Settings → Providers.",
   "error.responseFailed": "The model's response failed: {message}",
   "error.somethingWentWrong": "Something went wrong.",
   "error.toolsUnsupported":
@@ -197,7 +204,7 @@ export const en: Messages = {
     "Research tools are starting up — give them a few seconds on first run.",
   "notice.embeddingModelSaved": "Embedding model saved.",
   "notice.librarySearchSkipped": "Library search skipped: {error}",
-  "notice.switchedProvider": "Switched to {to} ({from} {reason})",
+  "notice.switchedProvider": "Switched to {to} ({from}: {reason})",
   "notice.invalidKey": "{provider} key looks invalid — disabled it. Check Settings.",
   "notice.transcriptCopied": "Conversation copied as Markdown.",
   "notice.savedToGoogleDocs": "Saved to Google Docs.",

@@ -147,6 +147,12 @@ which strict providers 400 on.
 `McpHost::call_tool` always forwards `arguments` as an object (`{}` minimum) — some servers' zod
 validation rejects a missing/null `arguments` for zero-parameter tools.
 
+On startup the app re-adopts MCP servers the Rust host is still running (`isMcpServerRunning` → `listMcpTools`),
+so a webview reload doesn't leave the chat with no tools while the panel says "running".
+
+Deep Research refuses to send when no research tool is running (`error.researchNeedsTools`) — otherwise the
+model is told to cite sources it has no way to fetch and invents them.
+
 Tools marked `deny` are filtered out of the `ToolSet` entirely; `ask` tools block on
 `requestToolApproval` (a promise resolved by the modal at the bottom of `App.tsx`).
 
@@ -177,6 +183,13 @@ that `retrieve()` discards. `retrieve()` itself is untouched by it.
 Embeddings require a **Gemini or Mistral** key (`EMBEDDING_CAPABLE`); config lives in `localStorage`,
 the key is resolved from the keychain at call time.
 
+Gemini's default embedding model is `gemini-embedding-001`; Google retired `text-embedding-004` (the API
+answers 404), so `loadEmbeddingConfig` maps that old id to the new one for configs saved earlier. Library
+documents are capped at `LIBRARY_MAX_CHARS` (300 000 chars) each — much higher than the 20 000 of a chat
+attachment, with a notice when a file is cut. Lib code reports student-facing failures through
+`LocalizedError` (`lib/localizedError.ts`, `errorText(t, err, fallback)`) and `resolveEmbedder` returns an
+`errorKey`, so none of those messages is hardcoded English any more.
+
 ### UI shell
 
 One top bar (`AppTopBar` in `components/AppTopBar.tsx`) spans the app: on the left the **sidebar
@@ -199,6 +212,11 @@ collapses whichever left bar is showing, using one shared `sidebarCollapsed` sta
 Empty chat screen is deliberately **minimal**: a greeting plus one compact row of `featured` starter
 prompts, with "Browse all ▾" expanding the full topic-grouped library. Explainer cards were
 removed on purpose — the Course teaches the same concepts live. Don't re-add them.
+
+Every `settings-overlay` panel (Providers, Library, Tools, Accounts, Diagnostics) closes on Escape via
+`useEscapeClose` (`lib/useEscapeClose.ts`); with two overlays stacked, the top one owns Escape. Sending is
+guarded by `sendLockRef` in `App.tsx` (state-based `isStreaming` lags a render, so a double Enter used to
+send twice). A user-pressed Stop (`AbortError`) is not written to the crash log.
 
 `McpPanel` has `Installed`/`Discover` tabs; `McpMarketplace` is inline tab content, not its own
 overlay. Its install-confirmation step is the one remaining true nested modal.
@@ -419,6 +437,16 @@ any future OAuth remote-HTTP server, even though Google no longer uses that path
   Windows cert handling skips gracefully; macOS `security import` and Tauri's updater-artifact
   signing both choke and fail the build. Git history has the full removed implementation.
 - macOS/Linux release jobs are untested on real hardware.
+
+## Last QA pass (multi-persona, real app over CDP)
+
+Fresh install → providers (Gemini only, failover with a dead/invalid-key/missing-secret provider, all
+disabled, none), Lab presets/temperature/top-p/max-length, Deep Research (all five modes + the gate),
+MCP (curated research servers, filesystem incl. path-escape attempt, Notion start, allow/ask/deny
+approval), library RAG (txt/PDF/empty/oversized, grounded and out-of-document questions), Course
+(tour, quiz/number/lab tasks), EN/ES parity, double-Enter, Stop, reload mid-stream, rename/delete.
+**Not exercised:** the wizard's success path with a real key, Google OAuth consent, OmniRoute start
+(hundreds of MB download), native folder picker, scanned-PDF OCR.
 
 ## Known limitations
 

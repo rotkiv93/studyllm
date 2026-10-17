@@ -16,6 +16,7 @@ import { fetchModelCatalog, lookupToolSupport, type ModelCatalog } from "../lib/
 import type { ProviderRow } from "../lib/db";
 import { OmniRouteView, ProviderModeSwitch, type ProviderMode } from "./OmniRouteView";
 import { useT } from "../lib/i18n";
+import { useEscapeClose } from "../lib/useEscapeClose";
 
 export interface ProviderDraft {
   type: ProviderType;
@@ -331,6 +332,7 @@ export function ProvidersPanel({
   modeBusy,
 }: Props) {
   const t = useT();
+  useEscapeClose(onClose);
   const [type, setType] = useState<ProviderType>("gemini");
   const [apiKey, setApiKey] = useState("");
   const [busy, setBusy] = useState(false);

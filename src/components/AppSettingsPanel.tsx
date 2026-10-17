@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { clearCrashLog, readCrashLog, revealCrashLog } from "../lib/crashlog";
 import { useI18n, LANGUAGE_LABELS, type Lang } from "../lib/i18n";
+import { useEscapeClose } from "../lib/useEscapeClose";
 
 interface Props {
   onClose: () => void;
 }
 
 export function AppSettingsPanel({ onClose }: Props) {
+  useEscapeClose(onClose);
   const { t, lang, setLang } = useI18n();
   const [crashLogText, setCrashLogText] = useState<string | null>(null);
   const [crashLogBusy, setCrashLogBusy] = useState(false);

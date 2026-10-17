@@ -4,6 +4,7 @@ import { EMBEDDING_CAPABLE, type EmbeddingConfig } from "../lib/embeddings";
 import { SUPPORTED_ATTACHMENT_HINT } from "../lib/attachments";
 import type { ProviderRow, RagDocumentRow } from "../lib/db";
 import { useT } from "../lib/i18n";
+import { useEscapeClose } from "../lib/useEscapeClose";
 
 /**
  * The document Library — the RAG surface. Two tabs following the established panel convention
@@ -42,6 +43,7 @@ export function LibraryPanel({
   onClose,
 }: LibraryPanelProps) {
   const t = useT();
+  useEscapeClose(onClose);
   const [tab, setTab] = useState<Tab>("documents");
   const fileInputRef = useRef<HTMLInputElement>(null);
 

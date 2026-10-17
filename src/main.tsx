@@ -19,6 +19,11 @@ function describeError(error: unknown): string {
 }
 
 window.addEventListener("unhandledrejection", (e) => {
+  // Pressing Stop aborts the stream on purpose; the SDK rejects a promise nobody awaits. Not a crash.
+  if (e.reason instanceof Error && e.reason.name === "AbortError") return;
+  // A provider that errored mid-stream (the router then fails over) leaves the SDK's unread result
+  // promises rejecting with this; the router already reports the real error.
+  if (e.reason instanceof Error && e.reason.name === "AI_NoOutputGeneratedError") return;
   appendCrashLog(`unhandled rejection: ${describeError(e.reason)}`).catch(() => {});
 });
 

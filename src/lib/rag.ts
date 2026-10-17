@@ -8,6 +8,8 @@
  * (tens of documents); it would need a real vector index for thousands. See PROJECT_STATUS.md.
  */
 
+import { LocalizedError } from "./localizedError";
+import type { MessageKey, TranslateFn } from "./i18n";
 import { parseAttachment } from "./attachments";
 import { chunkText } from "./chunking";
 import {
@@ -39,20 +41,34 @@ export const DEFAULT_RETRIEVE_K = 5;
  * Resolve the persisted embedding config against the live providers list + keychain into something
  * callable. Returns null (with a reason) when embeddings aren't set up — the caller surfaces it.
  */
+export type EmbedderFailure = { error: string; errorKey: MessageKey; errorParams?: { provider: string } };
+
+/** The student-facing (localized) text of an `EmbedderFailure`. */
+export function embedderErrorText(t: TranslateFn, f: EmbedderFailure): string {
+  return t(f.errorKey, f.errorParams);
+}
+
 export async function resolveEmbedder(
   providers: ProviderRow[],
-): Promise<{ embedder: ResolvedEmbedder } | { error: string }> {
+): Promise<{ embedder: ResolvedEmbedder } | EmbedderFailure> {
   const config = loadEmbeddingConfig();
   if (!config) {
-    return { error: "No embedding model selected. Pick one in the Library settings." };
+    return { error: "No embedding model selected. Pick one in the Library settings.", errorKey: "rag.error.noEmbedder" };
   }
   const row = providers.find((p) => p.id === config.providerId && p.enabled);
   if (!row) {
-    return { error: "The embedding provider is missing or disabled. Choose another in Library settings." };
+    return {
+      error: "The embedding provider is missing or disabled. Choose another in Library settings.",
+      errorKey: "rag.error.embedderMissing",
+    };
   }
   const apiKey = (await getCredential(row.secret_ref)) ?? "";
   if (!apiKey) {
-    return { error: `No API key found for ${row.label}. Re-enter it in Providers.` };
+    return {
+      error: `No API key found for ${row.label}. Re-enter it in Providers.`,
+      errorKey: "rag.error.noKey",
+      errorParams: { provider: row.label },
+    };
   }
   return {
     embedder: {
@@ -64,12 +80,22 @@ export async function resolveEmbedder(
   };
 }
 
-/** Parse + chunk + embed + persist a file as a library document. Returns the stored document row. */
-export async function ingestDocument(file: File, embedder: ResolvedEmbedder): Promise<RagDocumentRow> {
-  const parsed = await parseAttachment(file);
+/**
+ * Per-file cap for the library. Much higher than a chat attachment's (the whole text no longer has to
+ * fit the model's context — only the retrieved passages do), but bounded so one huge PDF can't mean
+ * thousands of embedding calls against a free tier.
+ */
+export const LIBRARY_MAX_CHARS = 300_000;
+
+/** Parse + chunk + embed + persist a file as a library document. */
+export async function ingestDocument(
+  file: File,
+  embedder: ResolvedEmbedder,
+): Promise<{ doc: RagDocumentRow; truncated: boolean }> {
+  const parsed = await parseAttachment(file, LIBRARY_MAX_CHARS);
   const chunks = chunkText(parsed.text);
   if (chunks.length === 0) {
-    throw new Error(`"${file.name}" had no usable text to index.`);
+    throw new LocalizedError(`"${file.name}" had no usable text to index.`, "error.noReadableText", { name: file.name });
   }
   const vectors = await embedTexts(
     chunks.map((c) => c.text),
@@ -95,7 +121,7 @@ export async function ingestDocument(file: File, embedder: ResolvedEmbedder): Pr
   }));
   await insertRagDocument(doc);
   await insertRagChunks(chunkRows);
-  return doc;
+  return { doc, truncated: parsed.truncated };
 }
 
 export interface RetrievedChunk {

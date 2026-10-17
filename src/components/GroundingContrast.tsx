@@ -3,6 +3,7 @@ import { IconSearch, IconLoader, IconStop } from "./icons";
 import { Markdown } from "./Markdown";
 import {
   resolveEmbedder,
+  embedderErrorText,
   retrieve,
   buildRagSystemBlock,
   type RetrievedChunk,
@@ -63,7 +64,7 @@ export function GroundingContrast({
 
     const resolved = await resolveEmbedder(providers);
     if ("error" in resolved) {
-      setError(resolved.error);
+      setError(embedderErrorText(t, resolved));
       return;
     }
 
