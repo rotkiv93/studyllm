@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
+  providerIcon,
   ONBOARDING_PROVIDER_TYPES,
   PROVIDER_MANIFEST,
   freeTierNoteKey,
@@ -121,7 +122,7 @@ export function OnboardingWizard({ onAddProvider, onAddFilesystem, onClose, onOp
                   onClick={() => setType(pt)}
                 >
                   <span className="onboarding-provider-name">
-                    {PROVIDER_MANIFEST[pt].label}
+                    {providerIcon(pt)} {PROVIDER_MANIFEST[pt].label}
                     {PROVIDER_MANIFEST[pt].recommended && (
                       <span className="provider-badge-recommended">{t("onboarding.recommended")}</span>
                     )}

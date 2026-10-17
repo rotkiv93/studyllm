@@ -1,5 +1,6 @@
 import { useState } from "react";
 import {
+  providerIcon,
   ONBOARDING_PROVIDER_TYPES,
   PROVIDER_MANIFEST,
   freeTierNoteKey,
@@ -114,7 +115,7 @@ export function ProviderSetup({
                 }}
               >
                 <span className="onboarding-provider-name">
-                  {PROVIDER_MANIFEST[pt].label}
+                  {providerIcon(pt)} {PROVIDER_MANIFEST[pt].label}
                   {PROVIDER_MANIFEST[pt].recommended && (
                     <span className="provider-badge-recommended">{t("onboarding.recommended")}</span>
                   )}

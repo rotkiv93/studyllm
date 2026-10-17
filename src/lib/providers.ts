@@ -12,6 +12,24 @@ export type ProviderType =
   | "sambanova"
   | "omniroute";
 
+/** Emoji that makes each provider easy to tell apart in lists and pickers. */
+const PROVIDER_ICONS: Record<ProviderType, string> = {
+  gemini: "✨",
+  mistral: "🌬️",
+  groq: "⚡",
+  nvidia: "🟩",
+  openrouter: "🔀",
+  cohere: "🔗",
+  cerebras: "🧠",
+  "github-models": "🐙",
+  sambanova: "🚀",
+  omniroute: "🧭",
+};
+
+export function providerIcon(type: string): string {
+  return PROVIDER_ICONS[type as ProviderType] ?? "🤖";
+}
+
 export interface ProviderManifestEntry {
   type: ProviderType;
   label: string;

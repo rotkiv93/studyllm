@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  providerIcon,
   PROVIDER_MANIFEST,
   SELECTABLE_PROVIDER_TYPES,
   freeTierNoteKey,
@@ -453,7 +454,7 @@ export function ProvidersPanel({
             >
               {addable.map((pt) => (
                 <option key={pt} value={pt}>
-                  {PROVIDER_MANIFEST[pt].label}
+                  {providerIcon(pt)} {PROVIDER_MANIFEST[pt].label}
                 </option>
               ))}
             </select>
@@ -500,7 +501,10 @@ export function ProvidersPanel({
                   className="provider-row-main"
                   title={PROVIDER_MANIFEST[p.type]?.freeTierNote ? t(freeTierNoteKey(p.type)) : undefined}
                 >
-                  <strong>{p.label}</strong>
+                  <strong>
+                    <span className="item-icon" aria-hidden="true">{providerIcon(p.type)}</span>
+                    {p.label}
+                  </strong>
                   <span className="provider-model">{p.model}</span>
                 </div>
                 <div className="provider-row-actions">

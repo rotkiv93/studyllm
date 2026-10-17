@@ -1,3 +1,4 @@
+import { mcpServerIcon } from "../lib/curatedMcp";
 import { useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { McpServerRow } from "../lib/db";
@@ -450,6 +451,7 @@ export function McpPanel({
       <li key={s.id} className="mcp-server-card">
         <div className="provider-row-main">
           <strong>
+            <span className="item-icon" aria-hidden="true">{mcpServerIcon(s.name)}</span>
             {s.name}{" "}
             <span
               className={`trust-badge trust-${s.trust_tier}`}
