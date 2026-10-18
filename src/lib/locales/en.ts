@@ -371,7 +371,7 @@ export const en: Messages = {
   "ollama.checking": "Looking for Ollama on this computer…",
   "ollama.running": "Ollama is running with {count} installed model(s). No key needed.",
   "ollama.runningEmpty": "Ollama is running but has no models yet. In a terminal type «ollama pull llama3.2».",
-  "ollama.notRunning": "Ollama is not running (or not installed). It runs models on your computer, no key needed.",
+  "ollama.notRunning": "Ollama is not running (or not installed). It runs models on your computer, no key needed. If it is open but not found, set the OLLAMA_ORIGINS variable to «*» (needed by some Windows setups) and restart it.",
   "ollama.install": "Install Ollama",
   "ollama.recheck": "Check again",
   "model.enterKey": "Enter an API key to load this provider's live model list.",

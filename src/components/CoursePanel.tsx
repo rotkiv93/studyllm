@@ -150,7 +150,12 @@ export function CoursePanel(props: CoursePanelProps) {
   const t = useT();
   const [current, setCurrent] = useState(loadInitialModule);
   const [checking, setChecking] = useState(false);
-  const [queried, setQueried] = useState({ assistantMessageCount: 0, toolCallCount: 0, omnirouteReachable: false, ollamaReachable: false });
+  const [queried, setQueried] = useState({
+    assistantMessageCount: 0,
+    toolCallCount: 0,
+    omnirouteReachable: false,
+    ollamaReachable: false,
+  });
   const [confirmReset, setConfirmReset] = useState(false);
   const [copied, setCopied] = useState(false);
   // Task cards the student folded away (remembered across sessions).

@@ -252,7 +252,6 @@ function LocalStatus({ type }: { type: ProviderType }) {
 
   useEffect(() => {
     let active = true;
-    setState({ status: "checking" });
     void fetchProviderModels(type, "", PROVIDER_MANIFEST[type].baseURL).then((models) => {
       if (!active) return;
       setState(models === null ? { status: "down" } : { status: "up", count: models.length });
@@ -275,7 +274,10 @@ function LocalStatus({ type }: { type: ProviderType }) {
           </a>
         </>
       )}{" "}
-      <button type="button" className="btn btn-ghost btn-sm" onClick={() => setNonce((n) => n + 1)}>
+      <button type="button" className="btn btn-ghost btn-sm" onClick={() => {
+          setState({ status: "checking" });
+          setNonce((n) => n + 1);
+        }}>
         {t("ollama.recheck")}
       </button>
     </p>
@@ -542,7 +544,7 @@ export function ProvidersPanel({
             )}
           </div>
           {keyless ? (
-            <LocalStatus type={chosen} />
+            <LocalStatus key={chosen} type={chosen} />
           ) : (
             <a href={PROVIDER_MANIFEST[chosen].apiKeyUrl} target="_blank" rel="noreferrer" className="omni-getkey">
               {t("providers.getKeyLink", { provider: PROVIDER_MANIFEST[chosen].label })}

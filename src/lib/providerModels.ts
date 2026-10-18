@@ -156,7 +156,14 @@ const MODELS_SOURCE: Partial<Record<ProviderType, ModelsSource>> = {
  * Asks a running Ollama what a model can do (`/api/show` → `capabilities`, e.g. ["completion",
  * "tools"]). Local and exact, so it beats the catalog; undefined when the answer isn't there.
  */
+const OLLAMA_CAPS_CACHE = new Map<string, boolean>();
+/** Models beyond this many get no badge instead of one more request each. */
+const OLLAMA_SHOW_LIMIT = 50;
+
 async function ollamaSupportsTools(root: string, model: string): Promise<boolean | undefined> {
+  const cacheKey = `${root}|${model}`;
+  const cached = OLLAMA_CAPS_CACHE.get(cacheKey);
+  if (cached !== undefined) return cached;
   try {
     const res = await fetch(joinUrl(root, "api/show"), {
       method: "POST",
@@ -165,7 +172,10 @@ async function ollamaSupportsTools(root: string, model: string): Promise<boolean
     });
     if (!res.ok) return undefined;
     const caps = ((await res.json()) as { capabilities?: unknown }).capabilities;
-    return Array.isArray(caps) ? caps.includes("tools") : undefined;
+    if (!Array.isArray(caps)) return undefined;
+    const tools = caps.includes("tools");
+    OLLAMA_CAPS_CACHE.set(cacheKey, tools);
+    return tools;
   } catch {
     return undefined;
   }
@@ -214,8 +224,9 @@ export async function fetchProviderModels(
 
   try {
     const headers: Record<string, string> = {};
-    if (apiKey.trim()) headers.Authorization = `Bearer ${apiKey.trim()}`;
-    const root = baseURL?.trim() ? baseURL.trim().replace(source.stripSuffix ?? /$^/, "") : "";
+    // A keyless local provider (Ollama) never gets one, even if the placeholder key is passed in.
+    if (apiKey.trim() && !PROVIDER_MANIFEST[type].keyless) headers.Authorization = `Bearer ${apiKey.trim()}`;
+    const root = baseURL?.trim() ? (source.stripSuffix ? baseURL.trim().replace(source.stripSuffix, "") : baseURL.trim()) : "";
     const url = source.usesBaseURL && root ? joinUrl(root, source.path ?? "models") : source.url;
     const res = await fetch(url, { headers });
     if (!res.ok) return null;
@@ -232,7 +243,10 @@ export async function fetchProviderModels(
     if (type === "ollama") {
       const ollamaRoot = root || "http://localhost:11434";
       const withTools = await Promise.all(
-        filtered.map(async (m) => ({ ...m, supportsTools: await ollamaSupportsTools(ollamaRoot, m.id) })),
+        filtered.map(async (m, i) => ({
+          ...m,
+          supportsTools: i < OLLAMA_SHOW_LIMIT ? await ollamaSupportsTools(ollamaRoot, m.id) : undefined,
+        })),
       );
       return withTools.sort((a, b) => a.id.localeCompare(b.id));
     }
@@ -276,7 +290,7 @@ export function pickBestModel(type: ProviderType, models: ModelInfo[] | null): s
   if (firstToolCapable) return firstToolCapable.id;
 
   // Whatever the student has installed beats a model they would still have to download.
-  if (type === "ollama") return models[0].id;
+  if (type === "ollama") return (models.find((m) => m.supportsTools !== false) ?? models[0]).id;
 
   return fallback;
 }
