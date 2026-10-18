@@ -27,7 +27,9 @@ pub fn run() {
         .setup(|app| {
             let handle = app.handle().clone();
             std::panic::set_hook(Box::new(move |info| {
-                handle.state::<CrashLog>().append(&handle, format!("PANIC: {info}"));
+                handle
+                    .state::<CrashLog>()
+                    .append(&handle, format!("PANIC: {info}"));
             }));
             Ok(())
         })

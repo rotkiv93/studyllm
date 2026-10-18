@@ -69,7 +69,9 @@ pub async fn oauth_connect(
     targets: Vec<OAuthTarget>,
 ) -> Result<Vec<OAuthConnectResult>, String> {
     if !config::is_configured() {
-        return Err("Google sign-in isn't set up yet \u{2014} contact the app maintainer.".to_string());
+        return Err(
+            "Google sign-in isn't set up yet \u{2014} contact the app maintainer.".to_string(),
+        );
     }
     if targets.is_empty() {
         return Err("No connection targets were provided.".to_string());
@@ -191,7 +193,9 @@ pub async fn oauth_reconnect(
 
     let kind = GoogleKind::parse(&provider)?;
     let native_provider = NativeProvider::new(kind, tokens.access_token.clone());
-    let tools = host.start_native(server_id.clone(), native_provider).await?;
+    let tools = host
+        .start_native(server_id.clone(), native_provider)
+        .await?;
 
     let expires_at = now_millis() + tokens.expires_in * 1000;
     host.spawn_oauth_refresh(
