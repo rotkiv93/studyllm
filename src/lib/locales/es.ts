@@ -134,6 +134,7 @@ export const es = {
   "provider.freeTier.github-models": "cuota diaria baja",
   "provider.freeTier.sambanova": "solo créditos de prueba",
   "provider.freeTier.omniroute": "se ejecuta en tu ordenador · junta tus propias claves gratuitas",
+  "provider.freeTier.ollama": "se ejecuta en tu ordenador · sin clave, sin límites, funciona sin conexión",
 
   // ── Chat / main panel ──────────────────────────────────────────────
   "chat.newChat": "Nuevo chat",
@@ -375,6 +376,15 @@ export const es = {
     "No se pudo acceder a la lista de modelos — se muestran sugerencias. Puedes escribir cualquier id de modelo.",
   "model.unavailableLocal":
     "No se pudo contactar con el router. ¿Está OmniRoute arrancado y la dirección es correcta? Puedes escribir «auto» o cualquier id de modelo.",
+  "model.unavailableOllama":
+    "No se pudo contactar con Ollama. ¿Está abierto y funcionando? Aun así puedes escribir el nombre de un modelo que tengas instalado.",
+  "ollama.checking": "Buscando Ollama en este ordenador…",
+  "ollama.running": "Ollama está funcionando con {count} modelo(s) instalado(s). No necesita clave.",
+  "ollama.runningEmpty": "Ollama está funcionando pero aún no tiene modelos. En una terminal escribe «ollama pull llama3.2».",
+  "ollama.notRunning": "Ollama no está funcionando (o no está instalado). Ejecuta modelos en tu ordenador, sin clave.",
+  "ollama.originsHint": "¿Está abierto y sigue sin encontrarse? En Windows, Ollama puede necesitar permitir esta app: define la variable OLLAMA_ORIGINS como tauri://localhost,http://tauri.localhost y reinicia Ollama.",
+  "ollama.install": "Instalar Ollama",
+  "ollama.recheck": "Comprobar de nuevo",
   "model.enterKey": "Introduce una clave de API para cargar la lista de modelos de este proveedor.",
 
   // ── Chat lab ───────────────────────────────────────────────────────

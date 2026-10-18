@@ -10,7 +10,8 @@ export type ProviderType =
   | "cerebras"
   | "github-models"
   | "sambanova"
-  | "omniroute";
+  | "omniroute"
+  | "ollama";
 
 /** Emoji that makes each provider easy to tell apart in lists and pickers. */
 const PROVIDER_ICONS: Record<ProviderType, string> = {
@@ -24,6 +25,7 @@ const PROVIDER_ICONS: Record<ProviderType, string> = {
   "github-models": "🐙",
   sambanova: "🚀",
   omniroute: "🧭",
+  ollama: "🦙",
 };
 
 export function providerIcon(type: string): string {
@@ -54,6 +56,8 @@ export interface ProviderManifestEntry {
    * Its URL is editable, its key is optional, and it's left out of the first-run wizard.
    */
   local?: boolean;
+  /** Needs no API key at all (Ollama): the add form shows no key field and stores the placeholder. */
+  keyless?: boolean;
 }
 
 /**
@@ -176,6 +180,20 @@ export const PROVIDER_MANIFEST: Record<ProviderType, ProviderManifestEntry> = {
     freeTierNote: "runs on your computer · pools your own free keys",
     local: true,
   },
+  ollama: {
+    type: "ollama",
+    label: "Ollama (local models)",
+    // Ollama's OpenAI-compatible surface; the model list comes from its own `/api/tags`.
+    baseURL: "http://localhost:11434/v1",
+    docsUrl: "https://ollama.com/library",
+    apiKeyUrl: "https://ollama.com/download",
+    defaultModel: "llama3.2",
+    suggestedModels: ["llama3.2", "qwen2.5", "llama3.1"],
+    recommended: false,
+    freeTierNote: "runs on your computer · no key, no limits, works offline",
+    local: true,
+    keyless: true,
+  },
 };
 
 export const PROVIDER_TYPES = Object.keys(PROVIDER_MANIFEST) as ProviderType[];
@@ -201,5 +219,5 @@ export const ONBOARDING_PROVIDER_TYPES = SELECTABLE_PROVIDER_TYPES.filter(
   (t) => !PROVIDER_MANIFEST[t].local,
 );
 
-/** Key stored for a local router that doesn't need one (the keychain entry can't be empty). */
+/** Key stored for a local provider that doesn't need one (the keychain entry can't be empty). */
 export const LOCAL_ROUTER_PLACEHOLDER_KEY = "local";

@@ -580,6 +580,7 @@ export default function App() {
   const courseAppState: CourseAppState = {
     enabledProviderCount: providers.filter((p) => p.enabled && p.type !== "omniroute").length,
     hasOmniroute: providers.some((p) => p.type === "omniroute"),
+    hasOllama: providers.some((p) => p.type === "ollama"),
     runningServerNames: mcpServers.filter((s) => s.id in mcpToolsByServer).map((s) => s.name.toLowerCase()),
     // Gmail & co. default their destructive tools to "ask", so only hand-set permissions count here.
     hasAskPermission: mcpServers.some(

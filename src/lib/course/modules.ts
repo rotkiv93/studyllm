@@ -32,6 +32,7 @@ export type CheckId =
   | "twoProviders"
   | "messageSent"
   | "omnirouteConnected"
+  | "ollamaConnected"
   | "documentAdded"
   | "filesystemRunning"
   | "toolUsed"
@@ -156,7 +157,7 @@ export const COURSE_MODULES: CourseModule[] = [
   {
     n: 8,
     tasks: [
-      { id: "m8.ollama", kind: "manual", optional: true, open: "providers" },
+      { id: "m8.ollama", kind: "check", check: "ollamaConnected", optional: true, open: "providers" },
       quiz(8, 0),
     ],
   },
