@@ -36,6 +36,21 @@ export const en: Messages = {
   "language.label": "App language",
   "language.hint": "Choose the interface language. Your preference is remembered next time you open the app.",
 
+  // ── Updates (AppSettingsPanel) ─────────────────────────────────────
+  "updates.title": "App updates",
+  "updates.hint": "StudyLLM checks GitHub for new versions. Updates are signature-verified before they install, and the app restarts when it's done.",
+  "updates.currentVersion": "Installed version: {version}",
+  "updates.check": "Check for updates",
+  "updates.checking": "Checking…",
+  "updates.upToDate": "You're on the latest version.",
+  "updates.available": "Version {version} is available.",
+  "updates.install": "Update and restart",
+  "updates.installing": "Downloading… {percent}%",
+  "updates.installingUnknown": "Downloading…",
+  "updates.error": "Couldn't check for updates: {error}",
+  "updates.devBuild": "Updates aren't available in a development build.",
+  "notice.updateAvailable": "A new version ({version}) is available — open Settings to update.",
+
   // ── Diagnostics (AppSettingsPanel) ─────────────────────────────────
   "diagnostics.title": "Diagnostics",
   "diagnostics.crashLog": "Crash log",

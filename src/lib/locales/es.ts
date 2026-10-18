@@ -37,6 +37,21 @@ export const es = {
   "language.label": "Idioma de la aplicación",
   "language.hint": "Elige el idioma de la interfaz. Tu preferencia se recuerda la próxima vez que abras la app.",
 
+  // ── Updates (AppSettingsPanel) ─────────────────────────────────────
+  "updates.title": "Actualizaciones de la app",
+  "updates.hint": "StudyLLM busca versiones nuevas en GitHub. Las actualizaciones se verifican con firma antes de instalarse y la app se reinicia al terminar.",
+  "updates.currentVersion": "Versión instalada: {version}",
+  "updates.check": "Buscar actualizaciones",
+  "updates.checking": "Buscando…",
+  "updates.upToDate": "Tienes la versión más reciente.",
+  "updates.available": "Hay una versión nueva disponible: {version}.",
+  "updates.install": "Actualizar y reiniciar",
+  "updates.installing": "Descargando… {percent}%",
+  "updates.installingUnknown": "Descargando…",
+  "updates.error": "No se pudo buscar actualizaciones: {error}",
+  "updates.devBuild": "Las actualizaciones no están disponibles en una compilación de desarrollo.",
+  "notice.updateAvailable": "Hay una versión nueva ({version}); abre Ajustes para actualizar.",
+
   // ── Diagnostics (AppSettingsPanel) ─────────────────────────────────
   "diagnostics.title": "Diagnóstico",
   "diagnostics.crashLog": "Registro de errores",
