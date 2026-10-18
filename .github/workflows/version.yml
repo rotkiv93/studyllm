@@ -1,0 +1,32 @@
+name: Version
+
+# On every push to main: if the version in the repo has no tag yet, tag it and start the Release
+# workflow. The version itself is bumped by the PR that changes the app (checked in pr-checks.yml),
+# see .github/version.sh. Tag pushes made with GITHUB_TOKEN don't trigger workflows, hence the
+# explicit dispatch.
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: version
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  release:
+    name: tag and release a new version
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: sh .github/version.sh release

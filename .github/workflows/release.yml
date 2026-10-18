@@ -1,34 +1,14 @@
 name: Release
 
-# Builds the installers + updater artifacts (signed `latest.json`) and attaches them to the draft
-# release that release-please created. Called from release-please.yml when a release PR is merged.
-# Not triggered by tag pushes on purpose: publishing the draft creates the tag, which would build twice.
-# To rebuild a release by hand: Actions -> Release -> Run workflow (tag = e.g. v0.7.0).
+# Builds the installers + updater artifacts (signed `latest.json`) for a tag and publishes the
+# GitHub Release once every platform has finished. Started by version.yml when a merge to main
+# carries a version that has no tag yet. To rebuild by hand: Actions -> Release -> Run workflow
+# (tag = e.g. v0.12.0; the tag must exist).
 on:
-  workflow_call:
-    inputs:
-      tag:
-        description: Release tag, e.g. v0.7.0
-        required: true
-        type: string
-      sha:
-        description: Commit to build (the release PR's merge commit)
-        required: true
-        type: string
-      notes:
-        description: Release notes body
-        required: false
-        type: string
-        default: ''
-    secrets:
-      TAURI_SIGNING_PRIVATE_KEY:
-        required: true
-      TAURI_SIGNING_PRIVATE_KEY_PASSWORD:
-        required: false
   workflow_dispatch:
     inputs:
       tag:
-        description: Release tag, e.g. v0.7.0
+        description: Release tag, e.g. v0.12.0
         required: true
         type: string
 
@@ -36,7 +16,34 @@ permissions:
   contents: write
 
 jobs:
-  publish-tauri:
+  notes:
+    runs-on: ubuntu-latest
+    outputs:
+      body: ${{ steps.notes.outputs.body }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag }}
+
+      # The release body is this version's section of CHANGELOG.md (written in the PR that bumped it).
+      - name: Extract changelog section
+        id: notes
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          body=$(sh .github/version.sh notes "${TAG#v}")
+          if [ -z "$body" ]; then
+            echo "::error::No '## ${TAG#v}' section in CHANGELOG.md"
+            exit 1
+          fi
+          {
+            echo "body<<CHANGELOG_EOF"
+            echo "$body"
+            echo "CHANGELOG_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: notes
     strategy:
       fail-fast: false
       matrix:
@@ -54,7 +61,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.sha || github.sha }}
+          ref: ${{ inputs.tag }}
 
       # An unset secret is forwarded as an empty string, which makes the Tauri bundler fail late
       # with an obscure error — fail early and say why.
@@ -96,7 +103,9 @@ jobs:
       # Installers are not OS-code-signed or notarized (Windows SmartScreen / macOS Gatekeeper warn on
       # first run), but updates ARE verified: the updater artifacts are signed with the Tauri
       # minisign key and the app only installs updates matching the public key in tauri.conf.json.
-      - uses: tauri-apps/tauri-action@v1
+      # The release stays a draft until the `publish` job, so installed apps never see a half-uploaded
+      # latest.json.
+      - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -105,13 +114,25 @@ jobs:
           tagName: ${{ inputs.tag }}
           releaseName: 'StudyLLM ${{ inputs.tag }}'
           releaseBody: |
-            ${{ inputs.notes }}
+            ${{ needs.notes.outputs.body }}
 
-            See the assets below to download and install this version for your OS. Installers are
-            unsigned — Windows SmartScreen and macOS Gatekeeper will warn before you can run
-            them. See the README for how to proceed anyway. Installed copies of the app update
-            themselves (signature-verified) once this release is published.
+            ---
+            Installers are unsigned — Windows SmartScreen and macOS Gatekeeper will warn before you
+            can run them (see the README for how to proceed). Installed copies of the app update
+            themselves, signature-verified.
           releaseDraft: true
           prerelease: false
           includeUpdaterJson: true
           args: ${{ matrix.args }}
+
+  # Only after every platform uploaded its installer and updater entry: make the release public,
+  # which is what the in-app updater (releases/latest/download/latest.json) sees.
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest

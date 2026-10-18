@@ -141,21 +141,22 @@ automatically on every push to `main` that touches `docs/`.
 
 ## Releasing (maintainers)
 
-Releases are driven by Conventional Commits (see below) and need no manual tagging:
+Merging a PR is the release; there is no release PR and no manual tagging or publishing:
 
-1. Merge feature/fix PRs into `main` as usual.
-2. [`release-please.yml`](.github/workflows/release-please.yml) keeps a **`chore(release): vX.Y.Z`**
-   PR open that bumps the version in `package.json`, `package-lock.json`, `tauri.conf.json`,
-   `Cargo.toml`/`Cargo.lock` and writes `CHANGELOG.md` (`feat` → minor, `fix` → patch, `feat!` → major
-   once past 1.0).
-3. Merging that PR creates a **draft** GitHub Release and
-   [`release.yml`](.github/workflows/release.yml) builds installers for Windows, macOS (Intel +
-   Apple Silicon) and Linux via [`tauri-action`](https://github.com/tauri-apps/tauri-action) into it,
-   together with the signed `latest.json` the in-app updater reads.
-4. Review the draft (Releases tab) and click **Publish release**. Publishing is what ships the update:
-   installed copies find it the next time they check.
+1. The PR that changes the app (`src/`, `src-tauri/`, `package*.json`) bumps the version with
+   `sh .github/version.sh set X.Y.Z` (keeps `package.json`/lock, `tauri.conf.json`, `Cargo.toml`/`Cargo.lock`
+   in lockstep) and adds a `## X.Y.Z` section to [`CHANGELOG.md`](CHANGELOG.md) describing what changed for
+   users. The `PR checks` workflow fails if either is missing or the version isn't above the last `vX.Y.Z`
+   tag. CI-/docs-only PRs need neither. Dependabot PRs are exempt and ship with the next bump.
+2. On merge to `main`, [`version.yml`](.github/workflows/version.yml) sees a version with no tag, tags
+   `vX.Y.Z` and starts [`release.yml`](.github/workflows/release.yml).
+3. `release.yml` builds installers for Windows, macOS (Intel + Apple Silicon) and Linux via
+   [`tauri-action`](https://github.com/tauri-apps/tauri-action), with the signed `latest.json` the in-app
+   updater reads, using the CHANGELOG section as the release notes. Once every platform has uploaded, the
+   release is published automatically and installed apps pick it up on their next check.
 
-To rebuild a release by hand: Actions → Release → Run workflow (tag, e.g. `v0.7.0`).
+To rebuild a release by hand: Actions → Release → Run workflow (tag, e.g. `v0.12.0`, must exist).
+(Modelled on [cornercase-terminal](https://github.com/usecornercase/cornercase-terminal)'s `version.sh`.)
 
 ### One-time setup
 
@@ -166,10 +167,6 @@ To rebuild a release by hand: Actions → Release → Run workflow (tag, e.g. `v
   `npx tauri signer generate -w ~/.tauri/studyllm.key` and replace `plugins.updater.pubkey` in
   `tauri.conf.json`. **Losing the private key means installed apps can never update again** — keep a
   backup outside the repo.
-- Settings → Actions → General → enable **"Allow GitHub Actions to create and approve pull requests"**
-  so release-please can open the release PR.
-- PRs opened by `GITHUB_TOKEN` (the release PR) don't trigger other workflows; close and reopen the
-  release PR once, or push to it, if you need the CI checks to run on it.
 
 ### What users see
 
@@ -185,30 +182,11 @@ After the first install the app updates itself: it checks GitHub on launch (noti
 is available"), and Settings → App updates → "Check for updates" → "Update and restart" downloads,
 verifies the signature, installs and relaunches. Development builds skip the check.
 
-### Commit messages → changelog
+### Commit messages
 
-The release PR's changelog (and the GitHub Release body) is generated from commit messages since the
-previous release by [release-please](https://github.com/googleapis/release-please), grouped by
-[Conventional Commits](https://www.conventionalcommits.org/) prefix (configured in
-`release-please-config.json`):
-
-| Prefix | Section |
-|---|---|
-| `feat:` | Features |
-| `fix:` | Bug Fixes |
-| `perf:` | Performance |
-| `refactor:` | Refactor |
-| `docs:` | Documentation |
-| `style:` | Styling |
-| `test:` | Testing |
-| `build:` | Build |
-| `ci:` | CI/CD |
-| `revert:` | Reverts |
-| `chore:` | (hidden) |
-
-A message like `feat(mcp): add uvx support` shows up under "Features" as "add uvx support". The
-`PR checks` workflow enforces the format on pull requests: the PR title and every non-merge commit
-subject must match `type(scope)!: subject`, otherwise the check fails.
+Commit subjects and PR titles must be [Conventional Commits](https://www.conventionalcommits.org/)
+(`feat(mcp): add uvx support`, `fix:`, `docs:`, `ci:`, …); the `PR checks` workflow fails otherwise. They keep
+history readable; the user-facing notes are the hand-written `CHANGELOG.md` section.
 
 <div align="center">
 

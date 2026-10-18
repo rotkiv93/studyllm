@@ -6,6 +6,7 @@ Closes #
 
 ## Checklist
 
+- [ ] If the app changed: version bumped (`sh .github/version.sh set X.Y.Z`) and `## X.Y.Z` added to `CHANGELOG.md`
 - [ ] PR title is a Conventional Commit (`feat:`, `fix:`, `docs:`, … optionally `(scope)`)
 - [ ] `npm run lint && npm test && npm run build` pass
 - [ ] If Rust changed: `cargo fmt --all`, `cargo clippy --all-targets -- -D warnings`, `cargo test` (in `src-tauri/`)
