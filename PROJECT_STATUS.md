@@ -508,8 +508,13 @@ any future OAuth remote-HTTP server, even though Google no longer uses that path
   `src-tauri/src/` changed without `PROJECT_STATUS.md`.
 - `.github/workflows/security.yml` (PR, push to `main`, weekly): `npm audit --omit=dev
   --audit-level=high`, `cargo audit`, dependency-review on PRs, CodeQL (JS/TS, Rust, Actions).
-  Known-accepted RustSec advisories (e.g. Tauri's unmaintained GTK3 crates) go in
-  `src-tauri/.cargo/audit.toml`, each with a comment.
+  Known-accepted RustSec advisories go in `src-tauri/.cargo/audit.toml`, each with a reason: currently
+  `rmcp` RUSTSEC-2026-0189 (server-transport DNS rebinding; we only use the client; needs a 0.9→1.x
+  upgrade) and lockfile-only `rsa`/`rkyv` (sqlx's unused DB drivers). `zip` was bumped 2→9 (critical
+  `extract()` symlink/SUID advisories; used to unpack downloaded runtimes) and h2/quinn-proto/rustls
+  were patched. Unmaintained-crate warnings (GTK3/zbus via Tauri) don't fail the job.
+- `dependency-review` needs the repo's **Dependency graph** enabled (Settings → Security) — until it is,
+  that job fails with "not supported on this repository".
 - `.github/workflows/labeler.yml` + `.github/labeler.yml`: auto-labels PRs by path
   (`frontend`/`rust`/`ci`/`docs`/`deps`). `.github/dependabot.yml`: weekly grouped npm/cargo/Actions
   updates with `build`/`ci` Conventional Commit prefixes. `.github/pull_request_template.md` holds the
