@@ -3,10 +3,12 @@ import {
   providerIcon,
   PROVIDER_MANIFEST,
   SELECTABLE_PROVIDER_TYPES,
+  LOCAL_ROUTER_PLACEHOLDER_KEY,
   freeTierNoteKey,
   type ProviderType,
 } from "../lib/providers";
 import {
+  clearOllamaCapsCache,
   fetchProviderModels,
   pickBestModel,
   providerModelsNeedApiKey,
@@ -226,7 +228,9 @@ function ModelField({
               provider: PROVIDER_MANIFEST[type].label,
             })}
           {modelsStatus === "unavailable" &&
-            (PROVIDER_MANIFEST[type].local
+            (type === "ollama"
+              ? t("model.unavailableOllama")
+              : PROVIDER_MANIFEST[type].local
               ? t("model.unavailableLocal")
               : providerModelsNeedApiKey(type)
                 ? t("model.unavailableWithKey")
@@ -235,6 +239,60 @@ function ModelField({
         </p>
       )}
     </div>
+  );
+}
+
+/**
+ * Whether a keyless local provider (Ollama) is running and which models it has installed — or, if it
+ * isn't, a friendly hint with the link to install it. Re-checked when the type is picked or on demand.
+ */
+function LocalStatus({ type }: { type: ProviderType }) {
+  const t = useT();
+  const [state, setState] = useState<{ status: "checking" } | { status: "up"; count: number } | { status: "down" }>({
+    status: "checking",
+  });
+  const [nonce, setNonce] = useState(0);
+  // The CORS hint is only worth showing once a second look still finds nothing.
+  const [rechecked, setRechecked] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    void fetchProviderModels(type, "", PROVIDER_MANIFEST[type].baseURL).then((models) => {
+      if (!active) return;
+      setState(models === null ? { status: "down" } : { status: "up", count: models.length });
+    });
+    return () => {
+      active = false;
+    };
+  }, [type, nonce]);
+
+  return (
+    <p className="settings-hint" role="status">
+      {state.status === "checking" && t("ollama.checking")}
+      {state.status === "up" &&
+        (state.count > 0 ? t("ollama.running", { count: state.count }) : t("ollama.runningEmpty"))}
+      {state.status === "down" && (
+        <>
+          {t("ollama.notRunning")}{" "}
+          <a href={PROVIDER_MANIFEST[type].apiKeyUrl} target="_blank" rel="noreferrer">
+            {t("ollama.install")}
+          </a>
+        </>
+      )}{" "}
+      <button
+        type="button"
+        className="btn btn-ghost btn-sm"
+        onClick={() => {
+          clearOllamaCapsCache();
+          setRechecked(true);
+          setState({ status: "checking" });
+          setNonce((n) => n + 1);
+        }}
+      >
+        {t("ollama.recheck")}
+      </button>
+      {state.status === "down" && rechecked && <> {t("ollama.originsHint")}</>}
+    </p>
   );
 }
 
@@ -252,6 +310,7 @@ function EditProviderRow({
   const [model, setModel] = useState(provider.model);
   const [apiKey, setApiKey] = useState("");
   const isLocal = !!PROVIDER_MANIFEST[provider.type]?.local;
+  const keyless = !!PROVIDER_MANIFEST[provider.type]?.keyless;
   const [baseURL, setBaseURL] = useState(
     provider.base_url_override ?? PROVIDER_MANIFEST[provider.type].baseURL,
   );
@@ -299,15 +358,17 @@ function EditProviderRow({
           onChange={setModel}
           idPrefix={`edit-${provider.id}`}
         />
-        <label>
-          {t("providers.apiKey")}
-          <input
-            type="password"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.currentTarget.value)}
-            placeholder={t("providers.keepCurrentKey")}
-          />
-        </label>
+        {!keyless && (
+          <label>
+            {t("providers.apiKey")}
+            <input
+              type="password"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.currentTarget.value)}
+              placeholder={t("providers.keepCurrentKey")}
+            />
+          </label>
+        )}
         <div className="provider-edit-actions">
           <button type="submit" className="btn btn-primary btn-sm" disabled={busy || !label.trim() || !model.trim()}>
             {t("common.save")}
@@ -346,8 +407,9 @@ export function ProvidersPanel({
   // OmniRoute has its own view; this list is only the providers the student keyed in themselves.
   const own = providers.filter((p) => p.type !== "omniroute");
   // Only providers that aren't on the list yet can be added.
-  const addable = SELECTABLE_PROVIDER_TYPES.filter((pt) => !PROVIDER_MANIFEST[pt].local && !own.some((p) => p.type === pt));
+  const addable = SELECTABLE_PROVIDER_TYPES.filter((pt) => pt !== "omniroute" && !own.some((p) => p.type === pt));
   const chosen: ProviderType = addable.includes(type) ? type : (addable[0] ?? type);
+  const keyless = !!PROVIDER_MANIFEST[chosen].keyless;
 
   function describeError(err: unknown): string {
     return err instanceof Error ? err.message : String(err);
@@ -355,12 +417,16 @@ export function ProvidersPanel({
 
   async function handleAdd(e: React.FormEvent, skipVerify = false) {
     e.preventDefault();
-    const key = apiKey.trim();
+    const key = keyless ? LOCAL_ROUTER_PLACEHOLDER_KEY : apiKey.trim();
     if (!key) return;
     setBusy(true);
     setFormError(null);
     let model = PROVIDER_MANIFEST[chosen].defaultModel;
     try {
+      if (keyless) {
+        // No key to verify: use what the student has installed, or the suggested model if Ollama is off.
+        model = pickBestModel(chosen, await fetchProviderModels(chosen, "", PROVIDER_MANIFEST[chosen].baseURL));
+      }
       // Same check as the first-run wizard: ask the provider for its models with this key, and start
       // from the best tool-capable free one. The model can be changed afterwards with "Edit".
       if (!skipVerify && providerSupportsLiveModels(chosen) && providerModelsNeedApiKey(chosen)) {
@@ -372,7 +438,13 @@ export function ProvidersPanel({
         }
         model = pickBestModel(chosen, models);
       }
-      await onAdd({ type: chosen, label: PROVIDER_MANIFEST[chosen].label, model, apiKey: key });
+      await onAdd({
+        type: chosen,
+        label: PROVIDER_MANIFEST[chosen].label,
+        model,
+        apiKey: key,
+        ...(keyless ? { baseURL: PROVIDER_MANIFEST[chosen].baseURL } : {}),
+      });
       setApiKey("");
       setUnverified(false);
     } catch (err) {
@@ -461,30 +533,36 @@ export function ProvidersPanel({
                 </option>
               ))}
             </select>
-            <input
-              type="password"
-              value={apiKey}
-              autoComplete="off"
-              placeholder={t("providers.pasteKey")}
-              onChange={(e) => {
-                setApiKey(e.currentTarget.value);
-                setUnverified(false);
-                setFormError(null);
-              }}
-            />
+            {!keyless && (
+              <input
+                type="password"
+                value={apiKey}
+                autoComplete="off"
+                placeholder={t("providers.pasteKey")}
+                onChange={(e) => {
+                  setApiKey(e.currentTarget.value);
+                  setUnverified(false);
+                  setFormError(null);
+                }}
+              />
+            )}
             {unverified ? (
               <button type="button" className="btn btn-secondary btn-sm" disabled={busy} onClick={(e) => void handleAdd(e, true)}>
                 {t("onboarding.addAnyway")}
               </button>
             ) : (
-              <button type="submit" className="btn btn-primary btn-sm" disabled={busy || !apiKey.trim()}>
+              <button type="submit" className="btn btn-primary btn-sm" disabled={busy || (!keyless && !apiKey.trim())}>
                 {busy ? t("onboarding.verifyingShort") : t("providers.addProviderButton")}
               </button>
             )}
           </div>
-          <a href={PROVIDER_MANIFEST[chosen].apiKeyUrl} target="_blank" rel="noreferrer" className="omni-getkey">
-            {t("providers.getKeyLink", { provider: PROVIDER_MANIFEST[chosen].label })}
-          </a>
+          {keyless ? (
+            <LocalStatus key={chosen} type={chosen} />
+          ) : (
+            <a href={PROVIDER_MANIFEST[chosen].apiKeyUrl} target="_blank" rel="noreferrer" className="omni-getkey">
+              {t("providers.getKeyLink", { provider: PROVIDER_MANIFEST[chosen].label })}
+            </a>
+          )}
         </form>
         )}
 

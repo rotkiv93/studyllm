@@ -115,6 +115,15 @@ import {
   extractDocUrl,
 } from "./lib/exportChat";
 import {
+  buildExportDoc,
+  EXPORT_EXTENSIONS,
+  renderExport,
+  suggestFileName,
+  type ExportFormat,
+} from "./lib/exportFile";
+import { invoke } from "@tauri-apps/api/core";
+import { save as saveDialog } from "@tauri-apps/plugin-dialog";
+import {
   parseAttachment,
   buildOutgoingContent,
   isSupportedAttachment,
@@ -354,6 +363,7 @@ export default function App() {
   }, [notice]);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [exportAnswersOnly, setExportAnswersOnly] = useState(false);
   const [mcpServers, setMcpServers] = useState<McpServerRow[]>([]);
   const [mcpToolsByServer, setMcpToolsByServer] = useState<Record<string, McpToolInfo[]>>({});
   const [conversations, setConversations] = useState<ConversationRow[]>([]);
@@ -575,6 +585,7 @@ export default function App() {
   const courseAppState: CourseAppState = {
     enabledProviderCount: providers.filter((p) => p.enabled && p.type !== "omniroute").length,
     hasOmniroute: providers.some((p) => p.type === "omniroute"),
+    hasOllama: providers.some((p) => p.type === "ollama"),
     runningServerNames: mcpServers.filter((s) => s.id in mcpToolsByServer).map((s) => s.name.toLowerCase()),
     // Gmail & co. default their destructive tools to "ask", so only hand-set permissions count here.
     hasAskPermission: mcpServers.some(
@@ -902,6 +913,18 @@ export default function App() {
     for await (const event of routerRef.current.streamReply(history, undefined, signal, { system })) {
       onEvent(event);
     }
+  }
+
+  /** Library quiz: one model call through the failover router, returned as the full reply text. */
+  async function askModel(system: string, user: string, signal: AbortSignal): Promise<string> {
+    let text = "";
+    let failure: string | null = null;
+    for await (const event of routerRef.current.streamReply([{ role: "user", content: user }], undefined, signal, { system })) {
+      if (event.type === "chunk") text += event.text;
+      else if (event.type === "error") failure = event.message;
+    }
+    if (!text.trim() && failure) throw new Error(failure);
+    return text;
   }
 
   /**
@@ -1597,6 +1620,48 @@ export default function App() {
     }
   }
 
+  /** Save the conversation as a .md / .docx / PDF file chosen through the native save dialog. */
+  async function handleSaveToFile(format: ExportFormat) {
+    setExportMenuOpen(false);
+    const title = activeTitle || t("chat.conversation");
+    try {
+      const path = await saveDialog({
+        defaultPath: suggestFileName(title, format),
+        filters: [{ name: format.toUpperCase(), extensions: [EXPORT_EXTENSIONS[format]] }],
+      });
+      if (!path) return; // cancelled — nothing to do, no toast
+      setExporting(true);
+      setError(null);
+      setNotice(null);
+      const models = [
+        ...new Set(messages.flatMap((m) => (m.role === "assistant" && m.model ? [m.model] : []))),
+      ];
+      const doc = buildExportDoc({
+        title,
+        messages: messages.filter((m) => m.role !== "tool"),
+        labels: {
+          you: t("chat.you"),
+          assistant: t("chat.assistant"),
+          exportedOn: t("export.exportedOn"),
+          model: t("export.model"),
+          attachments: t("export.attachments"),
+          sources: t("export.sources"),
+        },
+        model: models.join(", ") || undefined,
+        answersOnly: exportAnswersOnly,
+      });
+      const bytes = await renderExport(doc, format);
+      await invoke("save_export_file", bytes, {
+        headers: { "x-export-path": encodeURIComponent(path) },
+      });
+      setNotice(t("notice.savedToFile", { path }));
+    } catch (e) {
+      setError(t("error.exportFailed", { message: e instanceof Error ? e.message : String(e) }));
+    } finally {
+      setExporting(false);
+    }
+  }
+
   /** Create a Google Doc from the conversation via the connected Google account's Docs tools. */
   async function handleExportToGoogleDoc() {
     setExportMenuOpen(false);
@@ -1775,6 +1840,25 @@ export default function App() {
                       <IconCopy size={14} />
                       <span>{t("chat.copyAsMarkdown")}</span>
                     </button>
+                    {(["md", "docx", "pdf"] as const).map((f) => (
+                      <button
+                        key={f}
+                        type="button"
+                        className="export-menu-item"
+                        onClick={() => handleSaveToFile(f)}
+                      >
+                        <IconDownload size={14} />
+                        <span>{t(`chat.saveAs.${f}`)}</span>
+                      </button>
+                    ))}
+                    <label className="export-menu-item export-menu-check">
+                      <input
+                        type="checkbox"
+                        checked={exportAnswersOnly}
+                        onChange={(e) => setExportAnswersOnly(e.target.checked)}
+                      />
+                      <span>{t("chat.exportAnswersOnly")}</span>
+                    </label>
                     <button
                       type="button"
                       className="export-menu-item"
@@ -2014,6 +2098,7 @@ export default function App() {
           onSaveEmbeddingConfig={handleSaveEmbeddingConfig}
           onAddFiles={handleAddLibraryFiles}
           onDeleteDocument={handleDeleteRagDocument}
+          onAsk={askModel}
           busy={libraryBusy}
           error={libraryError}
           onClose={() => setShowLibrary(false)}

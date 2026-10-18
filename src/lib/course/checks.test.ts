@@ -39,6 +39,12 @@ describe("evaluateCheck", () => {
     ).toBe(true);
   });
 
+  it("requires Ollama to be both added and answering", () => {
+    expect(evaluateCheck("ollamaConnected", withState({ hasOllama: true }))).toBe(false);
+    expect(evaluateCheck("ollamaConnected", withState({ ollamaReachable: true }))).toBe(false);
+    expect(evaluateCheck("ollamaConnected", withState({ hasOllama: true, ollamaReachable: true }))).toBe(true);
+  });
+
   it("recognises a running Filesystem server by name, case-insensitively stored", () => {
     expect(evaluateCheck("filesystemRunning", withState({ runningServerNames: ["web reader"] }))).toBe(false);
     expect(evaluateCheck("filesystemRunning", withState({ runningServerNames: ["filesystem (docs)"] }))).toBe(true);
