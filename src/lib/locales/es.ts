@@ -266,6 +266,8 @@ export const es = {
   "library.showPassages": "Ver pasajes",
   "library.hidePassages": "Ocultar",
   "library.passagesLoading": "Cargando pasajes…",
+  "library.reindexForPages":
+    "Este PDF se indexó antes de registrar los números de página. Quítalo y vuelve a añadirlo (reindexar) para obtener citas con página, como p.12.",
   "library.docDetail": "Unos {avg} caracteres por pasaje · {dims} números cada uno.",
   "library.fingerprintHint": "La franja de colores es la «huella» de cada pasaje: sus números resumidos en celdas. Pasajes sobre lo mismo tienen huellas parecidas. Pulsa un pasaje para leerlo.",
   "library.fingerprintLabel": "Huella del embedding ({dims} números)",

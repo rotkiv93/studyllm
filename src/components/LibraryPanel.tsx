@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { IconBook, IconTrash, IconLoader, IconPaperclip } from "./icons";
 import { Fingerprint } from "./viz/Fingerprint";
 import { LibraryMap } from "./viz/LibraryMap";
-import { loadLibraryChunks, type LibraryChunk } from "../lib/rag";
+import { formatPages, loadLibraryChunks, type LibraryChunk } from "../lib/rag";
 import { snippet } from "../lib/ragInsights";
 import { EMBEDDING_CAPABLE, type EmbeddingConfig } from "../lib/embeddings";
 import { SUPPORTED_ATTACHMENT_HINT } from "../lib/attachments";
@@ -225,6 +225,8 @@ function LibraryDocument({
   const [expanded, setExpanded] = useState<string | null>(null);
   const avg = doc.chunk_count > 0 ? Math.round(doc.char_count / doc.chunk_count) : 0;
   const dims = chunks?.find((c) => c.vector.length > 0)?.vector.length ?? 0;
+  const needsReindex =
+    /\.pdf$/i.test(doc.name) && !!chunks && chunks.length > 0 && chunks.every((c) => c.pageStart == null);
 
   return (
     <li className={`library-doc${open ? " library-doc-open" : ""}`}>
@@ -267,6 +269,7 @@ function LibraryDocument({
               <p className="settings-hint">
                 {t("library.docDetail", { avg, dims: dims || "—" })} {t("library.fingerprintHint")}
               </p>
+              {needsReindex && <p className="settings-hint">{t("library.reindexForPages")}</p>}
               <ol className="library-chunk-list">
                 {chunks.map((c) => {
                   const isOpen = expanded === c.id;
@@ -278,7 +281,10 @@ function LibraryDocument({
                         aria-expanded={isOpen}
                         onClick={() => setExpanded(isOpen ? null : c.id)}
                       >
-                        <span className="library-chunk-tag">#{c.seq}</span>
+                        <span className="library-chunk-tag">
+                          #{c.seq}
+                          {formatPages(c.pageStart, c.pageEnd) ? ` · ${formatPages(c.pageStart, c.pageEnd)}` : ""}
+                        </span>
                         <Fingerprint vector={c.vector} label={t("library.fingerprintLabel", { dims: c.vector.length })} />
                         {!isOpen && <span className="library-chunk-snippet">{snippet(c.text)}</span>}
                       </button>

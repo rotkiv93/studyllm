@@ -180,7 +180,15 @@ Migration **v7** adds `rag_documents` + `rag_chunks` (embeddings as JSON `TEXT` 
 vector type). Pipeline: `parseAttachment` → `chunkText` (~1000 chars, ~150 overlap) → `embedTexts` →
 store; `retrieve()` embeds the query, ranks by cosine **in TypeScript** over every chunk, takes
 top-k; `buildRagSystemBlock` injects the grounding directive (answer only from passages, cite
-`[DocName #seq]`, admit gaps) via the router's `system` param.
+`[DocName p.12]` / `p.12–13` when a page is known, else `[DocName #seq]`; admit gaps) via the router's
+`system` param.
+
+**Page-aware PDFs (migration v10, nullable `page_start`/`page_end` on `rag_chunks`).** `parseAttachment`
+returns per-page `PageSpan`s for PDFs; `chunkText({ pages })` tags each chunk with the pages it touches
+(overlap tails inherit the previous chunk's last page; hard-split windows are exact). docx/txt and chunks
+indexed before v10 stay null and cite `#seq`. `chunkTag`/`formatPages` (rag.ts) feed the system block, the
+Retrieved-sources card, the retrieval passage dialog and the Library passage list; a PDF with no page data
+shows a "remove and add again (re-index)" hint — there is no in-place re-index since the original file isn't stored.
 
 `retrieveExplained()` is the explorer's variant — keeps the full scored list + query/chunk vectors
 that `retrieve()` discards. `retrieve()` itself is untouched by it.

@@ -465,6 +465,9 @@ export interface RagChunkRow {
   text: string;
   /** JSON-encoded `number[]` — the chunk's embedding vector (SQLite has no native vector type). */
   embedding: string;
+  /** Source page range (PDF only); null for other formats and for chunks indexed before pages were tracked. */
+  page_start: number | null;
+  page_end: number | null;
   created_at: number;
 }
 
@@ -481,9 +484,9 @@ export async function insertRagChunks(rows: RagChunkRow[]): Promise<void> {
   const db = await getDb();
   for (const row of rows) {
     await db.execute(
-      `INSERT INTO rag_chunks (id, document_id, seq, text, embedding, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [row.id, row.document_id, row.seq, row.text, row.embedding, row.created_at],
+      `INSERT INTO rag_chunks (id, document_id, seq, text, embedding, page_start, page_end, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [row.id, row.document_id, row.seq, row.text, row.embedding, row.page_start, row.page_end, row.created_at],
     );
   }
 }
