@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { buildRagSystemBlock, retrieveExplained } from "./rag";
+import { buildRagSystemBlock, chunkTag, retrieveExplained } from "./rag";
 import type { RetrievedChunk } from "./rag";
 import type { ResolvedEmbedder } from "./embeddings";
 
@@ -20,6 +20,8 @@ vi.mock("./embeddings", async (importActual) => {
 const chunk = (documentName: string, seq: number, text: string, score = 0.9): RetrievedChunk => ({
   documentName,
   seq,
+  pageStart: null,
+  pageEnd: null,
   text,
   score,
 });
@@ -63,5 +65,13 @@ describe("retrieveExplained", () => {
     expect(out.scored.every((c) => Array.isArray(c.vector) && c.vector.length === 2)).toBe(true);
     expect(out.queryVector).toEqual([1, 0]);
     expect(out.k).toBe(2);
+  });
+});
+
+describe("citation tags", () => {
+  it("prefers the page and shows a range across a break", () => {
+    expect(chunkTag({ documentName: "D.pdf", seq: 3, pageStart: 12, pageEnd: 12 })).toBe("D.pdf p.12");
+    expect(chunkTag({ documentName: "D.pdf", seq: 3, pageStart: 12, pageEnd: 13 })).toBe("D.pdf p.12–13");
+    expect(chunkTag({ documentName: "D.docx", seq: 3, pageStart: null, pageEnd: null })).toBe("D.docx #3");
   });
 });

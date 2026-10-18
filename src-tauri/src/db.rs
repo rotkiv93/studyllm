@@ -176,5 +176,14 @@ pub fn migrations() -> Vec<Migration> {
             "#,
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 10,
+            description: "page-aware RAG chunks: page range per chunk (null for non-PDF / pre-migration)",
+            sql: r#"
+                ALTER TABLE rag_chunks ADD COLUMN page_start INTEGER;
+                ALTER TABLE rag_chunks ADD COLUMN page_end INTEGER;
+            "#,
+            kind: MigrationKind::Up,
+        },
     ]
 }

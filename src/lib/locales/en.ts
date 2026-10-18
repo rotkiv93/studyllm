@@ -275,6 +275,8 @@ export const en: Messages = {
   "library.showPassages": "Show passages",
   "library.hidePassages": "Hide",
   "library.passagesLoading": "Loading passages…",
+  "library.reindexForPages":
+    "This PDF was indexed before page numbers were tracked. Remove it and add it again (re-index) to get page citations like p.12.",
   "library.docDetail": "About {avg} characters per passage · {dims} numbers each.",
   "library.fingerprintHint": "The coloured strip is each passage’s “fingerprint”: its numbers squeezed into cells. Passages about the same thing have similar fingerprints. Click a passage to read it.",
   "library.fingerprintLabel": "Embedding fingerprint ({dims} numbers)",
