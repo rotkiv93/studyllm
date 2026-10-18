@@ -45,6 +45,7 @@ All five original phases are ✅ **done**. Current capabilities:
 | Live provider model lists + tool-capability badges/filter | Done |
 | Google Workspace (Gmail/Calendar/Tasks/Drive/Docs/Sheets, ~30 tools) | Done |
 | Chat export, file attachments (text/PDF/docx) | Done |
+| LaTeX math rendering (inline `$E = mc^2$`, display `$$\sum_i x_i$$`, KaTeX offline) | Done |
 | RAG "chat with your documents" | Done |
 | Deep Research (system-prompt + step-budget layer over the tool loop) | Done |
 | **Course** — 11 interactive modules: each lesson is one flow of visual blocks, annotated screenshots of the app and task cards that *are* the exercise (embedded chats, setup forms, calculators, quizzes); progress persists; replaced the old Explore panel | Done |
@@ -396,6 +397,19 @@ family sidesteps this by not living under `.provider-list` at all.
 
 ⚠️ Flex items in `.messages` need `flex-shrink: 0`, and any child with `overflow: hidden` loses its
 automatic min-size floor — that's how tool blocks got squashed to nothing instead of scrolling.
+
+### Markdown & LaTeX math (`src/components/Markdown.tsx`)
+
+Assistant responses render LaTeX math for statistics, economics, and physics formulas via `remark-math` and `rehype-katex`:
+- **Inline and display math**: supports `$math$` and `$$math$$` syntax as well as fenced code blocks with language `math` (```` ```math ````).
+- **Offline fonts and CSS**: KaTeX stylesheet (`katex/dist/katex.min.css`) and webfonts (`KaTeX_*.woff2`, `.woff`, `.ttf`) are bundled directly into the Vite build assets (`dist/assets/`). No external font or CDN request is made.
+- **CSP**: in `src-tauri/tauri.conf.json`, `font-src` allows `'self' data:`, and `style-src` is set to `'self' 'unsafe-inline'` to accommodate KaTeX element-level inline styles (vertical alignment strut heights, vlist offsets).
+- **Streaming & error resilience**: `rehype-katex` is configured with `throwOnError: false`. While the model is streaming and a formula is not yet closed (e.g. `$E = \frac{1}{2`), it renders safely as plain text without crashing or flickering. Malformed closed LaTeX formulas display a `.katex-error` badge without throwing.
+- **Theming**: styled exclusively with `var(--...)` tokens (`--color-text-primary`, `--space-3`, `--color-danger`, `--color-danger-soft`, etc.), ensuring full contrast and automatic adaptation in both light and dark mode. Display math has horizontal scrolling (`overflow-x: auto`) to protect layout against wide equations.
+- **Copy and Export**: message copy (`CopyButton`) and transcript exports (`buildTranscriptMarkdown`, `buildTranscriptPlainText` in `exportChat.ts`) export the original message string containing raw LaTeX delimiters and commands.
+- **Handling of ordinary $ in text (e.g. prices)**:
+  - An isolated single dollar sign (e.g. `$100` or `$5.50`) has no matching delimiter and remains literal text without triggering math mode.
+  - If multiple dollar signs appear within the same paragraph (e.g. `$20 and $30`), CommonMark math syntax pairs them. To preserve multiple literal dollar signs as text, authors/models should escape them (`\$20 and \$30`) or format them as inline code (`` `$20` ``).
 
 ## Google Workspace ("Plugins")
 
