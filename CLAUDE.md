@@ -31,6 +31,44 @@ unused vars/params are build errors, not just warnings.
 
 Rust side (`src-tauri/`) can be checked directly with `cargo check` / `cargo build` from within `src-tauri/` if iterating on Rust without wanting a full `tauri build`. `cargo test` runs the `#[cfg(test)]` suite (currently `mcp/registry.rs`).
 
+## PR checks — verify before and after opening a PR
+
+CI (`.github/workflows/`) gates every PR to `main`. Don't leave a red check for the user to
+discover — run the same commands locally first, and after pushing, watch the PR's checks and fix
+whatever fails.
+
+**Before pushing / opening a PR**, run what CI runs (skip the Rust ones if nothing under
+`src-tauri/` changed):
+
+```
+npm run lint && npm test && npm run build          # from the repo root
+cd src-tauri
+cargo fmt --all --check                            # run `cargo fmt --all` to fix
+cargo clippy --all-targets -- -D warnings          # warnings are errors
+cargo test
+```
+
+(`cargo` may not be on PATH in this shell — use `~/.cargo/bin/cargo`.) Also run
+`npm audit --omit=dev --audit-level=high` if you touched `package.json`/the lockfile, and
+`cargo audit` if you touched `Cargo.toml`/`Cargo.lock` and it's installed.
+
+Other things CI enforces that you must satisfy up front:
+- The **PR title and every non-merge commit subject** must be a Conventional Commit
+  (`type(scope): subject`) — `pr-checks.yml` fails otherwise. Fix a bad commit before pushing
+  rather than after (once it's on the PR branch it needs a rebase/force-push, which needs the
+  user's OK).
+- `PROJECT_STATUS.md` should be updated when a feature changes (CI only warns, but see below).
+- Fill in `.github/pull_request_template.md` when creating the PR body.
+
+**After opening / pushing to a PR**, check the results with `gh pr checks <pr> --watch` (or
+`gh run list` / `gh run view <id> --log-failed`). If a check fails, read the failing log, reproduce it
+locally, fix the cause, and push a new commit (Conventional Commit format) — repeat until green.
+Don't disable a check, add `#[allow(...)]`/`eslint-disable`, or loosen a threshold just to get green
+unless the finding is a verified false positive; say so explicitly if you do. If a failure is
+unrelated to your change (flaky runner, pre-existing advisory), tell the user instead of papering
+over it. The `tauri-build` job also compiles on Windows and macOS, so avoid OS-specific assumptions
+(e.g. hard-coded `/tmp` paths in tests) even though you can only run one OS locally.
+
 ## Project status doc — read this first
 
 **Before starting work, read `PROJECT_STATUS.md`.** It's the living source of truth for

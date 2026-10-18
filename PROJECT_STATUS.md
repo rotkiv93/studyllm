@@ -51,7 +51,7 @@ All five original phases are ✅ **done**. Current capabilities:
 | **Lab bar** — always-visible right-hand bar (minimized rail ⇄ expanded) laid out like Google AI Studio's run settings: provider + model pickers, system instructions, temperature slider, tools, advanced; replaced the in-composer Chat Lab and mode chips | Done |
 | **OmniRoute mode** — the app downloads, starts, stops and manages OmniRoute (and the provider keys inside it); an either/or switch against your own provider keys | Done |
 | **Ollama provider** (issue #7) — `type: "ollama"` (`local`, `keyless`), `http://localhost:11434/v1`, no key; Providers panel shows whether Ollama is running + install link; installed models from `/api/tags`, tool badge from `/api/show` capabilities; sits in the normal failover order; Course module 8 task is now an auto-checked `ollamaConnected` | Done |
-| CI + release pipeline (unsigned installers, draft release) | Done by design |
+| CI + release pipeline (unsigned installers, draft release); PR checks: fmt/clippy, 3-OS build, Conventional Commit enforcement, security scans, Dependabot, auto-labels | Done by design — new checks not yet verified on GitHub or marked required |
 | Onboarding wizard, crash log, marketing site (ES/EN; covers Course, Lab bar, OmniRoute, Deep Research, Drive write tools, ranked Discover; screenshots retaken 2026-10-18 except `attachments.png`; library/RAG shots use demo documents) | Done |
 
 **Not started**: attachment phases 4–5 (images for vision models; OCR for scanned docs) — see
@@ -475,8 +475,26 @@ any future OAuth remote-HTTP server, even though Google no longer uses that path
 
 ## CI / release
 
-- `.github/workflows/ci.yml` (push/PR to `main`): lint, Vitest, `npm run build`, `cargo check
-  --all-targets`, `cargo test` (Ubuntu, with the webkit2gtk/appindicator deps Tauri needs to typecheck).
+- `.github/workflows/ci.yml` (push/PR to `main`, stale runs auto-cancelled): lint, Vitest, `npm run
+  build`; Rust `cargo fmt --all --check`, `cargo check --all-targets`, `cargo clippy --all-targets -- -D
+  warnings`, `cargo test` (Ubuntu, with the webkit2gtk/appindicator deps Tauri needs to typecheck); a
+  `tauri-build` matrix (Ubuntu/Windows/macOS, `tauri build --debug --no-bundle`) so OS-specific
+  breakage shows on the PR, not at tag time; `actionlint` over the workflow files.
+- `.github/workflows/pr-checks.yml`: PR title must be a Conventional Commit, every non-merge commit
+  subject must be one too (the changelog depends on it), and a non-failing warning when `src/` or
+  `src-tauri/src/` changed without `PROJECT_STATUS.md`.
+- `.github/workflows/security.yml` (PR, push to `main`, weekly): `npm audit --omit=dev
+  --audit-level=high`, `cargo audit`, dependency-review on PRs, CodeQL (JS/TS, Rust, Actions).
+  Known-accepted RustSec advisories (e.g. Tauri's unmaintained GTK3 crates) go in
+  `src-tauri/.cargo/audit.toml`, each with a comment.
+- `.github/workflows/labeler.yml` + `.github/labeler.yml`: auto-labels PRs by path
+  (`frontend`/`rust`/`ci`/`docs`/`deps`). `.github/dependabot.yml`: weekly grouped npm/cargo/Actions
+  updates with `build`/`ci` Conventional Commit prefixes. `.github/pull_request_template.md` holds the
+  pre-merge checklist.
+- None of these are **required status checks** yet — that's a branch-protection setting on GitHub,
+  not something in the repo. Until it's set, a red check doesn't block a merge.
+- Remaining `npm audit` findings are moderate-only (`sprintf-js` via `mammoth`→`argparse`); the
+  only fix is a breaking downgrade of `mammoth`, so they're below the `high` gate.
 - `.github/workflows/release.yml` (on a `v*` tag or manual dispatch): matrix-builds installers via
   `tauri-apps/tauri-action` across macOS aarch64 + x86_64, Ubuntu 22.04 (older glibc = broader
   AppImage/deb compatibility), and Windows → publishes to a **draft** GitHub Release.
