@@ -1,6 +1,6 @@
 name: PR checks
 
-# Enforces the Conventional Commits convention that cliff.toml turns into release notes, and
+# Enforces the Conventional Commits convention that release-please turns into version bumps and release notes, and
 # nudges PRs that change app code without touching PROJECT_STATUS.md.
 on:
   pull_request:

@@ -1,0 +1,44 @@
+name: Release PR
+
+# On every push to main, release-please reads the Conventional Commits since the last release and
+# keeps a "chore(release): vX.Y.Z" PR open that bumps the version everywhere and writes the changelog.
+# Merging that PR creates a DRAFT GitHub Release and builds the installers into it; publishing the
+# draft (a manual click) is what ships the update to installed apps.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: release-please
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.rp.outputs.release_created }}
+      tag_name: ${{ steps.rp.outputs.tag_name }}
+      sha: ${{ steps.rp.outputs.sha }}
+      body: ${{ steps.rp.outputs.body }}
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: rp
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  build:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.release-please.outputs.tag_name }}
+      sha: ${{ needs.release-please.outputs.sha }}
+      notes: ${{ needs.release-please.outputs.body }}
+    secrets: inherit
+    permissions:
+      contents: write
