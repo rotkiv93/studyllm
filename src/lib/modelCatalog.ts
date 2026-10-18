@@ -37,6 +37,8 @@ const PROVIDER_TO_CATALOG_KEY: Record<ProviderType, string> = {
   sambanova: "sambanova",
   // A router, not a model host — models.dev has no entry, so capability stays "unknown".
   omniroute: "omniroute",
+  // Local models are listed from Ollama itself; models.dev has no matching provider entry.
+  ollama: "ollama",
 };
 
 let inflight: Promise<ModelCatalog | null> | null = null;

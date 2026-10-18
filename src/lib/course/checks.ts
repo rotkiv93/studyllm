@@ -11,6 +11,10 @@ export interface CourseState {
   hasOmniroute: boolean;
   /** The router answered a `/v1/models` request just now. */
   omnirouteReachable: boolean;
+  /** An Ollama provider row exists (enabled or not). */
+  hasOllama: boolean;
+  /** Ollama answered `/api/tags` just now. */
+  ollamaReachable: boolean;
   /** Assistant replies stored across all conversations. */
   assistantMessageCount: number;
   /** Tool calls the model has made, across all conversations. */
@@ -27,6 +31,8 @@ export const EMPTY_COURSE_STATE: CourseState = {
   enabledProviderCount: 0,
   hasOmniroute: false,
   omnirouteReachable: false,
+  hasOllama: false,
+  ollamaReachable: false,
   assistantMessageCount: 0,
   toolCallCount: 0,
   runningServerNames: [],
@@ -45,6 +51,8 @@ export function evaluateCheck(id: CheckId, s: CourseState): boolean {
       return s.assistantMessageCount >= 1;
     case "omnirouteConnected":
       return s.hasOmniroute && s.omnirouteReachable;
+    case "ollamaConnected":
+      return s.hasOllama && s.ollamaReachable;
     case "documentAdded":
       return s.ragDocumentCount >= 1;
     case "filesystemRunning":

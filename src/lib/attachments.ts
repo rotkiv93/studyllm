@@ -13,6 +13,7 @@
 // Same-origin worker asset URL (Vite resolves `?url` to a bundled path); just a string, safe to
 // import in the node test env since it doesn't load pdf.js itself.
 import { LocalizedError } from "./localizedError";
+import type { PageSpan } from "./chunking";
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
 /** Cap per file so a huge PDF can't blow the model's context; a note is appended when it trips. */
@@ -27,6 +28,8 @@ export interface ParsedAttachment {
   text: string;
   /** True when the extracted text was cut to `MAX_ATTACHMENT_CHARS`. */
   truncated: boolean;
+  /** PDF only: where each page sits in `text`, so chunks can report page numbers. */
+  pages?: PageSpan[];
 }
 
 const TEXT_EXTS = ["txt", "md", "markdown", "csv", "tsv", "json", "log", "rtf"];
@@ -50,8 +53,10 @@ export function isSupportedAttachment(name: string): boolean {
 export async function parseAttachment(file: File, maxChars = MAX_ATTACHMENT_CHARS): Promise<ParsedAttachment> {
   const ext = extensionOf(file.name);
   let text: string;
+  let pageTexts: string[] | null = null;
   if (PDF_EXTS.includes(ext)) {
-    text = await extractPdfText(file, maxChars);
+    pageTexts = await extractPdfPages(file, maxChars);
+    text = pageTexts.join("\n\n");
   } else if (DOCX_EXTS.includes(ext)) {
     text = await extractDocxText(file);
   } else if (TEXT_EXTS.includes(ext)) {
@@ -61,7 +66,23 @@ export async function parseAttachment(file: File, maxChars = MAX_ATTACHMENT_CHAR
   } else {
     throw new Error(`Can't read ".${ext || "?"}" files yet — try a ${SUPPORTED_ATTACHMENT_HINT}.`);
   }
-  text = text.replace(/\r\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+  let pages: PageSpan[] | undefined;
+  if (pageTexts) {
+    // Normalize page by page so each page's offsets in the joined text stay known.
+    const spans: PageSpan[] = [];
+    let joined = "";
+    pageTexts.forEach((raw, i) => {
+      const clean = raw.replace(/\r\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+      if (!clean) return;
+      if (joined) joined += "\n\n";
+      spans.push({ page: i + 1, start: joined.length, end: joined.length + clean.length });
+      joined += clean;
+    });
+    text = joined;
+    pages = spans;
+  } else {
+    text = text.replace(/\r\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+  }
   const truncated = text.length > maxChars;
   if (truncated) text = text.slice(0, maxChars);
   if (!text) {
@@ -69,10 +90,10 @@ export async function parseAttachment(file: File, maxChars = MAX_ATTACHMENT_CHAR
       name: file.name,
     });
   }
-  return { name: file.name, text, truncated };
+  return { name: file.name, text, truncated, ...(pages ? { pages } : {}) };
 }
 
-async function extractPdfText(file: File, maxChars: number): Promise<string> {
+async function extractPdfPages(file: File, maxChars: number): Promise<string[]> {
   const pdfjs = await import("pdfjs-dist");
   pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
   const data = new Uint8Array(await file.arrayBuffer());
@@ -90,7 +111,7 @@ async function extractPdfText(file: File, maxChars: number): Promise<string> {
       total += pageText.length;
       if (total > maxChars) break; // stop early — parseAttachment will truncate anyway
     }
-    return pages.join("\n\n");
+    return pages;
   } finally {
     await doc.destroy();
   }

@@ -16,6 +16,10 @@ interface ModelsSource {
   url: string;
   /** True for a router on the student's machine whose `/models` lives under their own base URL. */
   usesBaseURL?: boolean;
+  /** Path under the base URL (default `models`). Ollama's native listing is `api/tags`, outside `/v1`. */
+  path?: string;
+  /** Prefix on the base URL to drop before appending `path` (Ollama: `/v1`). */
+  stripSuffix?: RegExp;
   /** False for registries that are public (no key needed to list models). */
   requiresApiKey: boolean;
   /** Extracts models from the parsed JSON body — shapes differ per provider. */
@@ -136,7 +140,61 @@ const MODELS_SOURCE: Partial<Record<ProviderType, ModelsSource>> = {
     requiresApiKey: false,
     parse: openAiStyle,
   },
+  ollama: {
+    url: "http://localhost:11434/api/tags",
+    usesBaseURL: true,
+    path: "api/tags",
+    stripSuffix: /\/v1\/?$/,
+    requiresApiKey: false,
+    parse: ollamaTags,
+    // Embedding-only models can't chat.
+    filter: excludes(["embed", "bge-", "minilm"]),
+  },
 };
+
+const OLLAMA_CAPS_CACHE = new Map<string, boolean>();
+/** Models beyond this many get no badge instead of one more request each. */
+const OLLAMA_SHOW_LIMIT = 50;
+
+/** Forgets cached `/api/show` answers — on an explicit "Check again", or between tests. */
+export function clearOllamaCapsCache(): void {
+  OLLAMA_CAPS_CACHE.clear();
+}
+
+/**
+ * Asks a running Ollama what a model can do (`/api/show` → `capabilities`, e.g. ["completion",
+ * "tools"]). Local and exact, so it beats the catalog; undefined when the answer isn't there.
+ */
+async function ollamaSupportsTools(root: string, model: string): Promise<boolean | undefined> {
+  const cacheKey = `${root}|${model}`;
+  const cached = OLLAMA_CAPS_CACHE.get(cacheKey);
+  if (cached !== undefined) return cached;
+  try {
+    const res = await fetch(joinUrl(root, "api/show"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model }),
+    });
+    if (!res.ok) return undefined;
+    const caps = ((await res.json()) as { capabilities?: unknown }).capabilities;
+    if (!Array.isArray(caps)) return undefined;
+    const tools = caps.includes("tools");
+    OLLAMA_CAPS_CACHE.set(cacheKey, tools);
+    return tools;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Ollama's `/api/tags`: `{ models: [{ name }] }`. Capabilities come later from `/api/show`. */
+function ollamaTags(body: unknown): ModelInfo[] {
+  const models = (body as { models?: unknown } | null)?.models;
+  if (!Array.isArray(models)) return [];
+  return models
+    .map((m) => (m as { name?: unknown })?.name)
+    .filter((id): id is string => typeof id === "string")
+    .map((id) => ({ id }));
+}
 
 /** Joins a base URL and a path without doubling or dropping the slash between them. */
 export function joinUrl(base: string, path: string): string {
@@ -171,8 +229,10 @@ export async function fetchProviderModels(
 
   try {
     const headers: Record<string, string> = {};
-    if (apiKey.trim()) headers.Authorization = `Bearer ${apiKey.trim()}`;
-    const url = source.usesBaseURL && baseURL?.trim() ? joinUrl(baseURL.trim(), "models") : source.url;
+    // A keyless local provider (Ollama) never gets one, even if the placeholder key is passed in.
+    if (apiKey.trim() && !PROVIDER_MANIFEST[type].keyless) headers.Authorization = `Bearer ${apiKey.trim()}`;
+    const root = baseURL?.trim() ? (source.stripSuffix ? baseURL.trim().replace(source.stripSuffix, "") : baseURL.trim()) : "";
+    const url = source.usesBaseURL && root ? joinUrl(root, source.path ?? "models") : source.url;
     const res = await fetch(url, { headers });
     if (!res.ok) return null;
     const body: unknown = await res.json();
@@ -184,6 +244,17 @@ export async function fetchProviderModels(
       return true;
     });
     const filtered = source.filter ? parsed.filter((m) => source.filter!(m.id)) : parsed;
+
+    if (type === "ollama") {
+      const ollamaRoot = root || "http://localhost:11434";
+      const withTools = await Promise.all(
+        filtered.map(async (m, i) => ({
+          ...m,
+          supportsTools: i < OLLAMA_SHOW_LIMIT ? await ollamaSupportsTools(ollamaRoot, m.id) : undefined,
+        })),
+      );
+      return withTools.sort((a, b) => a.id.localeCompare(b.id));
+    }
 
     // Fill in any still-unknown capability from the external catalog.
     const catalog = await fetchModelCatalog();
@@ -214,13 +285,17 @@ export function pickBestModel(type: ProviderType, models: ModelInfo[] | null): s
 
   // 1. Curated suggestions in priority order — pick the flagship first when it's live.
   for (const id of PROVIDER_MANIFEST[type].suggestedModels) {
-    const live = models.find((m) => m.id === id);
-    if (live && live.supportsTools !== false) return id;
+    // Ollama lists models with their tag (`llama3.2:latest`).
+    const live = models.find((m) => m.id === id || (type === "ollama" && m.id.startsWith(`${id}:`)));
+    if (live && live.supportsTools !== false) return live.id;
   }
 
   // 2. Any other model the live list explicitly reports as tool-capable.
   const firstToolCapable = models.find((m) => m.supportsTools === true);
   if (firstToolCapable) return firstToolCapable.id;
+
+  // Whatever the student has installed beats a model they would still have to download.
+  if (type === "ollama") return (models.find((m) => m.supportsTools !== false) ?? models[0]).id;
 
   return fallback;
 }

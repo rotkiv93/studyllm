@@ -133,6 +133,7 @@ export const en: Messages = {
   "provider.freeTier.github-models": "low daily quota",
   "provider.freeTier.sambanova": "trial credits only",
   "provider.freeTier.omniroute": "runs on your computer · pools your own free keys",
+  "provider.freeTier.ollama": "runs on your computer · no key, no limits, works offline",
 
   // ── Chat / main panel ──────────────────────────────────────────────
   "chat.newChat": "New chat",
@@ -147,6 +148,15 @@ export const en: Messages = {
   "chat.exportConversation": "Export this conversation",
   "chat.copyAsMarkdown": "Copy as Markdown",
   "chat.saveToGoogleDocs": "Save to Google Docs",
+  "chat.saveAs.md": "Save as Markdown (.md)",
+  "chat.saveAs.docx": "Save as Word (.docx)",
+  "chat.saveAs.pdf": "Save as PDF",
+  "chat.exportAnswersOnly": "Answers only (skip my questions)",
+  "export.exportedOn": "Exported from StudyLLM on {date}",
+  "export.model": "Model",
+  "export.attachments": "Attachments",
+  "export.sources": "Sources",
+  "notice.savedToFile": "Saved to {path}",
   "chat.conversation": "Conversation",
   "chat.defaultDocTitle": "StudyLLM conversation",
 
@@ -265,6 +275,8 @@ export const en: Messages = {
   "library.showPassages": "Show passages",
   "library.hidePassages": "Hide",
   "library.passagesLoading": "Loading passages…",
+  "library.reindexForPages":
+    "This PDF was indexed before page numbers were tracked. Remove it and add it again (re-index) to get page citations like p.12.",
   "library.docDetail": "About {avg} characters per passage · {dims} numbers each.",
   "library.tab.quiz": "Quiz",
   "quiz.fromDocument": "Practise with a quiz from this document",
@@ -399,6 +411,15 @@ export const en: Messages = {
     "Couldn't reach the live model list — showing suggestions. You can still type any model id.",
   "model.unavailableLocal":
     "Couldn't reach the router. Is OmniRoute running and the address correct? You can type \"auto\" or any model id.",
+  "model.unavailableOllama":
+    "Couldn't reach Ollama. Is it open and running? You can still type the name of a model you have installed.",
+  "ollama.checking": "Looking for Ollama on this computer…",
+  "ollama.running": "Ollama is running with {count} installed model(s). No key needed.",
+  "ollama.runningEmpty": "Ollama is running but has no models yet. In a terminal type «ollama pull llama3.2».",
+  "ollama.notRunning": "Ollama is not running (or not installed). It runs models on your computer, no key needed.",
+  "ollama.originsHint": "Open but still not found? On Windows, Ollama may need to allow this app: set the OLLAMA_ORIGINS variable to tauri://localhost,http://tauri.localhost and restart Ollama.",
+  "ollama.install": "Install Ollama",
+  "ollama.recheck": "Check again",
   "model.enterKey": "Enter an API key to load this provider's live model list.",
 
   // ── Chat lab ───────────────────────────────────────────────────────

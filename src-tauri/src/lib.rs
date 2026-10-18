@@ -1,6 +1,7 @@
 mod crashlog;
 mod credentials;
 mod db;
+mod export;
 mod mcp;
 mod oauth;
 mod omniroute;
@@ -34,6 +35,7 @@ pub fn run() {
             credentials::credentials_set,
             credentials::credentials_get,
             credentials::credentials_delete,
+            export::save_export_file,
             crashlog::crash_log_read,
             crashlog::crash_log_clear,
             crashlog::crash_log_path,

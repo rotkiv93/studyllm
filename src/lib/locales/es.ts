@@ -134,6 +134,7 @@ export const es = {
   "provider.freeTier.github-models": "cuota diaria baja",
   "provider.freeTier.sambanova": "solo créditos de prueba",
   "provider.freeTier.omniroute": "se ejecuta en tu ordenador · junta tus propias claves gratuitas",
+  "provider.freeTier.ollama": "se ejecuta en tu ordenador · sin clave, sin límites, funciona sin conexión",
 
   // ── Chat / main panel ──────────────────────────────────────────────
   "chat.newChat": "Nuevo chat",
@@ -148,6 +149,15 @@ export const es = {
   "chat.exportConversation": "Exportar esta conversación",
   "chat.copyAsMarkdown": "Copiar como Markdown",
   "chat.saveToGoogleDocs": "Guardar en Google Docs",
+  "chat.saveAs.md": "Guardar como Markdown (.md)",
+  "chat.saveAs.docx": "Guardar como Word (.docx)",
+  "chat.saveAs.pdf": "Guardar como PDF",
+  "chat.exportAnswersOnly": "Solo las respuestas (sin mis preguntas)",
+  "export.exportedOn": "Exportado desde StudyLLM el {date}",
+  "export.model": "Modelo",
+  "export.attachments": "Archivos adjuntos",
+  "export.sources": "Fuentes",
+  "notice.savedToFile": "Guardado en {path}",
   "chat.conversation": "Conversación",
   "chat.defaultDocTitle": "Conversación de StudyLLM",
 
@@ -266,6 +276,8 @@ export const es = {
   "library.showPassages": "Ver pasajes",
   "library.hidePassages": "Ocultar",
   "library.passagesLoading": "Cargando pasajes…",
+  "library.reindexForPages":
+    "Este PDF se indexó antes de registrar los números de página. Quítalo y vuelve a añadirlo (reindexar) para obtener citas con página, como p.12.",
   "library.docDetail": "Unos {avg} caracteres por pasaje · {dims} números cada uno.",
   "library.tab.quiz": "Cuestionario",
   "quiz.fromDocument": "Practicar con un cuestionario de este documento",
@@ -400,6 +412,15 @@ export const es = {
     "No se pudo acceder a la lista de modelos — se muestran sugerencias. Puedes escribir cualquier id de modelo.",
   "model.unavailableLocal":
     "No se pudo contactar con el router. ¿Está OmniRoute arrancado y la dirección es correcta? Puedes escribir «auto» o cualquier id de modelo.",
+  "model.unavailableOllama":
+    "No se pudo contactar con Ollama. ¿Está abierto y funcionando? Aun así puedes escribir el nombre de un modelo que tengas instalado.",
+  "ollama.checking": "Buscando Ollama en este ordenador…",
+  "ollama.running": "Ollama está funcionando con {count} modelo(s) instalado(s). No necesita clave.",
+  "ollama.runningEmpty": "Ollama está funcionando pero aún no tiene modelos. En una terminal escribe «ollama pull llama3.2».",
+  "ollama.notRunning": "Ollama no está funcionando (o no está instalado). Ejecuta modelos en tu ordenador, sin clave.",
+  "ollama.originsHint": "¿Está abierto y sigue sin encontrarse? En Windows, Ollama puede necesitar permitir esta app: define la variable OLLAMA_ORIGINS como tauri://localhost,http://tauri.localhost y reinicia Ollama.",
+  "ollama.install": "Instalar Ollama",
+  "ollama.recheck": "Comprobar de nuevo",
   "model.enterKey": "Introduce una clave de API para cargar la lista de modelos de este proveedor.",
 
   // ── Chat lab ───────────────────────────────────────────────────────

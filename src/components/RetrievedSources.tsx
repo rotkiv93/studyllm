@@ -1,5 +1,5 @@
 import { IconBook } from "./icons";
-import type { RetrievedChunk } from "../lib/rag";
+import { chunkTag, type RetrievedChunk } from "../lib/rag";
 import { useT } from "../lib/i18n";
 
 /**
@@ -25,7 +25,7 @@ export function RetrievedSources({ sources }: { sources: RetrievedChunk[] }) {
         <details key={i} className="attachment-details retrieved-source">
           <summary>
             <span className="retrieved-source-tag">
-              {s.documentName} #{s.seq}
+              {chunkTag(s)}
             </span>
             <span className="retrieved-source-score">
               {t("sources.match", { percent: Math.round(s.score * 100) })}

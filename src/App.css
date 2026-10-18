@@ -7417,3 +7417,8 @@ li.plugin-row {
 .quiz-history-date {
   color: var(--color-text-muted);
 }
+
+.export-menu-check {
+  cursor: pointer;
+  border-top: 1px solid var(--color-border);
+}
