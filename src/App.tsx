@@ -1619,7 +1619,9 @@ export default function App() {
         answersOnly: exportAnswersOnly,
       });
       const bytes = await renderExport(doc, format);
-      await invoke("save_export_file", { path, bytes: Array.from(bytes) });
+      await invoke("save_export_file", bytes, {
+        headers: { "x-export-path": encodeURIComponent(path) },
+      });
       setNotice(t("notice.savedToFile", { path }));
     } catch (e) {
       setError(t("error.exportFailed", { message: e instanceof Error ? e.message : String(e) }));

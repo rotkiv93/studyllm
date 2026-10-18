@@ -550,7 +550,7 @@ approval), library RAG (txt/PDF/empty/oversized, grounded and out-of-document qu
   mirroring `runtime.rs`. Its own project.
 - **Zotero MCP** (`zotero-mcp`, verified real): needs an API key + library ID, higher friction than
   the current all-keyless curated batch. Add once the env-var install flow is click-verified in-app.
-- **Export**: Notion page target. (Local `.md`/`.docx`/PDF saving is done: `src/lib/exportFile.ts` builds an `ExportDoc` (title, date, model, attachment names, library sources) and renders Markdown / `docx` / `pdf-lib`; bytes are written by the `save_export_file` Rust command after the dialog plugin's `save`. PDF uses standard Helvetica/Courier, so characters outside WinAnsi (e.g. CJK) print as `?`; use `.docx` for those. Library sources are only included when still in the live session — they aren't persisted.)
+- **Export**: Notion page target. (Local `.md`/`.docx`/PDF saving is done: `src/lib/exportFile.ts` builds an `ExportDoc` (title, date, model, attachment names, library sources) and renders Markdown / `docx` / `pdf-lib`; bytes are sent as a raw IPC body to the `save_export_file` Rust command (absolute path with `.md`/`.docx`/`.pdf` extension only) after the dialog plugin's `save`. PDF uses standard Helvetica/Courier, so characters outside WinAnsi (e.g. CJK) print as `?`; use `.docx` for those. Library sources are only included when still in the live session — they aren't persisted.)
 - See `TODO.md` for remaining verification gaps (live Google tool call, forced-fast-refresh test,
   revoke-then-use test, in-app embed→index→retrieve with a real key).
 

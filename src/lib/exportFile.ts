@@ -267,8 +267,9 @@ export async function renderDocx(doc: ExportDoc): Promise<Uint8Array> {
         return [new Paragraph({ border: { bottom: { style: "single", size: 6, space: 1, color: "999999" } } })];
     }
   });
-  const blob = await Packer.toBuffer(new Document({ sections: [{ children }] }));
-  return new Uint8Array(blob);
+  // toBlob, not toBuffer: the latter needs Node's Buffer, which the webview doesn't have.
+  const blob = await Packer.toBlob(new Document({ sections: [{ children }] }));
+  return new Uint8Array(await blob.arrayBuffer());
 }
 
 export async function renderPdf(doc: ExportDoc): Promise<Uint8Array> {
@@ -312,7 +313,18 @@ export async function renderPdf(doc: ExportDoc): Promise<Uint8Array> {
     if (opts.prefix) words.push({ text: opts.prefix, font: fonts.regular });
     for (const r of runs) {
       const font = r.code ? fonts.mono : r.bold || opts.bold ? fonts.bold : r.italic ? fonts.italic : fonts.regular;
-      for (const w of r.text.split(/\s+/).filter(Boolean)) words.push({ text: safe(w, font), font });
+      for (const w of r.text.split(/\s+/).filter(Boolean)) {
+        // Break words wider than the line (long URLs) into chunks that fit.
+        let rest = safe(w, font);
+        const limit = maxW - lead - 20;
+        while (font.widthOfTextAtSize(rest, size) > limit) {
+          let n = rest.length - 1;
+          while (n > 1 && font.widthOfTextAtSize(rest.slice(0, n), size) > limit) n--;
+          words.push({ text: rest.slice(0, n), font });
+          rest = rest.slice(n);
+        }
+        words.push({ text: rest, font });
+      }
     }
     const lineH = size * 1.35;
     let line: W[] = [];

@@ -81,6 +81,10 @@ describe("renderers", () => {
     const bytes = await renderPdf(doc);
     expect(new TextDecoder().decode(bytes.slice(0, 4))).toBe("%PDF");
   });
+  it("pdf wraps very long unbroken words", async () => {
+    const long = buildExportDoc({ title: "T", messages: [{ role: "assistant", content: "x".repeat(3000) }], labels });
+    expect((await renderPdf(long)).length).toBeGreaterThan(100);
+  });
   it("md goes through renderExport", async () => {
     expect(new TextDecoder().decode(await renderExport(doc, "md"))).toContain("# T");
   });
