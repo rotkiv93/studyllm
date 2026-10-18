@@ -141,34 +141,56 @@ automatically on every push to `main` that touches `docs/`.
 
 ## Releasing (maintainers)
 
-Pushing a `v*` tag (or running the workflow manually) runs
-[`.github/workflows/release.yml`](.github/workflows/release.yml), which builds installers for
-Windows, macOS (Intel + Apple Silicon), and Linux via
-[`tauri-action`](https://github.com/tauri-apps/tauri-action) and attaches them to a **draft**
-GitHub Release for you to review before publishing (Releases tab → the draft → "Publish release").
+Releases are driven by Conventional Commits (see below) and need no manual tagging:
 
-```bash
-git tag v0.3.0
-git push origin v0.3.0
-```
+1. Merge feature/fix PRs into `main` as usual.
+2. [`release-please.yml`](.github/workflows/release-please.yml) keeps a **`chore(release): vX.Y.Z`**
+   PR open that bumps the version in `package.json`, `package-lock.json`, `tauri.conf.json`,
+   `Cargo.toml`/`Cargo.lock` and writes `CHANGELOG.md` (`feat` → minor, `fix` → patch, `feat!` → major
+   once past 1.0).
+3. Merging that PR creates a **draft** GitHub Release and
+   [`release.yml`](.github/workflows/release.yml) builds installers for Windows, macOS (Intel +
+   Apple Silicon) and Linux via [`tauri-action`](https://github.com/tauri-apps/tauri-action) into it,
+   together with the signed `latest.json` the in-app updater reads.
+4. Review the draft (Releases tab) and click **Publish release**. Publishing is what ships the update:
+   installed copies find it the next time they check.
 
-This project ships **unsigned, non-notarized builds with no auto-updater** — deliberately, to
-keep the release pipeline dependency-free (no paid certs, no Apple Developer Program enrollment,
-no signing keypair to manage). That means:
+To rebuild a release by hand: Actions → Release → Run workflow (tag, e.g. `v0.7.0`).
+
+### One-time setup
+
+- **Updater signing key.** In-app updates are verified against a minisign public key committed in
+  `src-tauri/tauri.conf.json`; releases must be signed with the matching private key. Add it as the
+  repo secrets `TAURI_SIGNING_PRIVATE_KEY` (the key file's contents) and, only if you gave it one,
+  `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. Generate a new pair with
+  `npx tauri signer generate -w ~/.tauri/studyllm.key` and replace `plugins.updater.pubkey` in
+  `tauri.conf.json`. **Losing the private key means installed apps can never update again** — keep a
+  backup outside the repo.
+- Settings → Actions → General → enable **"Allow GitHub Actions to create and approve pull requests"**
+  so release-please can open the release PR.
+- PRs opened by `GITHUB_TOKEN` (the release PR) don't trigger other workflows; close and reopen the
+  release PR once, or push to it, if you need the CI checks to run on it.
+
+### What users see
+
+Installers are **not** OS code-signed or notarized (no paid certs / Apple Developer Program), so:
 
 - Windows shows a Microsoft Defender SmartScreen warning on first run — click "More info" → "Run
   anyway".
 - macOS Gatekeeper blocks the `.app` outright ("can't be opened because Apple cannot check it for
   malicious software") — right-click (or Ctrl-click) the app → "Open" → "Open" again in the
   dialog, or run `xattr -cr /path/to/StudyLLM.app` once.
-- There's no in-app update check — students re-download from the Releases page for a new version.
+
+After the first install the app updates itself: it checks GitHub on launch (notice: "a new version
+is available"), and Settings → App updates → "Check for updates" → "Update and restart" downloads,
+verifies the signature, installs and relaunches. Development builds skip the check.
 
 ### Commit messages → changelog
 
-Each release's GitHub Release body is auto-generated from commit messages since the previous tag
-(`cliff.toml` + the `changelog` job in `release.yml`, via
-[git-cliff](https://git-cliff.org/)). It groups commits by
-[Conventional Commits](https://www.conventionalcommits.org/) prefix:
+The release PR's changelog (and the GitHub Release body) is generated from commit messages since the
+previous release by [release-please](https://github.com/googleapis/release-please), grouped by
+[Conventional Commits](https://www.conventionalcommits.org/) prefix (configured in
+`release-please-config.json`):
 
 | Prefix | Section |
 |---|---|
@@ -181,20 +203,12 @@ Each release's GitHub Release body is auto-generated from commit messages since 
 | `test:` | Testing |
 | `build:` | Build |
 | `ci:` | CI/CD |
-| `chore:` | Miscellaneous |
 | `revert:` | Reverts |
-| anything else | Other |
+| `chore:` | (hidden) |
 
 A message like `feat(mcp): add uvx support` shows up under "Features" as "add uvx support". The
-changelog tooling itself is read-only, but the `PR checks` workflow enforces the format on pull
-requests: the PR title and every non-merge commit subject must match
-`type(scope)!: subject`, otherwise the check fails.
-
-If you ever want to revisit signing/auto-updating, the code-signing wiring (Windows Authenticode
-cert, Apple Developer ID + notarization) and the Tauri updater (keypair-signed `latest.json`) are
-both standard `tauri-action`/`tauri-plugin-updater` features — nothing about this app's structure
-rules them out, they were just removed here to match a "just build and hand out installers"
-workflow.
+`PR checks` workflow enforces the format on pull requests: the PR title and every non-merge commit
+subject must match `type(scope)!: subject`, otherwise the check fails.
 
 <div align="center">
 
