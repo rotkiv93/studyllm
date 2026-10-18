@@ -62,7 +62,7 @@ const FOLDED_STORAGE_KEY = "studyllm.course.folded";
 /** The part of `CourseState` the app already holds; the panel adds the values that need a query. */
 export type CourseAppState = Omit<
   CourseState,
-  "assistantMessageCount" | "toolCallCount" | "omnirouteReachable"
+  "assistantMessageCount" | "toolCallCount" | "omnirouteReachable" | "ollamaReachable"
 >;
 
 interface CoursePanelProps {
@@ -150,7 +150,7 @@ export function CoursePanel(props: CoursePanelProps) {
   const t = useT();
   const [current, setCurrent] = useState(loadInitialModule);
   const [checking, setChecking] = useState(false);
-  const [queried, setQueried] = useState({ assistantMessageCount: 0, toolCallCount: 0, omnirouteReachable: false });
+  const [queried, setQueried] = useState({ assistantMessageCount: 0, toolCallCount: 0, omnirouteReachable: false, ollamaReachable: false });
   const [confirmReset, setConfirmReset] = useState(false);
   const [copied, setCopied] = useState(false);
   // Task cards the student folded away (remembered across sessions).
@@ -173,14 +173,23 @@ export function CoursePanel(props: CoursePanelProps) {
   /** Reads the counts and whether the local router answers. Cheap enough to run on open and on demand. */
   const load = useCallback(async () => {
     const router = providers.find((p) => p.type === "omniroute" && p.enabled);
-    const [assistantMessageCount, toolCallCount, models] = await Promise.all([
+    const ollama = providers.find((p) => p.type === "ollama" && p.enabled);
+    const [assistantMessageCount, toolCallCount, models, ollamaModels] = await Promise.all([
       countAssistantMessages().catch(() => 0),
       countToolCalls().catch(() => 0),
       router
         ? fetchProviderModels("omniroute", "", router.base_url_override ?? PROVIDER_MANIFEST.omniroute.baseURL)
         : Promise.resolve(null),
+      ollama
+        ? fetchProviderModels("ollama", "", ollama.base_url_override ?? PROVIDER_MANIFEST.ollama.baseURL)
+        : Promise.resolve(null),
     ]);
-    return { assistantMessageCount, toolCallCount, omnirouteReachable: models !== null };
+    return {
+      assistantMessageCount,
+      toolCallCount,
+      omnirouteReachable: models !== null,
+      ollamaReachable: ollamaModels !== null,
+    };
   }, [providers]);
 
   // Check on open and whenever the providers change.

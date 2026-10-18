@@ -133,6 +133,7 @@ export const en: Messages = {
   "provider.freeTier.github-models": "low daily quota",
   "provider.freeTier.sambanova": "trial credits only",
   "provider.freeTier.omniroute": "runs on your computer · pools your own free keys",
+  "provider.freeTier.ollama": "runs on your computer · no key, no limits, works offline",
 
   // ── Chat / main panel ──────────────────────────────────────────────
   "chat.newChat": "New chat",
@@ -365,6 +366,14 @@ export const en: Messages = {
     "Couldn't reach the live model list — showing suggestions. You can still type any model id.",
   "model.unavailableLocal":
     "Couldn't reach the router. Is OmniRoute running and the address correct? You can type \"auto\" or any model id.",
+  "model.unavailableOllama":
+    "Couldn't reach Ollama. Is it open and running? You can still type the name of a model you have installed.",
+  "ollama.checking": "Looking for Ollama on this computer…",
+  "ollama.running": "Ollama is running with {count} installed model(s). No key needed.",
+  "ollama.runningEmpty": "Ollama is running but has no models yet. In a terminal type «ollama pull llama3.2».",
+  "ollama.notRunning": "Ollama is not running (or not installed). It runs models on your computer, no key needed.",
+  "ollama.install": "Install Ollama",
+  "ollama.recheck": "Check again",
   "model.enterKey": "Enter an API key to load this provider's live model list.",
 
   // ── Chat lab ───────────────────────────────────────────────────────

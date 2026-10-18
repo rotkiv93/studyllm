@@ -45,6 +45,8 @@ describe("providerSupportsLiveModels / providerModelsNeedApiKey", () => {
     // The local router lists models without a key, so it never waits for one.
     expect(providerSupportsLiveModels("omniroute")).toBe(true);
     expect(providerModelsNeedApiKey("omniroute")).toBe(false);
+    expect(providerSupportsLiveModels("ollama")).toBe(true);
+    expect(providerModelsNeedApiKey("ollama")).toBe(false);
   });
 });
 
@@ -81,6 +83,31 @@ describe("fetchProviderModels", () => {
     vi.stubGlobal("fetch", fetchSpy);
     expect(await fetchProviderModels("omniroute", "")).toBeNull();
     expect(fetchSpy).toHaveBeenCalledWith("http://localhost:20128/v1/models", { headers: {} });
+  });
+
+  it("lists Ollama's installed models from /api/tags and badges tools via /api/show", async () => {
+    const fetchSpy = vi.fn().mockImplementation(async (url: string, init?: { body?: string }) => {
+      if (url.endsWith("/api/tags")) {
+        return {
+          ok: true,
+          json: async () => ({ models: [{ name: "llama3.2:latest" }, { name: "gemma:2b" }, { name: "nomic-embed-text:latest" }] }),
+        };
+      }
+      const model = JSON.parse(init?.body ?? "{}").model as string;
+      return { ok: true, json: async () => ({ capabilities: model.startsWith("llama") ? ["completion", "tools"] : ["completion"] }) };
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+    const result = await fetchProviderModels("ollama", "", "http://localhost:11434/v1");
+    expect(fetchSpy).toHaveBeenCalledWith("http://localhost:11434/api/tags", { headers: {} });
+    expect(result).toEqual([
+      { id: "gemma:2b", supportsTools: false },
+      { id: "llama3.2:latest", supportsTools: true },
+    ]);
+  });
+
+  it("returns null when Ollama isn't running", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
+    expect(await fetchProviderModels("ollama", "")).toBeNull();
   });
 
   it("keeps only :free-suffixed models for openrouter", async () => {
@@ -159,6 +186,12 @@ describe("fetchProviderModels", () => {
 });
 
 describe("pickBestModel", () => {
+  it("matches Ollama's tagged ids and falls back to what is installed", () => {
+    expect(pickBestModel("ollama", [{ id: "gemma:2b" }, { id: "llama3.2:latest" }])).toBe("llama3.2:latest");
+    expect(pickBestModel("ollama", [{ id: "gemma:2b", supportsTools: false }])).toBe("gemma:2b");
+    expect(pickBestModel("ollama", null)).toBe("llama3.2");
+  });
+
   it("prefers a tool-capable model that's also a curated suggestion", () => {
     const result = pickBestModel("groq", [
       { id: "llama-3.1-8b-instant", supportsTools: true },

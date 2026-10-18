@@ -50,6 +50,7 @@ All five original phases are ✅ **done**. Current capabilities:
 | **Course** — 11 interactive modules: each lesson is one flow of visual blocks, annotated screenshots of the app and task cards that *are* the exercise (embedded chats, setup forms, calculators, quizzes); progress persists; replaced the old Explore panel | Done |
 | **Lab bar** — always-visible right-hand bar (minimized rail ⇄ expanded) laid out like Google AI Studio's run settings: provider + model pickers, system instructions, temperature slider, tools, advanced; replaced the in-composer Chat Lab and mode chips | Done |
 | **OmniRoute mode** — the app downloads, starts, stops and manages OmniRoute (and the provider keys inside it); an either/or switch against your own provider keys | Done |
+| **Ollama provider** (issue #7) — `type: "ollama"` (`local`, `keyless`), `http://localhost:11434/v1`, no key; Providers panel shows whether Ollama is running + install link; installed models from `/api/tags`, tool badge from `/api/show` capabilities; sits in the normal failover order; Course module 8 task is now an auto-checked `ollamaConnected` | Done |
 | CI + release pipeline (unsigned installers, draft release) | Done by design |
 | Onboarding wizard, crash log, marketing site (ES/EN; covers Course, Lab bar, OmniRoute, Deep Research, Drive write tools, ranked Discover; screenshots retaken 2026-10-18 except `attachments.png`; library/RAG shots use demo documents) | Done |
 
@@ -98,7 +99,9 @@ it). Integration surface: default `baseURL` `http://localhost:20128/v1`, key sto
 `LOCAL_ROUTER_PLACEHOLDER_KEY` (the keychain can't hold an empty secret), live model list from `<baseURL>/models`,
 kept out of the first-run wizard; the CSP's `connect-src` allows `http://localhost:*` / `http://127.0.0.1:*`. How
 it is *run and used* is the "OmniRoute mode" section below. The models.dev capability catalog has no entry for
-it, so its models are unbadged. Do not auto-enable its subscription/`tos: avoid` routes.
+it, so its models are unbadged.
+
+**Ollama (`type: "ollama"`, `local: true`, `keyless: true`)** is a normal own-provider row (listed, reorderable and failed over like the hosted ones, unlike OmniRoute) with default `baseURL` `http://localhost:11434/v1` and the placeholder key. `fetchProviderModels` lists installed models from the native `<baseURL minus /v1>/api/tags` (embedding models filtered) and asks `/api/show` for each one's `capabilities` to badge tool support. `pickBestModel` prefers suggested families (tagged ids like `llama3.2:latest`), then anything installed. Left out of the first-run wizard and KeyGuide. Not verified against a live Ollama in this environment (unit tests mock fetch); the `tauri dev` run was not done here. Do not auto-enable its subscription/`tos: avoid` routes.
 
 ### OmniRoute mode (`omniroute.rs`, `lib/omniroute.ts`, `components/OmniRouteView.tsx`)
 
