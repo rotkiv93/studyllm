@@ -1,7 +1,7 @@
 name: CI
 
 # PR only: main only ever receives PRs that already passed these checks, so re-running them on the
-# merge commit (and on the bot-made release PR merge) just burns minutes.
+# merge commit just burns minutes.
 on:
   pull_request:
     branches: [main]

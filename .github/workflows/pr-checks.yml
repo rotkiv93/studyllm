@@ -1,7 +1,7 @@
 name: PR checks
 
-# Enforces the Conventional Commits convention that release-please turns into version bumps and release notes, and
-# nudges PRs that change app code without touching PROJECT_STATUS.md.
+# Enforces Conventional Commit titles/subjects, that app changes carry a version bump + CHANGELOG section
+# (.github/version.sh), and nudges PRs that change app code without touching PROJECT_STATUS.md.
 on:
   pull_request:
     branches: [main]
@@ -44,7 +44,12 @@ jobs:
         with:
           fetch-depth: 0
 
-      # Merge commits are kept on main, so every branch commit lands in the changelog.
+      # An app change must bump the version above the last release and add its CHANGELOG.md section;
+      # merging to main then tags and releases it (version.yml). Dependabot PRs ride along with the next bump.
+      - name: Version bump + changelog
+        if: github.actor != 'dependabot[bot]'
+        run: sh .github/version.sh check "origin/${{ github.base_ref }}"
+
       - name: Check commit subjects
         env:
           BASE_REF: ${{ github.base_ref }}

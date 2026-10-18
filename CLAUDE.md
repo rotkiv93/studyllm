@@ -8,9 +8,12 @@
 
 - When making a commit, use a [Conventional Commits](https://www.conventionalcommits.org/) message
   (`feat:`, `fix:`, `docs:`, `refactor:`, `perf:`, `style:`, `test:`, `build:`, `ci:`, `chore:`,
-  `revert:`, optionally with a `(scope)`). Release notes and version bumps are generated from these prefixes by release-please
-  (`release-please-config.json`, `.github/workflows/release-please.yml`) — see README "Commit
-  messages → changelog".
+  `revert:`, optionally with a `(scope)`). They keep history readable (CI checks PR titles and commit subjects).
+- **A PR that changes the app (`src/`, `src-tauri/`, `package*.json`) must bump the version and add a
+  `## X.Y.Z` section to `CHANGELOG.md`** (what changed, for users): run `sh .github/version.sh set X.Y.Z`
+  (updates `package.json`/lock, `tauri.conf.json`, `Cargo.toml`/`Cargo.lock` together), pick a version above
+  the latest `git tag --list 'v*' --sort=-v:refname`. Merging to `main` tags `vX.Y.Z` and publishes the
+  release automatically (`version.yml` → `release.yml`) — see README "Releasing". CI-/docs-only PRs need no bump.
 
 ## Commands
 
