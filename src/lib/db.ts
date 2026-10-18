@@ -154,6 +154,12 @@ export async function deleteProvider(id: string): Promise<void> {
   await db.execute("DELETE FROM providers WHERE id = $1", [id]);
 }
 
+/** Today's date in the student's local timezone, so the daily count resets at local midnight. */
+export function localDateKey(d = new Date()): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 export async function recordProviderUsage(
   providerId: string,
   date: string,
@@ -174,7 +180,7 @@ export async function getProviderUsageToday(
   providerId: string,
 ): Promise<{ request_count: number; token_count_estimate: number } | null> {
   const db = await getDb();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDateKey();
   const rows = await db.select<{ request_count: number; token_count_estimate: number }[]>(
     "SELECT request_count, token_count_estimate FROM provider_usage WHERE provider_id = $1 AND date = $2",
     [providerId, today],

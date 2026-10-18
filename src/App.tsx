@@ -9,6 +9,7 @@ import {
   type StreamEvent,
 } from "./lib/providerRouter";
 import { LOCAL_ROUTER_PLACEHOLDER_KEY, PROVIDER_MANIFEST } from "./lib/providers";
+import type { QuotaSnapshot } from "./components/QuotaMeter";
 import { fetchProviderModels } from "./lib/providerModels";
 import { setCredential, getCredential, deleteCredential } from "./lib/credentials";
 import {
@@ -17,6 +18,8 @@ import {
   updateProvider,
   deleteProvider,
   recordProviderUsage,
+  getProviderUsageToday,
+  localDateKey,
   createConversation,
   updateConversationSettings,
   getConversation,
@@ -263,6 +266,8 @@ async function repairStoredMcpArgs(rows: McpServerRow[]): Promise<McpServerRow[]
 export default function App() {
   const t = useT();
   const [providers, setProviders] = useState<ProviderRow[]>([]);
+  const listedProvidersRef = useRef<ProviderRow[]>([]);
+  const [quota, setQuota] = useState<QuotaSnapshot>({ requests: {}, cooldowns: {} });
   const [showProviders, setShowProviders] = useState(false);
   const [showMcp, setShowMcp] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
@@ -1166,9 +1171,21 @@ export default function App() {
     return entries.length > 0 ? Object.fromEntries(entries) : undefined;
   }
 
+  /** Re-read today's request counts and the router's cooldowns for the usage meters. */
+  async function refreshQuota() {
+    const rows = listedProvidersRef.current;
+    const counts = await Promise.all(rows.map((p) => getProviderUsageToday(p.id)));
+    const requests: Record<string, number> = {};
+    rows.forEach((p, i) => {
+      requests[p.id] = counts[i]?.request_count ?? 0;
+    });
+    setQuota({ requests, cooldowns: routerRef.current.getCooldowns() });
+  }
+
   async function refreshProviders() {
     const rows = await listProviders();
     setProviders(rows);
+    listedProvidersRef.current = rows;
     const inMode = (r: ProviderRow) => (providerModeRef.current === "omniroute" ? r.type === "omniroute" : r.type !== "omniroute");
     const configured: ConfiguredProvider[] = await Promise.all(
       rows
@@ -1188,6 +1205,7 @@ export default function App() {
     );
     configuredProvidersRef.current = configured;
     routerRef.current.updateProviders(configured);
+    void refreshQuota();
   }
 
   async function handleAddProvider(draft: ProviderDraft) {
@@ -1446,6 +1464,7 @@ export default function App() {
         } else if (event.type === "router") {
           const ev = event.event;
           if (ev.kind === "switched") {
+            void refreshQuota();
             setNotice(
               t("notice.switchedProvider", {
                 to: ev.toLabel,
@@ -1516,9 +1535,9 @@ export default function App() {
         );
         await touchConversation(conversationId);
         if (finalProviderId) {
-          const today = new Date().toISOString().slice(0, 10);
-          await recordProviderUsage(finalProviderId, today, finalTokens);
+          await recordProviderUsage(finalProviderId, localDateKey(), finalTokens);
         }
+        await refreshQuota();
         await refreshConversations();
       }
     } catch (err) {
@@ -2031,6 +2050,7 @@ export default function App() {
       {!showCourse && (
         <PlaygroundPanel
           providers={activeProviders}
+          quota={quota}
           target={labTarget}
           onTarget={setLabTarget}
           loadModels={loadProviderModels}
@@ -2054,6 +2074,7 @@ export default function App() {
       {showProviders && (
         <ProvidersPanel
           providers={providers}
+          quota={quota}
           onAdd={handleAddProvider}
           onRemove={handleRemoveProvider}
           onToggle={handleToggleProvider}

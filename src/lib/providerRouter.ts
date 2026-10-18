@@ -179,6 +179,14 @@ export class ProviderRouter {
       .sort((a, b) => a.priority - b.priority);
   }
 
+  /** Epoch-ms end of each provider's active cooldown (expired ones are left out). */
+  getCooldowns(): Record<string, number> {
+    const now = Date.now();
+    const out: Record<string, number> = {};
+    for (const [id, until] of this.coolingDownUntil) if (until > now) out[id] = until;
+    return out;
+  }
+
   isAuthDisabled(providerId: string): boolean {
     return this.authDisabled.has(providerId);
   }
