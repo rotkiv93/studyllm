@@ -6,6 +6,14 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
+# A new push to the same branch/PR supersedes the in-flight run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   frontend-typecheck:
     runs-on: ubuntu-22.04
@@ -42,16 +50,73 @@ jobs:
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri -> target
 
+      - name: cargo fmt
+        working-directory: src-tauri
+        run: cargo fmt --all --check
+
       - name: cargo check
         working-directory: src-tauri
         run: cargo check --all-targets
 
+      - name: cargo clippy
+        working-directory: src-tauri
+        run: cargo clippy --all-targets -- -D warnings
+
       - name: cargo test
         working-directory: src-tauri
         run: cargo test
+
+  # Compiles the real desktop app on every OS we ship for, so Windows/macOS-only breakage shows
+  # up on the PR instead of at release-tag time. Debug + no bundle keeps it fast; installers are
+  # still only produced by release.yml.
+  tauri-build:
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [ubuntu-22.04, windows-latest, macos-latest]
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: 'npm'
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install system dependencies (Ubuntu only)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf build-essential curl wget file libxdo-dev libssl-dev
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build desktop app (debug, no installer)
+        run: npx tauri build --debug --no-bundle
+
+  # Lints the workflow files themselves (syntax, expressions, shellcheck on run: blocks).
+  actionlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run actionlint
+        uses: raven-actions/actionlint@v2
