@@ -318,7 +318,8 @@ export async function renderPdf(doc: ExportDoc): Promise<Uint8Array> {
         let rest = safe(w, font);
         const limit = maxW - lead - 20;
         while (font.widthOfTextAtSize(rest, size) > limit) {
-          let n = rest.length - 1;
+          // Estimate from the average glyph width, then shrink until it fits.
+          let n = Math.max(1, Math.floor((limit / font.widthOfTextAtSize(rest, size)) * rest.length));
           while (n > 1 && font.widthOfTextAtSize(rest.slice(0, n), size) > limit) n--;
           words.push({ text: rest.slice(0, n), font });
           rest = rest.slice(n);
