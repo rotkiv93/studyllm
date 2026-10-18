@@ -51,7 +51,7 @@ All five original phases are ✅ **done**. Current capabilities:
 | **Lab bar** — always-visible right-hand bar (minimized rail ⇄ expanded) laid out like Google AI Studio's run settings: provider + model pickers, system instructions, temperature slider, tools, advanced; replaced the in-composer Chat Lab and mode chips | Done |
 | **OmniRoute mode** — the app downloads, starts, stops and manages OmniRoute (and the provider keys inside it); an either/or switch against your own provider keys | Done |
 | CI + release pipeline (unsigned installers, draft release) | Done by design |
-| Onboarding wizard, crash log, marketing site (ES/EN) | Done |
+| Onboarding wizard, crash log, marketing site (ES/EN; covers Course, Lab bar, OmniRoute, Deep Research, Drive write tools, ranked Discover; screenshots retaken 2026-10-18 except `attachments.png`; library/RAG shots use demo documents) | Done |
 
 **Not started**: attachment phases 4–5 (images for vision models; OCR for scanned docs) — see
 "Deferred work" below.
