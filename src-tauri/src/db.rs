@@ -203,5 +203,32 @@ pub fn migrations() -> Vec<Migration> {
             "#,
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 12,
+            description: "full-text search over messages (FTS5, accent-insensitive), kept in sync by triggers",
+            sql: r#"
+                CREATE VIRTUAL TABLE messages_fts USING fts5(
+                    content,
+                    content='messages',
+                    content_rowid='rowid',
+                    tokenize='unicode61 remove_diacritics 2'
+                );
+                INSERT INTO messages_fts(messages_fts) VALUES('rebuild');
+
+                CREATE TRIGGER messages_fts_ai AFTER INSERT ON messages BEGIN
+                    INSERT INTO messages_fts(rowid, content) VALUES (new.rowid, new.content);
+                END;
+                CREATE TRIGGER messages_fts_ad AFTER DELETE ON messages BEGIN
+                    INSERT INTO messages_fts(messages_fts, rowid, content)
+                    VALUES ('delete', old.rowid, old.content);
+                END;
+                CREATE TRIGGER messages_fts_au AFTER UPDATE OF content ON messages BEGIN
+                    INSERT INTO messages_fts(messages_fts, rowid, content)
+                    VALUES ('delete', old.rowid, old.content);
+                    INSERT INTO messages_fts(rowid, content) VALUES (new.rowid, new.content);
+                END;
+            "#,
+            kind: MigrationKind::Up,
+        },
     ]
 }

@@ -1,5 +1,6 @@
-import { useState } from "react";
-import type { ConversationRow } from "../lib/db";
+import { useEffect, useState } from "react";
+import { buildFtsQuery, splitSnippet } from "../lib/chatSearch";
+import { searchMessages, type ConversationRow, type MessageSearchHit } from "../lib/db";
 import { useT } from "../lib/i18n";
 import { IconBook, IconChevronDown, IconChevronsLeft, IconChevronsRight, IconEdit, IconKey, IconMessage, IconPlug, IconPlus, IconSettings, IconTool, IconTrash } from "./icons";
 
@@ -13,7 +14,8 @@ interface Props {
   pluginsRunningCount: number;
   activeProviderCount: number;
   onNewChat: () => void;
-  onSelectConversation: (id: string) => void;
+  /** `messageId` is set when opened from a search hit, so the chat can scroll to that message. */
+  onSelectConversation: (id: string, messageId?: string) => void;
   onDeleteConversation: (id: string) => void;
   onRenameConversation: (id: string, title: string) => void;
   onOpenProviders: () => void;
@@ -53,6 +55,27 @@ export function Sidebar({
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [searchText, setSearchText] = useState("");
+  const [hits, setHits] = useState<MessageSearchHit[]>([]);
+  const ftsQuery = buildFtsQuery(searchText);
+
+  // Debounced so each keystroke doesn't hit SQLite; a stale response is dropped via `cancelled`.
+  useEffect(() => {
+    if (!ftsQuery) {
+      setHits([]);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      searchMessages(ftsQuery)
+        .then((rows) => !cancelled && setHits(rows))
+        .catch(() => !cancelled && setHits([]));
+    }, 150);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [ftsQuery]);
 
   // Config destinations tucked under the "Settings" group (expanded sidebar) or laid out flat on the
   // collapsed icon rail. Providers carries a warning dot when none are active; MCP a running-count badge.
@@ -106,6 +129,42 @@ export function Sidebar({
         </button>
 
       {!collapsed && (
+        <div className="conversation-search">
+          <input
+            type="search"
+            value={searchText}
+            onChange={(e) => setSearchText(e.currentTarget.value)}
+            onKeyDown={(e) => e.key === "Escape" && setSearchText("")}
+            placeholder={t("sidebar.searchPlaceholder")}
+            aria-label={t("sidebar.search")}
+          />
+        </div>
+      )}
+
+      {!collapsed && searchText.trim() !== "" && (
+        <nav className="conversation-list" aria-label={t("sidebar.searchResults")}>
+          {hits.length === 0 && <p className="conversation-empty">{t("sidebar.searchNoResults")}</p>}
+          {hits.map((h) => (
+            <button
+              key={h.message_id}
+              type="button"
+              className="search-hit"
+              onClick={() => {
+                onSelectConversation(h.conversation_id, h.message_id);
+                setSearchText("");
+              }}
+              disabled={disabled}
+            >
+              <span className="search-hit-title">{h.title || t("sidebar.untitled")}</span>
+              <span className="search-hit-snippet">
+                {splitSnippet(h.snippet).map((p, i) => (p.match ? <mark key={i}>{p.text}</mark> : p.text))}
+              </span>
+            </button>
+          ))}
+        </nav>
+      )}
+
+      {!collapsed && searchText.trim() === "" && (
         <nav className="conversation-list" aria-label={t("sidebar.conversationHistory")}>
           {conversations.length === 0 && (
             <p className="conversation-empty">{t("sidebar.empty")}</p>

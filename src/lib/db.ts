@@ -1,4 +1,5 @@
 import Database from "@tauri-apps/plugin-sql";
+import { MATCH_END, MATCH_START } from "./chatSearch";
 import type { ProviderType } from "./providers";
 
 let dbPromise: Promise<Database> | null = null;
@@ -273,6 +274,32 @@ export async function listMessages(conversationId: string): Promise<MessageRow[]
   return db.select<MessageRow[]>(
     "SELECT * FROM messages WHERE conversation_id = $1 ORDER BY created_at ASC",
     [conversationId],
+  );
+}
+
+export interface MessageSearchHit {
+  message_id: string;
+  conversation_id: string;
+  title: string;
+  role: "user" | "assistant";
+  /** FTS5 snippet with matches wrapped in MATCH_START/MATCH_END (see chatSearch.ts). */
+  snippet: string;
+  created_at: number;
+}
+
+/** Full-text search over every message, newest first. `ftsQuery` must come from `buildFtsQuery`. */
+export async function searchMessages(ftsQuery: string, limit = 30): Promise<MessageSearchHit[]> {
+  const db = await getDb();
+  return db.select<MessageSearchHit[]>(
+    `SELECT m.id AS message_id, m.conversation_id, c.title, m.role, m.created_at,
+            snippet(messages_fts, 0, $2, $3, '…', 12) AS snippet
+       FROM messages_fts
+       JOIN messages m ON m.rowid = messages_fts.rowid
+       JOIN conversations c ON c.id = m.conversation_id
+      WHERE messages_fts MATCH $1
+      ORDER BY m.created_at DESC
+      LIMIT $4`,
+    [ftsQuery, MATCH_START, MATCH_END, limit],
   );
 }
 
