@@ -53,6 +53,8 @@ All five original phases are ✅ **done**. Current capabilities:
 | **OmniRoute mode** — the app downloads, starts, stops and manages OmniRoute (and the provider keys inside it); an either/or switch against your own provider keys | Done |
 | **Free-quota meter** — "N requests today" per provider in the Providers list and the Lab bar's model section, from `provider_usage`; soft bar against an optional manifest `dailyRequestLimit` (rough estimate, labelled as such), warning at ≥80%, cooldown countdown from `ProviderRouter.getCooldowns()`; refreshed after each send; day boundary is local midnight (`localDateKey`) | Done |
 | **Ollama provider** (issue #7) — `type: "ollama"` (`local`, `keyless`), `http://localhost:11434/v1`, no key; Providers panel shows whether Ollama is running + install link; installed models from `/api/tags`, tool badge from `/api/show` capabilities; sits in the normal failover order; Course module 8 task is now an auto-checked `ollamaConnected` | Done |
+| **In-app auto-update** — Settings → "App updates" (check, notes, signed download, install + relaunch) plus a launch-time notice; release-please opens version-bump release PRs and builds draft releases with a signed `latest.json` | Code done — **needs signing-key secret + first release to verify end to end** (see CI / release) |
+| **In-app auto-update** — Settings → "App updates" (check, notes, signed download, install + relaunch) plus a launch-time notice; release-please opens version-bump release PRs and builds draft releases with a signed `latest.json` | Code done — **needs signing-key secret + first release to verify end to end** (see CI / release) |
 | CI + release pipeline (unsigned installers, draft release); PR checks: fmt/clippy, 3-OS build, Conventional Commit enforcement, security scans, Dependabot, auto-labels | Done by design — new checks not yet verified on GitHub or marked required |
 | Onboarding wizard, crash log, marketing site (ES/EN; covers Course, Lab bar, OmniRoute, Deep Research, Drive write tools, ranked Discover; screenshots retaken 2026-10-18 except `attachments.png`; library/RAG shots use demo documents) | Done |
 
@@ -523,14 +525,30 @@ any future OAuth remote-HTTP server, even though Google no longer uses that path
   not something in the repo. Until it's set, a red check doesn't block a merge.
 - Remaining `npm audit` findings are moderate-only (`sprintf-js` via `mammoth`→`argparse`); the
   only fix is a breaking downgrade of `mammoth`, so they're below the `high` gate.
-- `.github/workflows/release.yml` (on a `v*` tag or manual dispatch): matrix-builds installers via
-  `tauri-apps/tauri-action` across macOS aarch64 + x86_64, Ubuntu 22.04 (older glibc = broader
-  AppImage/deb compatibility), and Windows → publishes to a **draft** GitHub Release.
-- **Code signing and the auto-updater were deliberately removed**, not left unfinished — no paid
-  certs, no Apple Developer Program, no signing keypair to maintain. ⚠️ If ever revisited: forwarding
-  `${{ secrets.X }}` for a nonexistent secret sets the env var to an *empty string*, not "unset".
-  Windows cert handling skips gracefully; macOS `security import` and Tauri's updater-artifact
-  signing both choke and fail the build. Git history has the full removed implementation.
+- **Release flow (release-please):** `release-please.yml` runs on push to `main`, keeps a
+  `chore(release): vX.Y.Z` PR open (bumps `package.json`, `package-lock.json`, `tauri.conf.json`,
+  `Cargo.toml`/`Cargo.lock`; writes `CHANGELOG.md`; config in `release-please-config.json` +
+  `.release-please-manifest.json`). Merging it creates a **draft** release and calls `release.yml`
+  (now `workflow_call`/manual dispatch only — **no `v*` tag trigger**, since publishing the draft creates
+  the tag and would build twice) which matrix-builds installers via `tauri-apps/tauri-action` (macOS
+  aarch64 + x86_64, Ubuntu 22.04, Windows) and uploads the signed `latest.json`. Publishing the draft is
+  the manual step that ships the update. `cliff.toml`/git-cliff were removed (release-please writes the
+  notes). **Not yet exercised end to end** — needs the one-time setup below, then a first release PR.
+- **Auto-update (Tauri updater):** `tauri-plugin-updater` + `tauri-plugin-process` (desktop-only,
+  registered in `lib.rs`; `updater:default` + `process:allow-restart` in `capabilities/default.json`;
+  `bundle.createUpdaterArtifacts` + `plugins.updater` {pubkey, endpoint
+  `releases/latest/download/latest.json`, Windows `passive` install} in `tauri.conf.json`). Frontend:
+  `src/lib/updater.ts`; `AppSettingsPanel` has an "App updates" section (version, check, notes, install
+  with progress, relaunch); `App.tsx` does a silent check on launch and shows a notice. Skipped in dev
+  (`import.meta.env.DEV`). Installers stay OS-unsigned/un-notarized; *updates* are minisign-verified.
+- ⚠️ **One-time setup still required (maintainer):** add repo secrets `TAURI_SIGNING_PRIVATE_KEY`
+  (contents of `~/.tauri/studyllm.key`, generated on the maintainer's machine; the committed pubkey
+  matches it) and optionally `..._PASSWORD`; enable "Allow GitHub Actions to create and approve pull
+  requests". `release.yml` fails early with a clear message if the key secret is empty (an unset secret
+  is forwarded as an empty string, which otherwise breaks the bundler late). Losing the private key =
+  installed apps can never update again.
+- Release-PR caveat: PRs opened by `GITHUB_TOKEN` don't trigger other workflows, so CI doesn't run on the
+  release PR until it is closed/reopened or pushed to.
 - macOS/Linux release jobs are untested on real hardware.
 
 ## Last QA pass (multi-persona, real app over CDP)

@@ -8,8 +8,8 @@
 
 - When making a commit, use a [Conventional Commits](https://www.conventionalcommits.org/) message
   (`feat:`, `fix:`, `docs:`, `refactor:`, `perf:`, `style:`, `test:`, `build:`, `ci:`, `chore:`,
-  `revert:`, optionally with a `(scope)`). Release notes are auto-generated from these prefixes via
-  `cliff.toml` + the `changelog` job in `.github/workflows/release.yml` — see README "Commit
+  `revert:`, optionally with a `(scope)`). Release notes and version bumps are generated from these prefixes by release-please
+  (`release-please-config.json`, `.github/workflows/release-please.yml`) — see README "Commit
   messages → changelog".
 
 ## Commands

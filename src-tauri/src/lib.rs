@@ -13,7 +13,15 @@ use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+
+    // Self-update is desktop-only; the plugins don't exist on mobile targets.
+    #[cfg(desktop)]
+    let builder = builder
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init());
+
+    builder
         .plugin(
             tauri_plugin_sql::Builder::new()
                 .add_migrations("sqlite:studyllm.db", db::migrations())

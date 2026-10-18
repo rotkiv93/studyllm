@@ -149,6 +149,7 @@ import { oauthConnect, oauthReconnect } from "./lib/oauth";
 import { appendCrashLog } from "./lib/crashlog";
 import { CONNECTORS, DESTRUCTIVE_GOOGLE_TOOLS, type OAuthConnector } from "./lib/googleConnectors";
 import { useT } from "./lib/i18n";
+import { checkForUpdate } from "./lib/updater";
 import "./App.css";
 
 /** localStorage key remembering whether the app was last left in Chat or Course mode. */
@@ -361,6 +362,16 @@ export default function App() {
     const id = window.setTimeout(() => setNotice(null), 8000);
     return () => window.clearTimeout(id);
   }, [notice]);
+  // Silent update check once per launch; failures (offline, no release yet) are not worth surfacing.
+  useEffect(() => {
+    if (import.meta.env.DEV) return;
+    checkForUpdate()
+      .then((update) => {
+        if (update) setNotice(t("notice.updateAvailable", { version: update.version }));
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on launch
+  }, []);
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportAnswersOnly, setExportAnswersOnly] = useState(false);

@@ -1,35 +1,42 @@
 name: Release
 
+# Builds the installers + updater artifacts (signed `latest.json`) and attaches them to the draft
+# release that release-please created. Called from release-please.yml when a release PR is merged.
+# Not triggered by tag pushes on purpose: publishing the draft creates the tag, which would build twice.
+# To rebuild a release by hand: Actions -> Release -> Run workflow (tag = e.g. v0.7.0).
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_call:
+    inputs:
+      tag:
+        description: Release tag, e.g. v0.7.0
+        required: true
+        type: string
+      sha:
+        description: Commit to build (the release PR's merge commit)
+        required: true
+        type: string
+      notes:
+        description: Release notes body
+        required: false
+        type: string
+        default: ''
+    secrets:
+      TAURI_SIGNING_PRIVATE_KEY:
+        required: true
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD:
+        required: false
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag, e.g. v0.7.0
+        required: true
+        type: string
+
+permissions:
+  contents: write
 
 jobs:
-  changelog:
-    runs-on: ubuntu-latest
-    outputs:
-      body: ${{ steps.git-cliff.outputs.content }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      # Generates a categorized changelog (Features / Bug Fixes / ...) from Conventional Commit
-      # messages (feat:, fix:, docs:, ...) since the previous tag — see cliff.toml. Anything that
-      # doesn't follow the convention just lands in an "Other" bucket instead of breaking this.
-      - name: Generate changelog
-        id: git-cliff
-        uses: orhun/git-cliff-action@v4
-        with:
-          config: cliff.toml
-          args: --latest --strip header
-
   publish-tauri:
-    needs: changelog
-    permissions:
-      contents: write
     strategy:
       fail-fast: false
       matrix:
@@ -46,6 +53,20 @@ jobs:
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.sha || github.sha }}
+
+      # An unset secret is forwarded as an empty string, which makes the Tauri bundler fail late
+      # with an obscure error — fail early and say why.
+      - name: Check updater signing key
+        shell: bash
+        env:
+          KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "::error::TAURI_SIGNING_PRIVATE_KEY secret is not set. See README 'Auto-update signing key'."
+            exit 1
+          fi
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -72,21 +93,25 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      # This project deliberately ships unsigned, non-notarized, non-auto-updating builds — no
-      # code-signing certs, no Apple Developer Program enrollment, no Tauri updater keypair.
-      # Plain installers only; Windows SmartScreen and macOS Gatekeeper will warn on first run.
+      # Installers are not OS-code-signed or notarized (Windows SmartScreen / macOS Gatekeeper warn on
+      # first run), but updates ARE verified: the updater artifacts are signed with the Tauri
+      # minisign key and the app only installs updates matching the public key in tauri.conf.json.
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: 'StudyLLM ${{ github.ref_name }}'
+          tagName: ${{ inputs.tag }}
+          releaseName: 'StudyLLM ${{ inputs.tag }}'
           releaseBody: |
-            ${{ needs.changelog.outputs.body }}
+            ${{ inputs.notes }}
 
-            See the assets below to download and install this version for your OS. This build
-            is unsigned — Windows SmartScreen and macOS Gatekeeper will warn before you can run
-            it. See the README for how to proceed anyway.
+            See the assets below to download and install this version for your OS. Installers are
+            unsigned — Windows SmartScreen and macOS Gatekeeper will warn before you can run
+            them. See the README for how to proceed anyway. Installed copies of the app update
+            themselves (signature-verified) once this release is published.
           releaseDraft: true
           prerelease: false
+          includeUpdaterJson: true
           args: ${{ matrix.args }}
