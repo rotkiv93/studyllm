@@ -185,9 +185,10 @@ Each release's GitHub Release body is auto-generated from commit messages since 
 | `revert:` | Reverts |
 | anything else | Other |
 
-A message like `feat(mcp): add uvx support` shows up under "Features" as "add uvx support". This
-is read-only tooling — nothing blocks a commit that doesn't follow the format, it just lands in
-"Other" instead of a specific section.
+A message like `feat(mcp): add uvx support` shows up under "Features" as "add uvx support". The
+changelog tooling itself is read-only, but the `PR checks` workflow enforces the format on pull
+requests: the PR title and every non-merge commit subject must match
+`type(scope)!: subject`, otherwise the check fails.
 
 If you ever want to revisit signing/auto-updating, the code-signing wiring (Windows Authenticode
 cert, Apple Developer ID + notarization) and the Tauri updater (keypair-signed `latest.json`) are

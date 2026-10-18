@@ -129,7 +129,13 @@ impl OmniRouteHost {
             match child.try_wait() {
                 Ok(None) => managed = true,
                 Ok(Some(status)) => {
-                    let msg = format!("exit {}", status.code().map(|c| c.to_string()).unwrap_or_else(|| "?".into()));
+                    let msg = format!(
+                        "exit {}",
+                        status
+                            .code()
+                            .map(|c| c.to_string())
+                            .unwrap_or_else(|| "?".into())
+                    );
                     inner.last_exit = Some(msg);
                     inner.child = None;
                     inner.pid = None;
@@ -144,7 +150,11 @@ impl OmniRouteHost {
             port: OMNIROUTE_PORT,
             version: OMNIROUTE_VERSION,
             log_tail: inner.logs[start..].to_vec(),
-            exited: if managed { None } else { inner.last_exit.clone() },
+            exited: if managed {
+                None
+            } else {
+                inner.last_exit.clone()
+            },
         }
     }
 
@@ -166,7 +176,10 @@ pub async fn omniroute_status(host: State<'_, OmniRouteHost>) -> Result<OmniRout
 }
 
 #[tauri::command]
-pub async fn omniroute_start(app: AppHandle, host: State<'_, OmniRouteHost>) -> Result<OmniRouteStatus, String> {
+pub async fn omniroute_start(
+    app: AppHandle,
+    host: State<'_, OmniRouteHost>,
+) -> Result<OmniRouteStatus, String> {
     if host.snapshot().await.managed {
         return Ok(host.snapshot().await);
     }
@@ -184,19 +197,26 @@ pub async fn omniroute_start(app: AppHandle, host: State<'_, OmniRouteHost>) -> 
     ]);
     // Only this computer may reach it: the router has no real login by default.
     cmd.env("OMNIROUTE_SERVER_HOST", "127.0.0.1");
-    cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    cmd.stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
     #[cfg(windows)]
     cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
     #[cfg(unix)]
     cmd.process_group(0);
 
-    let mut child = cmd.spawn().map_err(|e| format!("Couldn't start OmniRoute: {e}"))?;
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| format!("Couldn't start OmniRoute: {e}"))?;
     let pid = child.id();
     {
         let mut inner = host.inner.lock().await;
         inner.logs.clear();
         inner.last_exit = None;
-        push_log(&mut inner, format!("Starting OmniRoute {OMNIROUTE_VERSION} (the first run downloads it)…"));
+        push_log(
+            &mut inner,
+            format!("Starting OmniRoute {OMNIROUTE_VERSION} (the first run downloads it)…"),
+        );
     }
     if let Some(out) = child.stdout.take() {
         pump_lines(out, host.inner.clone());
@@ -235,7 +255,12 @@ pub struct ApiResponse {
 }
 
 async fn sign_in(inner: &Arc<Mutex<Inner>>) -> Result<String, String> {
-    let password = inner.lock().await.password.clone().unwrap_or_else(|| DEFAULT_PASSWORD.to_string());
+    let password = inner
+        .lock()
+        .await
+        .password
+        .clone()
+        .unwrap_or_else(|| DEFAULT_PASSWORD.to_string());
     let resp = reqwest::Client::new()
         .post(format!("http://127.0.0.1:{OMNIROUTE_PORT}/api/auth/login"))
         .json(&serde_json::json!({ "password": password }))
@@ -262,11 +287,15 @@ async fn sign_in(inner: &Arc<Mutex<Inner>>) -> Result<String, String> {
 /// cross-origin `fetch` can't carry. Only `/api/providers…` paths are allowed. `Err("auth")` means the
 /// dashboard password isn't the default any more.
 #[tauri::command]
-pub async fn omniroute_api(host: State<'_, OmniRouteHost>, request: ApiRequest) -> Result<ApiResponse, String> {
+pub async fn omniroute_api(
+    host: State<'_, OmniRouteHost>,
+    request: ApiRequest,
+) -> Result<ApiResponse, String> {
     if !request.path.starts_with("/api/providers") || request.path.contains("..") {
         return Err("path not allowed".into());
     }
-    let method = reqwest::Method::from_bytes(request.method.as_bytes()).map_err(|e| e.to_string())?;
+    let method =
+        reqwest::Method::from_bytes(request.method.as_bytes()).map_err(|e| e.to_string())?;
     let url = format!("http://127.0.0.1:{OMNIROUTE_PORT}{}", request.path);
     let client = reqwest::Client::new();
 
@@ -276,11 +305,16 @@ pub async fn omniroute_api(host: State<'_, OmniRouteHost>, request: ApiRequest) 
             Some(c) if attempt == 0 => c,
             _ => sign_in(&host.inner).await?,
         };
-        let mut builder = client.request(method.clone(), &url).header(reqwest::header::COOKIE, cookie);
+        let mut builder = client
+            .request(method.clone(), &url)
+            .header(reqwest::header::COOKIE, cookie);
         if let Some(body) = &request.body {
             builder = builder.json(body);
         }
-        let resp = builder.send().await.map_err(|e| format!("OmniRoute isn't answering: {e}"))?;
+        let resp = builder
+            .send()
+            .await
+            .map_err(|e| format!("OmniRoute isn't answering: {e}"))?;
         let status = resp.status().as_u16();
         if status == 401 && attempt == 0 {
             host.inner.lock().await.cookie = None;
@@ -294,7 +328,10 @@ pub async fn omniroute_api(host: State<'_, OmniRouteHost>, request: ApiRequest) 
 }
 
 #[tauri::command]
-pub async fn omniroute_set_password(host: State<'_, OmniRouteHost>, password: String) -> Result<(), String> {
+pub async fn omniroute_set_password(
+    host: State<'_, OmniRouteHost>,
+    password: String,
+) -> Result<(), String> {
     let mut inner = host.inner.lock().await;
     inner.password = Some(password);
     inner.cookie = None;

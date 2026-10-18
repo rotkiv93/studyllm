@@ -53,7 +53,7 @@ All five original phases are ✅ **done**. Current capabilities:
 | **OmniRoute mode** — the app downloads, starts, stops and manages OmniRoute (and the provider keys inside it); an either/or switch against your own provider keys | Done |
 | **Free-quota meter** — "N requests today" per provider in the Providers list and the Lab bar's model section, from `provider_usage`; soft bar against an optional manifest `dailyRequestLimit` (rough estimate, labelled as such), warning at ≥80%, cooldown countdown from `ProviderRouter.getCooldowns()`; refreshed after each send; day boundary is local midnight (`localDateKey`) | Done |
 | **Ollama provider** (issue #7) — `type: "ollama"` (`local`, `keyless`), `http://localhost:11434/v1`, no key; Providers panel shows whether Ollama is running + install link; installed models from `/api/tags`, tool badge from `/api/show` capabilities; sits in the normal failover order; Course module 8 task is now an auto-checked `ollamaConnected` | Done |
-| CI + release pipeline (unsigned installers, draft release) | Done by design |
+| CI + release pipeline (unsigned installers, draft release); PR checks: fmt/clippy, 3-OS build, Conventional Commit enforcement, security scans, Dependabot, auto-labels | Done by design — new checks not yet verified on GitHub or marked required |
 | Onboarding wizard, crash log, marketing site (ES/EN; covers Course, Lab bar, OmniRoute, Deep Research, Drive write tools, ranked Discover; screenshots retaken 2026-10-18 except `attachments.png`; library/RAG shots use demo documents) | Done |
 
 **Not started**: attachment phases 4–5 (images for vision models; OCR for scanned docs) — see
@@ -498,8 +498,31 @@ any future OAuth remote-HTTP server, even though Google no longer uses that path
 
 ## CI / release
 
-- `.github/workflows/ci.yml` (push/PR to `main`): lint, Vitest, `npm run build`, `cargo check
-  --all-targets`, `cargo test` (Ubuntu, with the webkit2gtk/appindicator deps Tauri needs to typecheck).
+- `.github/workflows/ci.yml` (push/PR to `main`, stale runs auto-cancelled): lint, Vitest, `npm run
+  build`; Rust `cargo fmt --all --check`, `cargo check --all-targets`, `cargo clippy --all-targets -- -D
+  warnings`, `cargo test` (Ubuntu, with the webkit2gtk/appindicator deps Tauri needs to typecheck); a
+  `tauri-build` matrix (Ubuntu/Windows/macOS, `tauri build --debug --no-bundle`) so OS-specific
+  breakage shows on the PR, not at tag time; `actionlint` over the workflow files.
+- `.github/workflows/pr-checks.yml`: PR title must be a Conventional Commit, every non-merge commit
+  subject must be one too (the changelog depends on it), and a non-failing warning when `src/` or
+  `src-tauri/src/` changed without `PROJECT_STATUS.md`.
+- `.github/workflows/security.yml` (PR, push to `main`, weekly): `npm audit --omit=dev
+  --audit-level=high`, `cargo audit`, dependency-review on PRs, CodeQL (JS/TS, Rust, Actions).
+  Known-accepted RustSec advisories go in `src-tauri/.cargo/audit.toml`, each with a reason: currently
+  `rmcp` RUSTSEC-2026-0189 (server-transport DNS rebinding; we only use the client; needs a 0.9→1.x
+  upgrade) and lockfile-only `rsa`/`rkyv` (sqlx's unused DB drivers). `zip` was bumped 2→9 (critical
+  `extract()` symlink/SUID advisories; used to unpack downloaded runtimes) and h2/quinn-proto/rustls
+  were patched. Unmaintained-crate warnings (GTK3/zbus via Tauri) don't fail the job.
+- `dependency-review` needs the repo's **Dependency graph** enabled (Settings → Security) — until it is,
+  that job fails with "not supported on this repository".
+- `.github/workflows/labeler.yml` + `.github/labeler.yml`: auto-labels PRs by path
+  (`frontend`/`rust`/`ci`/`docs`/`deps`). `.github/dependabot.yml`: weekly grouped npm/cargo/Actions
+  updates with `build`/`ci` Conventional Commit prefixes. `.github/pull_request_template.md` holds the
+  pre-merge checklist.
+- None of these are **required status checks** yet — that's a branch-protection setting on GitHub,
+  not something in the repo. Until it's set, a red check doesn't block a merge.
+- Remaining `npm audit` findings are moderate-only (`sprintf-js` via `mammoth`→`argparse`); the
+  only fix is a breaking downgrade of `mammoth`, so they're below the `high` gate.
 - `.github/workflows/release.yml` (on a `v*` tag or manual dispatch): matrix-builds installers via
   `tauri-apps/tauri-action` across macOS aarch64 + x86_64, Ubuntu 22.04 (older glibc = broader
   AppImage/deb compatibility), and Windows → publishes to a **draft** GitHub Release.

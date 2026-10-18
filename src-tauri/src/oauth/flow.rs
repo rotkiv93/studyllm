@@ -6,8 +6,8 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use base64::Engine as _;
 use rand::RngCore;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
@@ -63,10 +63,7 @@ pub async fn bind_loopback_listener() -> Result<(TcpListener, u16), String> {
     let listener = TcpListener::bind("127.0.0.1:0")
         .await
         .map_err(|e| format!("Couldn't start the local sign-in listener: {e}"))?;
-    let port = listener
-        .local_addr()
-        .map_err(|e| e.to_string())?
-        .port();
+    let port = listener.local_addr().map_err(|e| e.to_string())?.port();
     Ok((listener, port))
 }
 
@@ -139,7 +136,7 @@ fn parse_query(query: &str) -> HashMap<String, String> {
 /// testable against canned strings without a live socket.
 fn extract_query_params(request_line: &str) -> HashMap<String, String> {
     let path_and_query = request_line.split_whitespace().nth(1).unwrap_or("/");
-    let query = path_and_query.splitn(2, '?').nth(1).unwrap_or("");
+    let query = path_and_query.split_once('?').map_or("", |x| x.1);
     parse_query(query)
 }
 
@@ -262,7 +259,10 @@ mod tests {
     #[test]
     fn pkce_challenge_matches_rfc7636_vector() {
         let verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
-        assert_eq!(challenge_for(verifier), "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM");
+        assert_eq!(
+            challenge_for(verifier),
+            "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
+        );
     }
 
     #[test]
@@ -282,14 +282,17 @@ mod tests {
     #[test]
     fn extract_query_params_reads_error() {
         let params = extract_query_params("GET /callback?error=access_denied&state=xyz HTTP/1.1");
-        assert_eq!(params.get("error").map(String::as_str), Some("access_denied"));
+        assert_eq!(
+            params.get("error").map(String::as_str),
+            Some("access_denied")
+        );
     }
 
     #[test]
     fn extract_query_params_ignores_stray_requests() {
         let params = extract_query_params("GET /favicon.ico HTTP/1.1");
-        assert!(params.get("code").is_none());
-        assert!(params.get("error").is_none());
+        assert!(!params.contains_key("code"));
+        assert!(!params.contains_key("error"));
     }
 
     #[test]

@@ -3,9 +3,9 @@ use tauri_plugin_sql::{Migration, MigrationKind};
 pub fn migrations() -> Vec<Migration> {
     vec![
         Migration {
-        version: 1,
-        description: "create core tables",
-        sql: r#"
+            version: 1,
+            description: "create core tables",
+            sql: r#"
             CREATE TABLE conversations (
                 id TEXT PRIMARY KEY,
                 title TEXT NOT NULL DEFAULT 'New chat',
@@ -45,8 +45,8 @@ pub fn migrations() -> Vec<Migration> {
                 PRIMARY KEY (provider_id, date)
             );
         "#,
-        kind: MigrationKind::Up,
-    },
+            kind: MigrationKind::Up,
+        },
         Migration {
             version: 2,
             description: "create mcp_servers table",
@@ -154,7 +154,8 @@ pub fn migrations() -> Vec<Migration> {
         },
         Migration {
             version: 8,
-            description: "per-conversation chat lab: custom system prompt + decoding hyperparameters",
+            description:
+                "per-conversation chat lab: custom system prompt + decoding hyperparameters",
             sql: r#"
                 ALTER TABLE conversations ADD COLUMN system_prompt TEXT;
                 ALTER TABLE conversations ADD COLUMN temperature REAL;
@@ -178,7 +179,8 @@ pub fn migrations() -> Vec<Migration> {
         },
         Migration {
             version: 10,
-            description: "page-aware RAG chunks: page range per chunk (null for non-PDF / pre-migration)",
+            description:
+                "page-aware RAG chunks: page range per chunk (null for non-PDF / pre-migration)",
             sql: r#"
                 ALTER TABLE rag_chunks ADD COLUMN page_start INTEGER;
                 ALTER TABLE rag_chunks ADD COLUMN page_end INTEGER;

@@ -64,7 +64,11 @@ fn archive_root_name() -> Result<String, String> {
     if cfg!(windows) {
         Ok(format!("node-v{NODE_VERSION}-win-x64"))
     } else if cfg!(target_os = "macos") {
-        let arch = if cfg!(target_arch = "aarch64") { "arm64" } else { "x64" };
+        let arch = if cfg!(target_arch = "aarch64") {
+            "arm64"
+        } else {
+            "x64"
+        };
         Ok(format!("node-v{NODE_VERSION}-darwin-{arch}"))
     } else if cfg!(target_os = "linux") {
         Ok(format!("node-v{NODE_VERSION}-linux-x64"))
@@ -89,7 +93,9 @@ fn download_url() -> Result<String, String> {
     } else {
         format!("{root}.tar.gz")
     };
-    Ok(format!("https://nodejs.org/dist/v{NODE_VERSION}/{filename}"))
+    Ok(format!(
+        "https://nodejs.org/dist/v{NODE_VERSION}/{filename}"
+    ))
 }
 
 fn emit_log(app: &AppHandle, message: impl Into<String>) {
@@ -107,7 +113,11 @@ fn uv_archive_subdir() -> Result<Option<String>, String> {
     if cfg!(windows) {
         Ok(None)
     } else if cfg!(target_os = "macos") {
-        let arch = if cfg!(target_arch = "aarch64") { "aarch64" } else { "x86_64" };
+        let arch = if cfg!(target_arch = "aarch64") {
+            "aarch64"
+        } else {
+            "x86_64"
+        };
         Ok(Some(format!("uv-{arch}-apple-darwin")))
     } else if cfg!(target_os = "linux") {
         Ok(Some("uv-x86_64-unknown-linux-gnu".to_string()))
@@ -120,7 +130,11 @@ fn uv_download_filename() -> Result<String, String> {
     if cfg!(windows) {
         Ok("uv-x86_64-pc-windows-msvc.zip".to_string())
     } else if cfg!(target_os = "macos") {
-        let arch = if cfg!(target_arch = "aarch64") { "aarch64" } else { "x86_64" };
+        let arch = if cfg!(target_arch = "aarch64") {
+            "aarch64"
+        } else {
+            "x86_64"
+        };
         Ok(format!("uv-{arch}-apple-darwin.tar.gz"))
     } else if cfg!(target_os = "linux") {
         Ok("uv-x86_64-unknown-linux-gnu.tar.gz".to_string())
@@ -149,7 +163,10 @@ async fn download_and_extract_uv(app: &AppHandle) -> Result<PathBuf, String> {
 
     let response = reqwest::get(&url).await.map_err(|e| e.to_string())?;
     if !response.status().is_success() {
-        return Err(format!("Failed to download uv runtime: HTTP {}", response.status()));
+        return Err(format!(
+            "Failed to download uv runtime: HTTP {}",
+            response.status()
+        ));
     }
     let bytes = response.bytes().await.map_err(|e| e.to_string())?;
 

@@ -1,0 +1,37 @@
+version: 2
+
+# `build` prefix keeps Dependabot PR titles/commits valid Conventional Commits (see pr-checks.yml)
+# and files them under "Build" in the generated release notes.
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: build
+      include: scope
+    groups:
+      npm-minor-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: cargo
+    directory: /src-tauri
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: build
+      include: scope
+    groups:
+      cargo-minor-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci
+      include: scope
+    groups:
+      actions-minor-patch:
+        update-types: [minor, patch]

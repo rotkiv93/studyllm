@@ -1,0 +1,83 @@
+name: Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 6 * * 1' # weekly, so new advisories surface even without PR activity
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  npm-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: 'npm'
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: npm audit (production deps, high+)
+        run: npm audit --omit=dev --audit-level=high
+
+  cargo-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install cargo-audit
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+
+      # Advisories we knowingly accept (e.g. unmaintained GTK3 crates pulled in by Tauri on Linux)
+      # belong in src-tauri/.cargo/audit.toml with a comment each, not in a disabled job.
+      - name: cargo audit
+        working-directory: src-tauri
+        run: cargo audit
+
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+
+  codeql:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [javascript-typescript, actions, rust]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:${{ matrix.language }}

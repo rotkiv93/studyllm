@@ -22,7 +22,11 @@ fn format_timestamp() -> String {
     let secs = now.as_secs() as i64;
     let days = secs.div_euclid(86400);
     let time_of_day = secs.rem_euclid(86400);
-    let (h, min, s) = (time_of_day / 3600, (time_of_day / 60) % 60, time_of_day % 60);
+    let (h, min, s) = (
+        time_of_day / 3600,
+        (time_of_day / 60) % 60,
+        time_of_day % 60,
+    );
 
     let z = days + 719468;
     let era = if z >= 0 { z } else { z - 146096 } / 146097;

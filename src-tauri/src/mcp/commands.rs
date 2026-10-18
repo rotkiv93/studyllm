@@ -2,14 +2,19 @@ use std::collections::HashMap;
 
 use tauri::{AppHandle, Emitter, Manager, State};
 
-use crate::crashlog::CrashLog;
 use super::host::{McpCallOutcome, McpHost, McpToolInfo};
 use super::runtime;
+use crate::crashlog::CrashLog;
 
 pub(crate) fn emit_status(app: &AppHandle, id: &str, status: &str, message: Option<String>) {
     if status == "error" {
-        app.state::<CrashLog>()
-            .append(app, format!("mcp[{id}] failed to start: {}", message.as_deref().unwrap_or("unknown error")));
+        app.state::<CrashLog>().append(
+            app,
+            format!(
+                "mcp[{id}] failed to start: {}",
+                message.as_deref().unwrap_or("unknown error")
+            ),
+        );
     }
     let _ = app.emit(
         "mcp://server-status-changed",

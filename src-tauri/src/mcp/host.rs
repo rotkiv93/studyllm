@@ -2,18 +2,18 @@ use std::collections::HashMap;
 use std::process::Stdio;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use rmcp::RoleClient;
 use rmcp::model::{CallToolRequestParam, Content, RawContent, ResourceContents, Tool};
 use rmcp::service::{RunningService, ServiceExt};
 use rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig;
 use rmcp::transport::{ConfigureCommandExt, StreamableHttpClientTransport, TokioChildProcess};
+use rmcp::RoleClient;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 
+use super::google::NativeProvider;
 use crate::crashlog::CrashLog;
 use crate::credentials;
 use crate::oauth;
-use super::google::NativeProvider;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::Mutex;
@@ -44,9 +44,7 @@ pub enum RunningServer {
     /// In-process tool provider (currently just Gmail/Drive REST wrappers) — no live connection
     /// to hold open, so there's nothing for `cancel_connection` to tear down and nothing for the
     /// refresh loop to reconnect; a token refresh is just `NativeProvider::set_token`.
-    Native {
-        provider: NativeProvider,
-    },
+    Native { provider: NativeProvider },
 }
 
 impl RunningServer {
@@ -102,7 +100,10 @@ async fn run_oauth_refresh_loop(app: AppHandle, id: String, mut ctx: RefreshCont
     loop {
         let now = now_millis();
         let wake_at = (ctx.expires_at - REFRESH_MARGIN_MS).max(now + MIN_SLEEP_MS);
-        sleep(Duration::from_millis((wake_at - now).max(MIN_SLEEP_MS) as u64)).await;
+        sleep(Duration::from_millis(
+            (wake_at - now).max(MIN_SLEEP_MS) as u64
+        ))
+        .await;
 
         let refresh_token = match credentials::load(&ctx.refresh_ref) {
             Ok(Some(token)) => token,
@@ -138,7 +139,10 @@ async fn run_oauth_refresh_loop(app: AppHandle, id: String, mut ctx: RefreshCont
         }
 
         let host = app.state::<McpHost>();
-        if let Err(e) = host.update_native_token(&id, tokens.access_token.clone()).await {
+        if let Err(e) = host
+            .update_native_token(&id, tokens.access_token.clone())
+            .await
+        {
             super::commands::emit_status(&app, &id, "error", Some(e));
             host.clear_refresh_task_entry(&id).await;
             return;
@@ -168,7 +172,8 @@ impl From<&Tool> for McpToolInfo {
         McpToolInfo {
             name: t.name.to_string(),
             description: t.description.as_ref().map(|d| d.to_string()),
-            input_schema: serde_json::to_value(&*t.input_schema).unwrap_or_else(|_| serde_json::json!({})),
+            input_schema: serde_json::to_value(&*t.input_schema)
+                .unwrap_or_else(|_| serde_json::json!({})),
         }
     }
 }
@@ -178,14 +183,13 @@ impl From<&Tool> for McpToolInfo {
 fn spawn_stderr_forwarder(app: AppHandle, id: String, stderr: tokio::process::ChildStderr) {
     tokio::spawn(async move {
         let mut lines = BufReader::new(stderr).lines();
-        loop {
-            match lines.next_line().await {
-                Ok(Some(line)) => {
-                    app.state::<CrashLog>().append(&app, format!("mcp[{id}] {line}"));
-                    let _ = app.emit("mcp://server-log", serde_json::json!({ "id": id, "line": line }));
-                }
-                _ => break,
-            }
+        while let Ok(Some(line)) = lines.next_line().await {
+            app.state::<CrashLog>()
+                .append(&app, format!("mcp[{id}] {line}"));
+            let _ = app.emit(
+                "mcp://server-log",
+                serde_json::json!({ "id": id, "line": line }),
+            );
         }
     });
 }
@@ -316,7 +320,8 @@ impl McpHost {
             .list_tools(Default::default())
             .await
             .map_err(|e| e.to_string())?;
-        let tool_infos: Vec<McpToolInfo> = tools_result.tools.iter().map(McpToolInfo::from).collect();
+        let tool_infos: Vec<McpToolInfo> =
+            tools_result.tools.iter().map(McpToolInfo::from).collect();
 
         let mut running = self.running.lock().await;
         running.insert(

@@ -59,14 +59,19 @@ mod tests {
 
     #[test]
     fn validates_extension_and_absolute() {
-        assert!(validate_path("/tmp/a.md").is_ok());
-        assert!(validate_path("/tmp/a.PDF").is_ok());
-        assert!(validate_path("/tmp/a.sh").is_err());
+        // `/tmp/...` isn't absolute on Windows, so build the root per-OS.
+        let root = if cfg!(windows) { "C:\\tmp" } else { "/tmp" };
+        assert!(validate_path(&format!("{root}/a.md")).is_ok());
+        assert!(validate_path(&format!("{root}/a.PDF")).is_ok());
+        assert!(validate_path(&format!("{root}/a.sh")).is_err());
         assert!(validate_path("a.md").is_err());
     }
 
     #[test]
     fn decodes_path() {
-        assert_eq!(urlencoding_decode("%2Ftmp%2Fa%20b.md").unwrap(), "/tmp/a b.md");
+        assert_eq!(
+            urlencoding_decode("%2Ftmp%2Fa%20b.md").unwrap(),
+            "/tmp/a b.md"
+        );
     }
 }

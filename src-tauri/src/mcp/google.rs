@@ -16,10 +16,10 @@
 
 use std::sync::Arc;
 
-use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use base64::Engine as _;
 use reqwest::StatusCode;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use tokio::sync::RwLock;
 
 use super::host::{McpCallOutcome, McpToolInfo};
@@ -445,7 +445,10 @@ async fn gmail_search_messages(token: &str, args: Value) -> Result<McpCallOutcom
     let list_resp = client
         .get("https://gmail.googleapis.com/gmail/v1/users/me/messages")
         .bearer_auth(token)
-        .query(&[("q", query.as_str()), ("maxResults", &max_results.to_string())])
+        .query(&[
+            ("q", query.as_str()),
+            ("maxResults", &max_results.to_string()),
+        ])
         .send()
         .await
         .map_err(|e| format!("Couldn't reach Gmail: {e}"))?;
@@ -513,7 +516,10 @@ async fn gmail_search_messages(token: &str, args: Value) -> Result<McpCallOutcom
 /// base64url-decoding it. Pure/no network so it's directly unit-testable against canned
 /// `messages.get` JSON fixtures.
 fn extract_plain_text_body(payload: &Value) -> Option<String> {
-    let mime_type = payload.get("mimeType").and_then(|m| m.as_str()).unwrap_or("");
+    let mime_type = payload
+        .get("mimeType")
+        .and_then(|m| m.as_str())
+        .unwrap_or("");
     if mime_type.starts_with("text/plain") {
         if let Some(data) = payload
             .get("body")
@@ -577,7 +583,8 @@ async fn gmail_get_message(token: &str, args: Value) -> Result<McpCallOutcome, S
         .and_then(|h| h.as_array())
         .cloned()
         .unwrap_or_default();
-    let body = extract_plain_text_body(&payload).unwrap_or_else(|| "(no plain-text body found)".to_string());
+    let body = extract_plain_text_body(&payload)
+        .unwrap_or_else(|| "(no plain-text body found)".to_string());
 
     Ok(McpCallOutcome {
         is_error: false,
@@ -609,7 +616,10 @@ async fn gmail_search_threads(token: &str, args: Value) -> Result<McpCallOutcome
     let body = api_call!(
         reqwest::Method::GET,
         "https://gmail.googleapis.com/gmail/v1/users/me/threads",
-        &[("q", query.as_str()), ("maxResults", &max_results.to_string())],
+        &[
+            ("q", query.as_str()),
+            ("maxResults", &max_results.to_string())
+        ],
         None,
         token
     );
@@ -723,7 +733,9 @@ async fn gmail_modify_message_labels(token: &str, args: Value) -> Result<McpCall
                 .join(", ")
         })
         .unwrap_or_default();
-    ok_text(format!("Updated labels on message {message_id}. Now: {label_ids}"))
+    ok_text(format!(
+        "Updated labels on message {message_id}. Now: {label_ids}"
+    ))
 }
 
 async fn gmail_list_drafts(token: &str, args: Value) -> Result<McpCallOutcome, String> {
@@ -768,7 +780,10 @@ async fn gmail_create_draft(token: &str, args: Value) -> Result<McpCallOutcome, 
         Some(&json!({ "message": { "raw": raw } })),
         token
     );
-    ok_text(format!("Created draft (id: {}) to {to}.", str_field(&body, "id")))
+    ok_text(format!(
+        "Created draft (id: {}) to {to}.",
+        str_field(&body, "id")
+    ))
 }
 
 async fn gmail_send_message(token: &str, args: Value) -> Result<McpCallOutcome, String> {
@@ -940,8 +955,14 @@ async fn drive_create_file(token: &str, args: Value) -> Result<McpCallOutcome, S
     let resp = reqwest::Client::new()
         .post("https://www.googleapis.com/upload/drive/v3/files")
         .bearer_auth(token)
-        .query(&[("uploadType", "multipart"), ("fields", "id,name,webViewLink")])
-        .header("Content-Type", format!("multipart/related; boundary={boundary}"))
+        .query(&[
+            ("uploadType", "multipart"),
+            ("fields", "id,name,webViewLink"),
+        ])
+        .header(
+            "Content-Type",
+            format!("multipart/related; boundary={boundary}"),
+        )
         .body(body)
         .send()
         .await
@@ -949,9 +970,13 @@ async fn drive_create_file(token: &str, args: Value) -> Result<McpCallOutcome, S
     let status = resp.status();
     let text = resp.text().await.map_err(|e| e.to_string())?;
     if !status.is_success() {
-        return Ok(McpCallOutcome { is_error: true, text: describe_google_error(&text, status) });
+        return Ok(McpCallOutcome {
+            is_error: true,
+            text: describe_google_error(&text, status),
+        });
     }
-    let file: Value = serde_json::from_str(&text).map_err(|e| format!("Unexpected Drive response: {e}"))?;
+    let file: Value =
+        serde_json::from_str(&text).map_err(|e| format!("Unexpected Drive response: {e}"))?;
     ok_text(format!(
         "Created file '{}' (id: {}).
 {}",
@@ -966,7 +991,9 @@ async fn drive_update_file(token: &str, args: Value) -> Result<McpCallOutcome, S
     let content = get_str_arg(&args, "content")?;
     let mime = get_opt_str_arg(&args, "mime_type").unwrap_or_else(|| "text/plain".to_string());
     let resp = reqwest::Client::new()
-        .patch(format!("https://www.googleapis.com/upload/drive/v3/files/{file_id}"))
+        .patch(format!(
+            "https://www.googleapis.com/upload/drive/v3/files/{file_id}"
+        ))
         .bearer_auth(token)
         .query(&[("uploadType", "media"), ("fields", "id,name")])
         .header("Content-Type", format!("{mime}; charset=UTF-8"))
@@ -977,7 +1004,10 @@ async fn drive_update_file(token: &str, args: Value) -> Result<McpCallOutcome, S
     let status = resp.status();
     let text = resp.text().await.map_err(|e| e.to_string())?;
     if !status.is_success() {
-        return Ok(McpCallOutcome { is_error: true, text: describe_google_error(&text, status) });
+        return Ok(McpCallOutcome {
+            is_error: true,
+            text: describe_google_error(&text, status),
+        });
     }
     ok_text(format!("Updated file {file_id}."))
 }
@@ -1041,7 +1071,9 @@ async fn drive_search_files(token: &str, args: Value) -> Result<McpCallOutcome, 
                 f.get("id").and_then(|v| v.as_str()).unwrap_or("?"),
                 f.get("name").and_then(|v| v.as_str()).unwrap_or("?"),
                 f.get("mimeType").and_then(|v| v.as_str()).unwrap_or("?"),
-                f.get("modifiedTime").and_then(|v| v.as_str()).unwrap_or("?"),
+                f.get("modifiedTime")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("?"),
             )
         })
         .collect();
@@ -1071,7 +1103,9 @@ async fn drive_read_file(token: &str, args: Value) -> Result<McpCallOutcome, Str
     let client = reqwest::Client::new();
 
     let meta_resp = client
-        .get(format!("https://www.googleapis.com/drive/v3/files/{file_id}"))
+        .get(format!(
+            "https://www.googleapis.com/drive/v3/files/{file_id}"
+        ))
         .bearer_auth(token)
         .query(&[("fields", "id,name,mimeType")])
         .send()
@@ -1087,7 +1121,11 @@ async fn drive_read_file(token: &str, args: Value) -> Result<McpCallOutcome, Str
     }
     let meta: Value =
         serde_json::from_str(&meta_text).map_err(|e| format!("Unexpected Drive response: {e}"))?;
-    let mime_type = meta.get("mimeType").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let mime_type = meta
+        .get("mimeType")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
     let name = meta
         .get("name")
         .and_then(|v| v.as_str())
@@ -1105,7 +1143,9 @@ async fn drive_read_file(token: &str, args: Value) -> Result<McpCallOutcome, Str
             .await
     } else {
         client
-            .get(format!("https://www.googleapis.com/drive/v3/files/{file_id}"))
+            .get(format!(
+                "https://www.googleapis.com/drive/v3/files/{file_id}"
+            ))
             .bearer_auth(token)
             .query(&[("alt", "media")])
             .send()
@@ -1319,7 +1359,11 @@ fn build_event_body(args: &Value) -> Value {
     Value::Object(map)
 }
 
-async fn call_calendar_tool(token: &str, name: &str, args: Value) -> Result<McpCallOutcome, String> {
+async fn call_calendar_tool(
+    token: &str,
+    name: &str,
+    args: Value,
+) -> Result<McpCallOutcome, String> {
     match name {
         "calendar_list_calendars" => calendar_list_calendars(token, args).await,
         "calendar_list_events" => calendar_list_events(token, args).await,
@@ -1355,7 +1399,13 @@ async fn calendar_list_calendars(token: &str, _args: Value) -> Result<McpCallOut
     }
     let lines: Vec<String> = items
         .iter()
-        .map(|c| format!("id: {}\tname: {}", str_field(c, "id"), str_field(c, "summary")))
+        .map(|c| {
+            format!(
+                "id: {}\tname: {}",
+                str_field(c, "id"),
+                str_field(c, "summary")
+            )
+        })
         .collect();
     ok_text(lines.join("\n"))
 }
@@ -1375,7 +1425,9 @@ fn render_event_list(body: &Value) -> Result<McpCallOutcome, String> {
 
 async fn calendar_list_events(token: &str, args: Value) -> Result<McpCallOutcome, String> {
     let calendar_id = calendar_id_arg(&args);
-    let max_results = get_opt_u32_arg(&args, "max_results", 10).clamp(1, 50).to_string();
+    let max_results = get_opt_u32_arg(&args, "max_results", 10)
+        .clamp(1, 50)
+        .to_string();
     let mut query: Vec<(&str, String)> = vec![
         ("maxResults", max_results),
         ("singleEvents", "true".to_string()),
@@ -1401,7 +1453,9 @@ async fn calendar_list_events(token: &str, args: Value) -> Result<McpCallOutcome
 async fn calendar_search_events(token: &str, args: Value) -> Result<McpCallOutcome, String> {
     let query_text = get_str_arg(&args, "query")?;
     let calendar_id = calendar_id_arg(&args);
-    let max_results = get_opt_u32_arg(&args, "max_results", 10).clamp(1, 50).to_string();
+    let max_results = get_opt_u32_arg(&args, "max_results", 10)
+        .clamp(1, 50)
+        .to_string();
     let body = api_call!(
         reqwest::Method::GET,
         &format!("{CALENDAR_BASE}/calendars/{calendar_id}/events"),
@@ -1427,7 +1481,10 @@ async fn calendar_get_event(token: &str, args: Value) -> Result<McpCallOutcome, 
         None,
         token
     );
-    let description = body.get("description").and_then(|v| v.as_str()).unwrap_or("");
+    let description = body
+        .get("description")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
     let location = body.get("location").and_then(|v| v.as_str()).unwrap_or("");
     ok_text(format!(
         "{}\nlocation: {location}\ndescription: {description}",
@@ -1508,7 +1565,11 @@ async fn calendar_respond_to_event(token: &str, args: Value) -> Result<McpCallOu
         .unwrap_or_default();
     let mut found = false;
     for attendee in &mut attendees {
-        if attendee.get("self").and_then(|s| s.as_bool()).unwrap_or(false) {
+        if attendee
+            .get("self")
+            .and_then(|s| s.as_bool())
+            .unwrap_or(false)
+        {
             if let Some(obj) = attendee.as_object_mut() {
                 obj.insert("responseStatus".into(), json!(response));
                 found = true;
@@ -1548,7 +1609,8 @@ fn tasks_tools() -> Vec<McpToolInfo> {
         McpToolInfo {
             name: "tasks_list_tasks".to_string(),
             description: Some(
-                "List the tasks in a task list, returning id/title/status/due for each.".to_string(),
+                "List the tasks in a task list, returning id/title/status/due for each."
+                    .to_string(),
             ),
             input_schema: json!({
                 "type": "object",
@@ -1639,7 +1701,13 @@ async fn tasks_list_tasklists(token: &str, _args: Value) -> Result<McpCallOutcom
     }
     let lines: Vec<String> = items
         .iter()
-        .map(|l| format!("id: {}\ttitle: {}", str_field(l, "id"), str_field(l, "title")))
+        .map(|l| {
+            format!(
+                "id: {}\ttitle: {}",
+                str_field(l, "id"),
+                str_field(l, "title")
+            )
+        })
         .collect();
     ok_text(lines.join("\n"))
 }
@@ -1679,7 +1747,12 @@ async fn tasks_list_tasks(token: &str, args: Value) -> Result<McpCallOutcome, St
 /// Shared `{title, notes, due, status}` body builder for create/update — only present keys emitted.
 fn build_task_body(args: &Value) -> Value {
     let mut map = serde_json::Map::new();
-    for (arg_key, field) in [("title", "title"), ("notes", "notes"), ("due", "due"), ("status", "status")] {
+    for (arg_key, field) in [
+        ("title", "title"),
+        ("notes", "notes"),
+        ("due", "due"),
+        ("status", "status"),
+    ] {
         if let Some(v) = get_opt_str_arg(args, arg_key) {
             map.insert(field.into(), json!(v));
         }
@@ -1894,8 +1967,13 @@ async fn sheets_append_row(token: &str, args: Value) -> Result<McpCallOutcome, S
     let range = get_opt_str_arg(&args, "range").unwrap_or_else(|| "Sheet1".to_string());
     let body = api_call!(
         reqwest::Method::POST,
-        &format!("https://sheets.googleapis.com/v4/spreadsheets/{spreadsheet_id}/values/{range}:append"),
-        &[("valueInputOption", "USER_ENTERED"), ("insertDataOption", "INSERT_ROWS")],
+        &format!(
+            "https://sheets.googleapis.com/v4/spreadsheets/{spreadsheet_id}/values/{range}:append"
+        ),
+        &[
+            ("valueInputOption", "USER_ENTERED"),
+            ("insertDataOption", "INSERT_ROWS")
+        ],
         Some(&json!({ "values": [values] })),
         token
     );
@@ -1937,7 +2015,10 @@ mod tests {
     fn event_body_only_includes_present_fields_and_nests_times() {
         let args = json!({ "summary": "Standup", "start": "2026-07-20T09:00:00-07:00" });
         let body = build_event_body(&args);
-        assert_eq!(body.get("summary").and_then(|v| v.as_str()), Some("Standup"));
+        assert_eq!(
+            body.get("summary").and_then(|v| v.as_str()),
+            Some("Standup")
+        );
         assert_eq!(
             body.pointer("/start/dateTime").and_then(|v| v.as_str()),
             Some("2026-07-20T09:00:00-07:00")
@@ -1970,7 +2051,10 @@ mod tests {
         let args = json!({ "title": "Buy milk", "status": "completed" });
         let body = build_task_body(&args);
         assert_eq!(body.get("title").and_then(|v| v.as_str()), Some("Buy milk"));
-        assert_eq!(body.get("status").and_then(|v| v.as_str()), Some("completed"));
+        assert_eq!(
+            body.get("status").and_then(|v| v.as_str()),
+            Some("completed")
+        );
         assert!(body.get("notes").is_none());
         assert!(body.get("due").is_none());
     }
@@ -1978,7 +2062,10 @@ mod tests {
     #[test]
     fn str_array_arg_extracts_strings_and_defaults_empty() {
         let args = json!({ "add_label_ids": ["INBOX", "STARRED"] });
-        assert_eq!(get_str_array_arg(&args, "add_label_ids"), vec!["INBOX", "STARRED"]);
+        assert_eq!(
+            get_str_array_arg(&args, "add_label_ids"),
+            vec!["INBOX", "STARRED"]
+        );
         assert!(get_str_array_arg(&args, "missing").is_empty());
     }
 
@@ -1992,7 +2079,10 @@ mod tests {
 
     #[test]
     fn event_time_prefers_datetime_then_date() {
-        assert_eq!(event_time(&json!({ "dateTime": "2026-07-20T09:00:00Z" })), "2026-07-20T09:00:00Z");
+        assert_eq!(
+            event_time(&json!({ "dateTime": "2026-07-20T09:00:00Z" })),
+            "2026-07-20T09:00:00Z"
+        );
         assert_eq!(event_time(&json!({ "date": "2026-07-20" })), "2026-07-20");
         assert_eq!(event_time(&json!({})), "?");
     }
@@ -2004,7 +2094,10 @@ mod tests {
             "mimeType": "text/plain",
             "body": { "data": data }
         });
-        assert_eq!(extract_plain_text_body(&payload).as_deref(), Some("hello world"));
+        assert_eq!(
+            extract_plain_text_body(&payload).as_deref(),
+            Some("hello world")
+        );
     }
 
     #[test]
@@ -2018,7 +2111,10 @@ mod tests {
                 { "mimeType": "text/plain", "body": { "data": plain } }
             ]
         });
-        assert_eq!(extract_plain_text_body(&payload).as_deref(), Some("plain body"));
+        assert_eq!(
+            extract_plain_text_body(&payload).as_deref(),
+            Some("plain body")
+        );
     }
 
     #[test]
@@ -2036,7 +2132,10 @@ mod tests {
                 { "mimeType": "application/pdf", "filename": "att.pdf" }
             ]
         });
-        assert_eq!(extract_plain_text_body(&payload).as_deref(), Some("nested body"));
+        assert_eq!(
+            extract_plain_text_body(&payload).as_deref(),
+            Some("nested body")
+        );
     }
 
     #[test]
@@ -2052,7 +2151,9 @@ mod tests {
     #[test]
     fn native_google_doc_types_are_detected() {
         assert!(is_google_native_doc("application/vnd.google-apps.document"));
-        assert!(is_google_native_doc("application/vnd.google-apps.spreadsheet"));
+        assert!(is_google_native_doc(
+            "application/vnd.google-apps.spreadsheet"
+        ));
         assert!(!is_google_native_doc("application/pdf"));
         assert!(!is_google_native_doc("text/plain"));
     }
@@ -2071,8 +2172,9 @@ mod tests {
 
     #[test]
     fn extracts_google_error_message_from_error_envelope() {
-        let body = json!({ "error": { "code": 403, "message": "The caller does not have permission" } })
-            .to_string();
+        let body =
+            json!({ "error": { "code": 403, "message": "The caller does not have permission" } })
+                .to_string();
         assert_eq!(
             extract_google_error_message(&body).as_deref(),
             Some("The caller does not have permission")
