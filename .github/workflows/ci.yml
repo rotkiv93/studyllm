@@ -1,8 +1,8 @@
 name: CI
 
+# PR only: main only ever receives PRs that already passed these checks, so re-running them on the
+# merge commit (and on the bot-made release PR merge) just burns minutes.
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
 
@@ -62,10 +62,6 @@ jobs:
         working-directory: src-tauri
         run: cargo fmt --all --check
 
-      - name: cargo check
-        working-directory: src-tauri
-        run: cargo check --all-targets
-
       - name: cargo clippy
         working-directory: src-tauri
         run: cargo clippy --all-targets -- -D warnings
@@ -81,7 +77,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: [ubuntu-22.04, windows-latest, macos-latest]
+        # Linux is already compiled by rust-check (clippy) and again at release time.
+        platform: [windows-latest, macos-latest]
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v7
@@ -99,12 +96,6 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri -> target
-
-      - name: Install system dependencies (Ubuntu only)
-        if: matrix.platform == 'ubuntu-22.04'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf build-essential curl wget file libxdo-dev libssl-dev
 
       - name: Install frontend dependencies
         run: npm ci
