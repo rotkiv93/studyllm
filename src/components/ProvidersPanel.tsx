@@ -8,6 +8,7 @@ import {
   type ProviderType,
 } from "../lib/providers";
 import {
+  clearOllamaCapsCache,
   fetchProviderModels,
   pickBestModel,
   providerModelsNeedApiKey,
@@ -249,6 +250,8 @@ function LocalStatus({ type }: { type: ProviderType }) {
     status: "checking",
   });
   const [nonce, setNonce] = useState(0);
+  // The CORS hint is only worth showing once a second look still finds nothing.
+  const [rechecked, setRechecked] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -274,12 +277,19 @@ function LocalStatus({ type }: { type: ProviderType }) {
           </a>
         </>
       )}{" "}
-      <button type="button" className="btn btn-ghost btn-sm" onClick={() => {
+      <button
+        type="button"
+        className="btn btn-ghost btn-sm"
+        onClick={() => {
+          clearOllamaCapsCache();
+          setRechecked(true);
           setState({ status: "checking" });
           setNonce((n) => n + 1);
-        }}>
+        }}
+      >
         {t("ollama.recheck")}
       </button>
+      {state.status === "down" && rechecked && <> {t("ollama.originsHint")}</>}
     </p>
   );
 }

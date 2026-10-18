@@ -152,14 +152,19 @@ const MODELS_SOURCE: Partial<Record<ProviderType, ModelsSource>> = {
   },
 };
 
-/**
- * Asks a running Ollama what a model can do (`/api/show` → `capabilities`, e.g. ["completion",
- * "tools"]). Local and exact, so it beats the catalog; undefined when the answer isn't there.
- */
 const OLLAMA_CAPS_CACHE = new Map<string, boolean>();
 /** Models beyond this many get no badge instead of one more request each. */
 const OLLAMA_SHOW_LIMIT = 50;
 
+/** Forgets cached `/api/show` answers — on an explicit "Check again", or between tests. */
+export function clearOllamaCapsCache(): void {
+  OLLAMA_CAPS_CACHE.clear();
+}
+
+/**
+ * Asks a running Ollama what a model can do (`/api/show` → `capabilities`, e.g. ["completion",
+ * "tools"]). Local and exact, so it beats the catalog; undefined when the answer isn't there.
+ */
 async function ollamaSupportsTools(root: string, model: string): Promise<boolean | undefined> {
   const cacheKey = `${root}|${model}`;
   const cached = OLLAMA_CAPS_CACHE.get(cacheKey);

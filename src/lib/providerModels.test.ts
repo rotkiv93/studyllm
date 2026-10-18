@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Isolate these tests from the external models.dev catalog — capability here should come
 // only from each provider's own /models metadata (or stay undefined).
@@ -8,6 +8,7 @@ vi.mock("./modelCatalog", () => ({
 }));
 
 import {
+  clearOllamaCapsCache,
   fetchProviderModels,
   pickBestModel,
   providerModelsNeedApiKey,
@@ -216,5 +217,53 @@ describe("pickBestModel", () => {
   it("falls back to the manifest default for an empty or null list", () => {
     expect(pickBestModel("groq", [])).toBe(PROVIDER_MANIFEST.groq.defaultModel);
     expect(pickBestModel("groq", null)).toBe(PROVIDER_MANIFEST.groq.defaultModel);
+  });
+});
+
+describe("Ollama listing hardening", () => {
+  function ollamaFetch(names: string[], caps: string[] = ["completion", "tools"]) {
+    const spy = vi.fn().mockImplementation(async (url: string) => ({
+      ok: true,
+      json: async () => (url.endsWith("/api/tags") ? { models: names.map((name) => ({ name })) } : { capabilities: caps }),
+    }));
+    vi.stubGlobal("fetch", spy);
+    return spy;
+  }
+  const showCalls = (spy: ReturnType<typeof vi.fn>) => spy.mock.calls.filter(([u]) => String(u).endsWith("/api/show"));
+
+  beforeEach(() => clearOllamaCapsCache());
+
+  it("never sends Authorization to Ollama, even with the placeholder key", async () => {
+    const spy = ollamaFetch(["llama3.2:latest"]);
+    await fetchProviderModels("ollama", "local", "http://localhost:11434/v1");
+    expect(spy.mock.calls[0][1]).toEqual({ headers: {} });
+  });
+
+  it("asks /api/show once per model until the cache is cleared", async () => {
+    const spy = ollamaFetch(["llama3.2:latest"]);
+    await fetchProviderModels("ollama", "", "http://localhost:11434/v1");
+    await fetchProviderModels("ollama", "", "http://localhost:11434/v1");
+    expect(showCalls(spy)).toHaveLength(1);
+    clearOllamaCapsCache();
+    await fetchProviderModels("ollama", "", "http://localhost:11434/v1");
+    expect(showCalls(spy)).toHaveLength(2);
+  });
+
+  it("only asks /api/show for the first 50 models and leaves the rest unbadged", async () => {
+    const names = Array.from({ length: 60 }, (_, i) => `m${String(i).padStart(2, "0")}:latest`);
+    const spy = ollamaFetch(names);
+    const result = await fetchProviderModels("ollama", "", "http://localhost:11434/v1");
+    expect(showCalls(spy)).toHaveLength(50);
+    expect(result).toHaveLength(60);
+    expect(result!.filter((m) => m.supportsTools === undefined)).toHaveLength(10);
+  });
+
+  it("prefers an installed model that can use tools over one that can't", () => {
+    expect(
+      pickBestModel("ollama", [
+        { id: "gemma:2b", supportsTools: false },
+        { id: "phi3:mini", supportsTools: undefined },
+      ]),
+    ).toBe("phi3:mini");
   });
 });
