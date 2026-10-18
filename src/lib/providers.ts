@@ -49,6 +49,8 @@ export interface ProviderManifestEntry {
    * English source text — the UI renders the localized version via `freeTierNoteKey(type)`.
    */
   freeTierNote: string;
+  /** Rough free-tier requests per day, when one is known. An estimate (limits drift) that only drives the usage meter. */
+  dailyRequestLimit?: number;
   /** When true, hidden from the add/onboarding pickers but still renders for already-saved rows. */
   deprecated?: boolean;
   /**
@@ -77,6 +79,7 @@ export const PROVIDER_MANIFEST: Record<ProviderType, ProviderManifestEntry> = {
     suggestedModels: ["gemini-2.5-flash", "gemini-2.5-flash-lite"],
     recommended: true,
     freeTierNote: "~1,500 req/day · native tool calling",
+    dailyRequestLimit: 1500,
   },
   mistral: {
     type: "mistral",
@@ -99,6 +102,7 @@ export const PROVIDER_MANIFEST: Record<ProviderType, ProviderManifestEntry> = {
     suggestedModels: ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"],
     recommended: false,
     freeTierNote: "very fast · low daily quota",
+    dailyRequestLimit: 1000,
   },
   nvidia: {
     type: "nvidia",
@@ -154,6 +158,7 @@ export const PROVIDER_MANIFEST: Record<ProviderType, ProviderManifestEntry> = {
     suggestedModels: ["openai/gpt-4o-mini", "meta/Llama-3.3-70B-Instruct"],
     recommended: false,
     freeTierNote: "low daily quota",
+    dailyRequestLimit: 150,
   },
   sambanova: {
     type: "sambanova",

@@ -47,9 +47,11 @@ All five original phases are ✅ **done**. Current capabilities:
 | Chat export (clipboard Markdown, Google Doc, **Save as `.md` / `.docx` / PDF** via the native save dialog, with an "answers only" toggle), file attachments (text/PDF/docx) | Done |
 | RAG "chat with your documents" | Done |
 | Deep Research (system-prompt + step-budget layer over the tool loop) | Done |
+| **Practice quiz** — Library "Quiz" tab (also a button per document): N multiple-choice / short-answer questions from a document's passages, immediate feedback, score, review of missed ones, attempt history | Done (not yet run in the app) |
 | **Course** — 11 interactive modules: each lesson is one flow of visual blocks, annotated screenshots of the app and task cards that *are* the exercise (embedded chats, setup forms, calculators, quizzes); progress persists; replaced the old Explore panel | Done |
 | **Lab bar** — always-visible right-hand bar (minimized rail ⇄ expanded) laid out like Google AI Studio's run settings: provider + model pickers, system instructions, temperature slider, tools, advanced; replaced the in-composer Chat Lab and mode chips | Done |
 | **OmniRoute mode** — the app downloads, starts, stops and manages OmniRoute (and the provider keys inside it); an either/or switch against your own provider keys | Done |
+| **Free-quota meter** — "N requests today" per provider in the Providers list and the Lab bar's model section, from `provider_usage`; soft bar against an optional manifest `dailyRequestLimit` (rough estimate, labelled as such), warning at ≥80%, cooldown countdown from `ProviderRouter.getCooldowns()`; refreshed after each send; day boundary is local midnight (`localDateKey`) | Done |
 | **Ollama provider** (issue #7) — `type: "ollama"` (`local`, `keyless`), `http://localhost:11434/v1`, no key; Providers panel shows whether Ollama is running + install link; installed models from `/api/tags`, tool badge from `/api/show` capabilities; sits in the normal failover order; Course module 8 task is now an auto-checked `ollamaConnected` | Done |
 | CI + release pipeline (unsigned installers, draft release); PR checks: fmt/clippy, 3-OS build, Conventional Commit enforcement, security scans, Dependabot, auto-labels | Done by design — new checks not yet verified on GitHub or marked required |
 | Onboarding wizard, crash log, marketing site (ES/EN; covers Course, Lab bar, OmniRoute, Deep Research, Drive write tools, ranked Discover; screenshots retaken 2026-10-18 except `attachments.png`; library/RAG shots use demo documents) | Done |
@@ -183,7 +185,15 @@ Migration **v7** adds `rag_documents` + `rag_chunks` (embeddings as JSON `TEXT` 
 vector type). Pipeline: `parseAttachment` → `chunkText` (~1000 chars, ~150 overlap) → `embedTexts` →
 store; `retrieve()` embeds the query, ranks by cosine **in TypeScript** over every chunk, takes
 top-k; `buildRagSystemBlock` injects the grounding directive (answer only from passages, cite
-`[DocName #seq]`, admit gaps) via the router's `system` param.
+`[DocName p.12]` / `p.12–13` when a page is known, else `[DocName #seq]`; admit gaps) via the router's
+`system` param.
+
+**Page-aware PDFs (migration v10, nullable `page_start`/`page_end` on `rag_chunks`).** `parseAttachment`
+returns per-page `PageSpan`s for PDFs; `chunkText({ pages })` tags each chunk with the pages it touches
+(overlap tails inherit the previous chunk's last page; hard-split windows are exact). docx/txt and chunks
+indexed before v10 stay null and cite `#seq`. `chunkTag`/`formatPages` (rag.ts) feed the system block, the
+Retrieved-sources card, the retrieval passage dialog and the Library passage list; a PDF with no page data
+shows a "remove and add again (re-index)" hint — there is no in-place re-index since the original file isn't stored.
 
 `retrieveExplained()` is the explorer's variant — keeps the full scored list + query/chunk vectors
 that `retrieve()` discards. `retrieve()` itself is untouched by it.
@@ -206,6 +216,19 @@ documents are capped at `LIBRARY_MAX_CHARS` (300 000 chars) each — much higher
 attachment, with a notice when a file is cut. Lib code reports student-facing failures through
 `LocalizedError` (`lib/localizedError.ts`, `errorText(t, err, fallback)`) and `resolveEmbedder` returns an
 `errorKey`, so none of those messages is hardcoded English any more.
+
+### Practice quiz (`lib/quiz.ts`, `components/QuizPanel.tsx`)
+
+Tab inside the Library. `selectPassages` spreads up to 8 passages evenly over the chosen document (or, with an
+optional topic, ranks them with `retrieve()` and keeps that document's hits); the model gets them numbered and an
+"ONLY from these passages" directive and returns a tiny JSON schema (`{questions:[{type,question,options,answer,
+explanation,passage}]}`). `parseQuiz` tolerates code fences / chatter / a bare array and drops invalid questions;
+every question keeps its `passage` number, shown as a collapsible source after answering. Short answers are graded
+by the model against that passage (`buildGradePrompt`/`parseGrade`, labelled "Graded by the AI"). The model call is
+`askModel` in `App.tsx` (failover router, no persistence). Attempts persist in `quiz_attempts` (**migration v11**,
+`insertQuizAttempt`/`listQuizAttempts`). Prompts stay English. **No flashcards feature exists**, so "send missed to
+flashcards" is not done. Verified by typecheck, lint, build and `quiz.test.ts`; `cargo check` and the running app
+were not available in the environment that wrote it.
 
 ### UI shell
 

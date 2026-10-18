@@ -14,6 +14,7 @@ import {
 import { RESEARCH_MODES, researchModeKeys, type ResearchMode } from "../lib/researchModes";
 import { estimateTokenCount } from "../lib/tokenize";
 import type { ProviderRow } from "../lib/db";
+import { QuotaMeter, type QuotaSnapshot } from "./QuotaMeter";
 import { useT, type MessageKey } from "../lib/i18n";
 
 /**
@@ -97,6 +98,7 @@ export interface PlaygroundPanelProps {
   settings: ChatSettings;
   onChange: (next: ChatSettings) => void;
   providers: ProviderRow[];
+  quota: QuotaSnapshot;
   /** The provider (and model) pinned for this chat; a null provider means automatic, in list order. */
   target: { providerId: string | null; model: string | null };
   onTarget: (next: { providerId: string | null; model: string | null }) => void;
@@ -275,11 +277,13 @@ function SliderField({
  */
 function ModelPicker({
   providers,
+  quota,
   target,
   onTarget,
   loadModels,
 }: {
   providers: ProviderRow[];
+  quota: QuotaSnapshot;
   target: { providerId: string | null; model: string | null };
   onTarget: (next: { providerId: string | null; model: string | null }) => void;
   loadModels: (providerId: string) => Promise<string[] | null>;
@@ -361,6 +365,9 @@ function ModelPicker({
           </span>
         )}
       </div>
+      {active && active.type !== "omniroute" && (
+        <QuotaMeter type={active.type} requests={quota.requests[active.id] ?? 0} cooldownUntil={quota.cooldowns[active.id]} />
+      )}
       {active?.type === "omniroute" && <span className="play-pill">{t("lab.usingOmni")}</span>}
     </div>
   );
@@ -372,6 +379,7 @@ export function PlaygroundPanel({
   settings,
   onChange,
   providers,
+  quota,
   target,
   onTarget,
   loadModels,
@@ -457,7 +465,7 @@ export function PlaygroundPanel({
       </header>
 
       <div className="play-body">
-        <ModelPicker providers={providers} target={target} onTarget={onTarget} loadModels={loadModels} />
+        <ModelPicker providers={providers} quota={quota} target={target} onTarget={onTarget} loadModels={loadModels} />
 
         <Section title={t("lab.system")}>
           <div className="play-inline">

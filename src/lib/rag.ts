@@ -93,7 +93,7 @@ export async function ingestDocument(
   embedder: ResolvedEmbedder,
 ): Promise<{ doc: RagDocumentRow; truncated: boolean }> {
   const parsed = await parseAttachment(file, LIBRARY_MAX_CHARS);
-  const chunks = chunkText(parsed.text);
+  const chunks = chunkText(parsed.text, { pages: parsed.pages });
   if (chunks.length === 0) {
     throw new LocalizedError(`"${file.name}" had no usable text to index.`, "error.noReadableText", { name: file.name });
   }
@@ -117,6 +117,8 @@ export async function ingestDocument(
     seq: c.seq,
     text: c.text,
     embedding: JSON.stringify(vectors[i] ?? []),
+    page_start: c.pageStart ?? null,
+    page_end: c.pageEnd ?? null,
     created_at: now,
   }));
   await insertRagDocument(doc);
@@ -130,6 +132,8 @@ export interface LibraryChunk {
   documentId: string;
   documentName: string;
   seq: number;
+  pageStart: number | null;
+  pageEnd: number | null;
   text: string;
   vector: number[];
 }
@@ -149,6 +153,8 @@ export async function loadLibraryChunks(): Promise<LibraryChunk[]> {
       documentId: row.document_id,
       documentName: row.document_name,
       seq: row.seq,
+      pageStart: row.page_start,
+      pageEnd: row.page_end,
       text: row.text,
       vector,
     };
@@ -158,6 +164,8 @@ export async function loadLibraryChunks(): Promise<LibraryChunk[]> {
 export interface RetrievedChunk {
   documentName: string;
   seq: number;
+  pageStart: number | null;
+  pageEnd: number | null;
   text: string;
   score: number;
 }
@@ -181,6 +189,8 @@ export async function retrieve(
     return {
       documentName: row.document_name,
       seq: row.seq,
+      pageStart: row.page_start,
+      pageEnd: row.page_end,
       text: row.text,
       score: cosineSimilarity(queryVec, vec),
     };
@@ -227,6 +237,8 @@ export async function retrieveExplained(
     return {
       documentName: row.document_name,
       seq: row.seq,
+      pageStart: row.page_start,
+      pageEnd: row.page_end,
       text: row.text,
       score: cosineSimilarity(queryVec, vec),
       vector: vec,
@@ -236,19 +248,31 @@ export async function retrieveExplained(
   return { queryVector: queryVec, k, scored };
 }
 
+/** `p.12` / `p.12–13`, or null when the chunk has no page (non-PDF or indexed before pages). */
+export function formatPages(pageStart: number | null, pageEnd: number | null): string | null {
+  if (pageStart == null) return null;
+  return pageEnd != null && pageEnd !== pageStart ? `p.${pageStart}–${pageEnd}` : `p.${pageStart}`;
+}
+
+/** The citation tag for a passage: `[Doc p.12]` when a page is known, else `[Doc #seq]`. */
+export function chunkTag(c: Pick<RetrievedChunk, "documentName" | "seq" | "pageStart" | "pageEnd">): string {
+  return `${c.documentName} ${formatPages(c.pageStart, c.pageEnd) ?? `#${c.seq}`}`;
+}
+
 /**
  * Build the grounding system block fed to the model. It instructs the model to answer only from the
- * retrieved passages and to cite them as `[DocName #seq]`, so the answer is traceable to the
+ * retrieved passages and to cite them as `[DocName p.12]` (page known) or `[DocName #seq]`, so the answer is traceable to the
  * student's own sources (and honestly admits when the library doesn't cover the question).
  */
 export function buildRagSystemBlock(chunks: RetrievedChunk[]): string {
   const passages = chunks
-    .map((c) => `[${c.documentName} #${c.seq}]\n${c.text}`)
+    .map((c) => `[${chunkTag(c)}]\n${c.text}`)
     .join("\n\n");
   return (
     "You are answering using the student's personal document library (retrieval-augmented). " +
-    "Use ONLY the passages below to answer. Cite every claim with its source tag like " +
-    "[DocName #seq]. If the passages do not contain the answer, say so plainly instead of guessing.\n\n" +
+    "Use ONLY the passages below to answer. Cite every claim with its source tag, copied exactly as shown above each passage, " +
+    "e.g. [DocName p.12] (or [DocName p.12–13] across a page break), " +
+    "or [DocName #seq] when no page is given. If the passages do not contain the answer, say so plainly instead of guessing.\n\n" +
     "=== Retrieved passages ===\n" +
     passages
   );

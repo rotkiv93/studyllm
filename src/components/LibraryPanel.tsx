@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { IconBook, IconTrash, IconLoader, IconPaperclip } from "./icons";
+import { QuizPanel } from "./QuizPanel";
 import { Fingerprint } from "./viz/Fingerprint";
 import { LibraryMap } from "./viz/LibraryMap";
-import { loadLibraryChunks, type LibraryChunk } from "../lib/rag";
+import { formatPages, loadLibraryChunks, type LibraryChunk } from "../lib/rag";
 import { snippet } from "../lib/ragInsights";
 import { EMBEDDING_CAPABLE, type EmbeddingConfig } from "../lib/embeddings";
 import { SUPPORTED_ATTACHMENT_HINT } from "../lib/attachments";
@@ -15,6 +16,7 @@ import { useEscapeClose } from "../lib/useEscapeClose";
  * (`settings-overlay` > `settings-panel`, `.settings-header`, `.settings-hint`, `.mcp-tabs`):
  *   • Documents — add files (parsed + chunked + embedded by the caller), open one to read its
  *     passages and see each passage's embedding "fingerprint", remove.
+ *   • Quiz      — practice questions generated from a document, graded with feedback (QuizPanel).
  *   • Map       — every passage of every document plotted by meaning (PCA), coloured by document.
  *   • Settings  — choose which configured provider + model to embed with.
  *
@@ -22,7 +24,7 @@ import { useEscapeClose } from "../lib/useEscapeClose";
  * which owns the providers list, the keychain, and the DB.
  */
 
-type Tab = "documents" | "map" | "settings";
+type Tab = "documents" | "quiz" | "map" | "settings";
 
 interface LibraryPanelProps {
   documents: RagDocumentRow[];
@@ -31,6 +33,8 @@ interface LibraryPanelProps {
   onSaveEmbeddingConfig: (config: EmbeddingConfig) => void;
   onAddFiles: (files: File[]) => Promise<void>;
   onDeleteDocument: (id: string) => Promise<void>;
+  /** One non-streaming model call (for the practice quiz). */
+  onAsk: (system: string, user: string, signal: AbortSignal) => Promise<string>;
   /** True while a file is being ingested (parse → chunk → embed). */
   busy: boolean;
   error: string | null;
@@ -44,6 +48,7 @@ export function LibraryPanel({
   onSaveEmbeddingConfig,
   onAddFiles,
   onDeleteDocument,
+  onAsk,
   busy,
   error,
   onClose,
@@ -51,6 +56,7 @@ export function LibraryPanel({
   const t = useT();
   useEscapeClose(onClose);
   const [tab, setTab] = useState<Tab>("documents");
+  const [quizDocId, setQuizDocId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Configured providers whose endpoint can serve embeddings.
@@ -97,6 +103,15 @@ export function LibraryPanel({
             onClick={() => setTab("documents")}
           >
             {t("library.tab.documents")}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === "quiz"}
+            className={`mcp-tab-btn${tab === "quiz" ? " mcp-tab-btn-active" : ""}`}
+            onClick={() => setTab("quiz")}
+          >
+            {t("library.tab.quiz")}
           </button>
           <button
             type="button"
@@ -172,6 +187,10 @@ export function LibraryPanel({
                       doc={d}
                       chunks={chunks?.filter((c) => c.documentId === d.id) ?? null}
                       busy={busy}
+                      onQuiz={() => {
+                        setQuizDocId(d.id);
+                        setTab("quiz");
+                      }}
                       onDelete={() => void onDeleteDocument(d.id)}
                     />
                   ))}
@@ -179,6 +198,14 @@ export function LibraryPanel({
               </>
             )}
           </>
+        ) : tab === "quiz" ? (
+          <QuizPanel
+            documents={documents}
+            providers={providers}
+            chunks={chunks}
+            initialDocumentId={quizDocId}
+            onAsk={onAsk}
+          />
         ) : tab === "map" ? (
           documents.length === 0 ? (
             <p className="settings-hint library-empty">{t("library.mapEmpty")}</p>
@@ -213,11 +240,13 @@ function LibraryDocument({
   doc,
   chunks,
   busy,
+  onQuiz,
   onDelete,
 }: {
   doc: RagDocumentRow;
   chunks: LibraryChunk[] | null;
   busy: boolean;
+  onQuiz: () => void;
   onDelete: () => void;
 }) {
   const t = useT();
@@ -225,6 +254,8 @@ function LibraryDocument({
   const [expanded, setExpanded] = useState<string | null>(null);
   const avg = doc.chunk_count > 0 ? Math.round(doc.char_count / doc.chunk_count) : 0;
   const dims = chunks?.find((c) => c.vector.length > 0)?.vector.length ?? 0;
+  const needsReindex =
+    /\.pdf$/i.test(doc.name) && !!chunks && chunks.length > 0 && chunks.every((c) => c.pageStart == null);
 
   return (
     <li className={`library-doc${open ? " library-doc-open" : ""}`}>
@@ -247,6 +278,9 @@ function LibraryDocument({
           </span>
           <span className="library-doc-action">{open ? t("library.hidePassages") : t("library.showPassages")}</span>
         </button>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={onQuiz} title={t("quiz.fromDocument")}>
+          {t("library.tab.quiz")}
+        </button>
         <button
           type="button"
           className="btn btn-icon btn-ghost"
@@ -267,6 +301,7 @@ function LibraryDocument({
               <p className="settings-hint">
                 {t("library.docDetail", { avg, dims: dims || "—" })} {t("library.fingerprintHint")}
               </p>
+              {needsReindex && <p className="settings-hint">{t("library.reindexForPages")}</p>}
               <ol className="library-chunk-list">
                 {chunks.map((c) => {
                   const isOpen = expanded === c.id;
@@ -278,7 +313,10 @@ function LibraryDocument({
                         aria-expanded={isOpen}
                         onClick={() => setExpanded(isOpen ? null : c.id)}
                       >
-                        <span className="library-chunk-tag">#{c.seq}</span>
+                        <span className="library-chunk-tag">
+                          #{c.seq}
+                          {formatPages(c.pageStart, c.pageEnd) ? ` · ${formatPages(c.pageStart, c.pageEnd)}` : ""}
+                        </span>
                         <Fingerprint vector={c.vector} label={t("library.fingerprintLabel", { dims: c.vector.length })} />
                         {!isOpen && <span className="library-chunk-snippet">{snippet(c.text)}</span>}
                       </button>

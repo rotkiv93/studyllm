@@ -3,7 +3,7 @@ import { IconSearch, IconLoader } from "./icons";
 import { SimilarityRanking } from "./viz/SimilarityRanking";
 import { EmbeddingMap } from "./viz/EmbeddingMap";
 import { Fingerprint } from "./viz/Fingerprint";
-import { embedderErrorText, resolveEmbedder, retrieveExplained, type RetrievalExplanation } from "../lib/rag";
+import { chunkTag, embedderErrorText, resolveEmbedder, retrieveExplained, type RetrievalExplanation } from "../lib/rag";
 import type { ProviderRow, RagDocumentRow } from "../lib/db";
 import { useT, type TranslateFn } from "../lib/i18n";
 
@@ -225,7 +225,7 @@ export function RetrievalExplorer({
             <div className="settings-header passage-dialog-header">
               <div className="passage-dialog-title">
                 <span className="passage-dialog-tag">
-                  {selectedChunk.documentName} #{selectedChunk.seq}
+                  {chunkTag(selectedChunk)}
                 </span>
                 <span
                   className={`passage-dialog-score${selectedIndex < result.k ? " passage-dialog-score-kept" : ""}`}
