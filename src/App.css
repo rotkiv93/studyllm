@@ -7281,6 +7281,7 @@ li.plugin-row {
 .quota-warn,
 .quota-cooldown {
   color: var(--color-warning);
+}
 
 /* ── Library: practice quiz ─────────────────────────────────────────── */
 .quiz {
