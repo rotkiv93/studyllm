@@ -518,8 +518,9 @@ any future OAuth remote-HTTP server, even though Google no longer uses that path
 - `dependency-review` needs the repo's **Dependency graph** enabled (Settings → Security) — until it is,
   that job fails with "not supported on this repository".
 - `.github/workflows/labeler.yml` + `.github/labeler.yml`: auto-labels PRs by path
-  (`frontend`/`rust`/`ci`/`docs`/`deps`). `.github/dependabot.yml`: weekly grouped npm/cargo/Actions
-  updates with `build`/`ci` Conventional Commit prefixes. `.github/pull_request_template.md` holds the
+  (`frontend`/`rust`/`ci`/`docs`/`deps`). `.github/dependabot.yml`: weekly npm/cargo/Actions updates with
+  `build`/`ci` Conventional Commit prefixes; max 3 open PRs per ecosystem, minor/patch grouped, semver-major of npm/cargo
+  deps **ignored** (upgrade by hand), all Actions updates in one grouped PR. `.github/pull_request_template.md` holds the
   pre-merge checklist.
 - None of these are **required status checks** yet — that's a branch-protection setting on GitHub,
   not something in the repo. Until it's set, a red check doesn't block a merge.

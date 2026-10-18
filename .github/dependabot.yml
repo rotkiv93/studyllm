@@ -2,36 +2,50 @@ version: 2
 
 # `build` prefix keeps Dependabot PR titles/commits valid Conventional Commits (see pr-checks.yml)
 # and files them under "Build" in the generated release notes.
+#
+# Kept quiet on purpose: at most 3 open PRs per ecosystem, minor/patch updates grouped into one PR,
+# and semver-major bumps of app dependencies are ignored (they need code changes — upgrade those by
+# hand when wanted, e.g. rmcp, typescript, vitest). GitHub Actions majors are low-risk, so they are
+# grouped into a single PR instead.
 updates:
   - package-ecosystem: npm
     directory: /
     schedule:
       interval: weekly
+    open-pull-requests-limit: 3
     commit-message:
       prefix: build
       include: scope
     groups:
       npm-minor-patch:
         update-types: [minor, patch]
+    ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
 
   - package-ecosystem: cargo
     directory: /src-tauri
     schedule:
       interval: weekly
+    open-pull-requests-limit: 3
     commit-message:
       prefix: build
       include: scope
     groups:
       cargo-minor-patch:
         update-types: [minor, patch]
+    ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
 
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    open-pull-requests-limit: 3
     commit-message:
       prefix: ci
       include: scope
     groups:
-      actions-minor-patch:
-        update-types: [minor, patch]
+      actions:
+        patterns: ['*']
