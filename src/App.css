@@ -7248,3 +7248,8 @@ li.plugin-row {
     flex-wrap: wrap;
   }
 }
+
+.export-menu-check {
+  cursor: pointer;
+  border-top: 1px solid var(--color-border);
+}
