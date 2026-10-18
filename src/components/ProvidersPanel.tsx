@@ -16,6 +16,7 @@ import {
 import { fetchModelCatalog, lookupToolSupport, type ModelCatalog } from "../lib/modelCatalog";
 import type { ProviderRow } from "../lib/db";
 import { OmniRouteView, ProviderModeSwitch, type ProviderMode } from "./OmniRouteView";
+import { QuotaMeter, type QuotaSnapshot } from "./QuotaMeter";
 import { useT } from "../lib/i18n";
 import { useEscapeClose } from "../lib/useEscapeClose";
 
@@ -39,6 +40,7 @@ export interface ProviderEditDraft {
 
 interface Props {
   providers: ProviderRow[];
+  quota: QuotaSnapshot;
   onAdd: (draft: ProviderDraft) => Promise<void>;
   onRemove: (id: string) => Promise<void>;
   onToggle: (id: string, enabled: boolean) => Promise<void>;
@@ -321,6 +323,7 @@ function EditProviderRow({
 
 export function ProvidersPanel({
   providers,
+  quota,
   onAdd,
   onRemove,
   onToggle,
@@ -506,6 +509,7 @@ export function ProvidersPanel({
                     {p.label}
                   </strong>
                   <span className="provider-model">{p.model}</span>
+                  <QuotaMeter type={p.type} requests={quota.requests[p.id] ?? 0} cooldownUntil={quota.cooldowns[p.id]} />
                 </div>
                 <div className="provider-row-actions">
                   <button

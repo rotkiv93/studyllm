@@ -50,6 +50,7 @@ All five original phases are ✅ **done**. Current capabilities:
 | **Course** — 11 interactive modules: each lesson is one flow of visual blocks, annotated screenshots of the app and task cards that *are* the exercise (embedded chats, setup forms, calculators, quizzes); progress persists; replaced the old Explore panel | Done |
 | **Lab bar** — always-visible right-hand bar (minimized rail ⇄ expanded) laid out like Google AI Studio's run settings: provider + model pickers, system instructions, temperature slider, tools, advanced; replaced the in-composer Chat Lab and mode chips | Done |
 | **OmniRoute mode** — the app downloads, starts, stops and manages OmniRoute (and the provider keys inside it); an either/or switch against your own provider keys | Done |
+| **Free-quota meter** — "N requests today" per provider in the Providers list and the Lab bar's model section, from `provider_usage`; soft bar against an optional manifest `dailyRequestLimit` (rough estimate, labelled as such), warning at ≥80%, cooldown countdown from `ProviderRouter.getCooldowns()`; refreshed after each send; day boundary is local midnight (`localDateKey`) | Done |
 | CI + release pipeline (unsigned installers, draft release) | Done by design |
 | Onboarding wizard, crash log, marketing site (ES/EN; covers Course, Lab bar, OmniRoute, Deep Research, Drive write tools, ranked Discover; screenshots retaken 2026-10-18 except `attachments.png`; library/RAG shots use demo documents) | Done |
 
