@@ -482,7 +482,25 @@ export default function App() {
     }
   }, [showCourse]);
 
+  // Set when a conversation is opened from a search hit; consumed once its messages have rendered.
+  const pendingJumpRef = useRef<string | null>(null);
+
+  function jumpToMessage(messageId: string) {
+    const el = scrollRef.current?.querySelector<HTMLElement>(`[data-message-id="${CSS.escape(messageId)}"]`);
+    if (!el) return;
+    el.scrollIntoView({ block: "center" });
+    el.classList.remove("message-flash");
+    void el.offsetWidth; // restart the animation if it's already running
+    el.classList.add("message-flash");
+  }
+
   useEffect(() => {
+    const target = pendingJumpRef.current;
+    if (target) {
+      pendingJumpRef.current = null;
+      jumpToMessage(target);
+      return;
+    }
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [messages]);
 
@@ -629,8 +647,13 @@ export default function App() {
     if (id) void updateConversationSettings(id, chatSettingsToRow(next));
   }
 
-  async function handleSelectConversation(id: string) {
-    if (isStreaming || id === activeConversationId) return;
+  async function handleSelectConversation(id: string, messageId?: string) {
+    if (isStreaming) return;
+    if (id === activeConversationId) {
+      if (messageId) jumpToMessage(messageId);
+      return;
+    }
+    if (messageId) pendingJumpRef.current = messageId;
     const [rows, toolRows, conversation] = await Promise.all([
       listMessages(id),
       listToolCallsForConversation(id),
@@ -1910,7 +1933,7 @@ export default function App() {
                 mcpServers={mcpServers}
               />
             ) : (
-              <div key={i} className={`message message-${m.role}`}>
+              <div key={i} className={`message message-${m.role}`} data-message-id={m.id}>
                 <div className="message-head">
                   <span className="message-role">{m.role === "user" ? t("chat.you") : t("chat.assistant")}</span>
                   {m.role === "assistant" && (m.providerLabel || m.model) && (
