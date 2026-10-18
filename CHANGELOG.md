@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.11.0](https://github.com/rotkiv93/studyllm/compare/v0.10.0...v0.11.0) (2026-10-18)
+
+
+### Features
+
+* **chat:** search across all conversations ([22030bc](https://github.com/rotkiv93/studyllm/commit/22030bce2ebfe5e9b9a1141badabec0b0d7851ab))
+* **chat:** search across all conversations ([5af20d0](https://github.com/rotkiv93/studyllm/commit/5af20d045a3a451222ea77132353737c165d4569))
+
 ## [0.10.0](https://github.com/rotkiv93/studyllm/compare/v0.9.0...v0.10.0) (2026-10-18)
 
 
