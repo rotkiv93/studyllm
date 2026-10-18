@@ -547,6 +547,7 @@ any future OAuth remote-HTTP server, even though Google no longer uses that path
   requests". `release.yml` fails early with a clear message if the key secret is empty (an unset secret
   is forwarded as an empty string, which otherwise breaks the bundler late). Losing the private key =
   installed apps can never update again.
+- release-please can't bump the `studyllm` entry in `Cargo.lock` (its `simple` type + toml jsonpath did not match), so a `sync-cargo-lock` job in `release-please.yml` runs `cargo update --workspace` on the release PR branch and pushes a `chore(release): sync Cargo.lock version` commit. Workflow can also be re-run via manual dispatch.
 - Release-PR caveat: PRs opened by `GITHUB_TOKEN` don't trigger other workflows, so CI doesn't run on the
   release PR until it is closed/reopened or pushed to.
 - macOS/Linux release jobs are untested on real hardware.
