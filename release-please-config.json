@@ -6,6 +6,7 @@
       "package-name": "studyllm",
       "include-component-in-tag": false,
       "draft": true,
+      "force-tag-creation": true,
       "bump-minor-pre-major": true,
       "bump-patch-for-minor-pre-major": false,
       "pull-request-title-pattern": "chore(release): v${version}",
