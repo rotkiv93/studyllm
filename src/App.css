@@ -114,10 +114,12 @@
 
   /* ---- Layout ---- */
   --layout-max-width: 760px;
+  --chat-column-lg: 56rem;
+  --chat-column-xl: 64rem;
   --header-height: 3.5rem;
   --sidebar-width: 272px;
   --sidebar-width-collapsed: 60px;
-  --sidebar-search-width: 7.5rem;
+  --sidebar-search-width: 8.5rem;
   --play-panel-width: 320px;
   --play-rail-width: 3.4rem;
 
@@ -7464,7 +7466,7 @@ li.plugin-row {
   gap: var(--space-2);
 }
 
-.sidebar-actions .sidebar-new-chat {
+.sidebar:not(.sidebar-collapsed) .sidebar-actions .sidebar-new-chat {
   flex: 1 1 auto;
   min-width: 0;
   width: auto;
@@ -7541,14 +7543,14 @@ li.plugin-row {
    they don't float as a narrow strip in a sea of whitespace. */
 @media (min-width: 120rem) {
   :root {
-    --chat-column: 56rem;
-    --layout-max-width: 56rem;
+    --chat-column: var(--chat-column-lg);
+    --layout-max-width: var(--chat-column-lg);
   }
 }
 
 @media (min-width: 160rem) {
   :root {
-    --chat-column: 64rem;
-    --layout-max-width: 64rem;
+    --chat-column: var(--chat-column-xl);
+    --layout-max-width: var(--chat-column-xl);
   }
 }
