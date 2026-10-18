@@ -1,0 +1,77 @@
+name: PR checks
+
+# Enforces the Conventional Commits convention that cliff.toml turns into release notes, and
+# nudges PRs that change app code without touching PROJECT_STATUS.md.
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: pr-checks-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  pr-title:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            perf
+            refactor
+            docs
+            style
+            test
+            build
+            ci
+            chore
+            revert
+
+  commit-messages:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Merge commits are kept on main, so every branch commit lands in the changelog.
+      - name: Check commit subjects
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          pattern='^(feat|fix|perf|refactor|docs|style|test|build|ci|chore|revert)(\([^)]+\))?!?: .+'
+          bad=$(git log --no-merges --format='%h %s' "origin/${BASE_REF}..HEAD" | while read -r sha subject; do
+            [[ "$subject" =~ $pattern ]] || echo "$sha $subject"
+          done)
+          if [ -n "$bad" ]; then
+            echo "These commits are not Conventional Commits (type(scope): subject):"
+            echo "$bad"
+            exit 1
+          fi
+
+  status-doc-reminder:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Warning only: CLAUDE.md treats a change as incomplete until PROJECT_STATUS.md reflects it,
+      # but not every code change (refactors, fixes) alters what the doc describes.
+      - name: Warn if PROJECT_STATUS.md was not updated
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          changed=$(git diff --name-only "origin/${BASE_REF}...HEAD")
+          if echo "$changed" | grep -qE '^(src/|src-tauri/src/)' && ! echo "$changed" | grep -qx 'PROJECT_STATUS.md'; then
+            echo "::warning title=PROJECT_STATUS.md::App code changed but PROJECT_STATUS.md was not updated. Update it if this adds, removes or changes a feature."
+          fi

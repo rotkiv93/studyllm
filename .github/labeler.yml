@@ -1,0 +1,30 @@
+frontend:
+  - changed-files:
+      - any-glob-to-any-file:
+          - src/**
+          - index.html
+          - vite.config.ts
+          - tsconfig*.json
+          - eslint.config.js
+
+rust:
+  - changed-files:
+      - any-glob-to-any-file: src-tauri/**
+
+ci:
+  - changed-files:
+      - any-glob-to-any-file: .github/**
+
+docs:
+  - changed-files:
+      - any-glob-to-any-file:
+          - docs/**
+          - '**/*.md'
+
+deps:
+  - changed-files:
+      - any-glob-to-any-file:
+          - package.json
+          - package-lock.json
+          - src-tauri/Cargo.toml
+          - src-tauri/Cargo.lock
