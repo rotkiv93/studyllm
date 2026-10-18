@@ -1,0 +1,17 @@
+# Advisories we knowingly accept for `cargo audit` (see .github/workflows/security.yml).
+# Every entry needs a reason and a condition for removing it.
+
+[advisories]
+ignore = [
+    # rmcp: DNS rebinding in the Streamable HTTP *server* transport. StudyLLM only uses rmcp as a
+    # client (child-process + streamable-http-client transports in mcp/host.rs), so the vulnerable
+    # code is never built or run. Fix is a 0.9 -> 1.x major upgrade; remove this once that lands.
+    "RUSTSEC-2026-0189",
+
+    # rsa (Marvin attack, no fixed release) and rkyv: both only appear in Cargo.lock via sqlx's
+    # optional database drivers pulled in by tauri-plugin-sql. `cargo tree --target all -e all`
+    # shows neither is in the compiled dependency graph (we enable only the `sqlite` feature).
+    # Remove when tauri-plugin-sql/sqlx stop locking them.
+    "RUSTSEC-2023-0071",
+    "RUSTSEC-2026-0235",
+]
