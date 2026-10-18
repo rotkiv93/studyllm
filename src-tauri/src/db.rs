@@ -185,5 +185,21 @@ pub fn migrations() -> Vec<Migration> {
             "#,
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 11,
+            description: "practice quiz attempts: score + the questions with the student's answers",
+            sql: r#"
+                CREATE TABLE quiz_attempts (
+                    id TEXT PRIMARY KEY,
+                    document_id TEXT,
+                    document_name TEXT NOT NULL,
+                    total INTEGER NOT NULL,
+                    correct INTEGER NOT NULL,
+                    details_json TEXT NOT NULL,
+                    created_at INTEGER NOT NULL
+                );
+            "#,
+            kind: MigrationKind::Up,
+        },
     ]
 }

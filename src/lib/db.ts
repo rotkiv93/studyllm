@@ -599,3 +599,28 @@ export async function countToolCalls(): Promise<number> {
   const rows = await db.select<{ n: number }[]>("SELECT COUNT(*) AS n FROM tool_calls");
   return rows[0]?.n ?? 0;
 }
+
+export interface QuizAttemptRow {
+  id: string;
+  document_id: string | null;
+  document_name: string;
+  total: number;
+  correct: number;
+  /** JSON: `{ passages, questions, results }` — enough to review the attempt later. */
+  details_json: string;
+  created_at: number;
+}
+
+export async function insertQuizAttempt(row: QuizAttemptRow): Promise<void> {
+  const db = await getDb();
+  await db.execute(
+    `INSERT INTO quiz_attempts (id, document_id, document_name, total, correct, details_json, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+    [row.id, row.document_id, row.document_name, row.total, row.correct, row.details_json, row.created_at],
+  );
+}
+
+export async function listQuizAttempts(limit = 30): Promise<QuizAttemptRow[]> {
+  const db = await getDb();
+  return db.select<QuizAttemptRow[]>("SELECT * FROM quiz_attempts ORDER BY created_at DESC LIMIT $1", [limit]);
+}

@@ -910,6 +910,18 @@ export default function App() {
     }
   }
 
+  /** Library quiz: one model call through the failover router, returned as the full reply text. */
+  async function askModel(system: string, user: string, signal: AbortSignal): Promise<string> {
+    let text = "";
+    let failure: string | null = null;
+    for await (const event of routerRef.current.streamReply([{ role: "user", content: user }], undefined, signal, { system })) {
+      if (event.type === "chunk") text += event.text;
+      else if (event.type === "error") failure = event.message;
+    }
+    if (!text.trim() && failure) throw new Error(failure);
+    return text;
+  }
+
   /**
    * Course labs: one practice model call. Normally the whole failover router answers; with a
    * `providerId` only that provider does (the comparison lab). Persists nothing.
@@ -2065,6 +2077,7 @@ export default function App() {
           onSaveEmbeddingConfig={handleSaveEmbeddingConfig}
           onAddFiles={handleAddLibraryFiles}
           onDeleteDocument={handleDeleteRagDocument}
+          onAsk={askModel}
           busy={libraryBusy}
           error={libraryError}
           onClose={() => setShowLibrary(false)}

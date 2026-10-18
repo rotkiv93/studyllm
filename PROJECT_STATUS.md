@@ -47,6 +47,7 @@ All five original phases are ✅ **done**. Current capabilities:
 | Chat export (clipboard Markdown, Google Doc, **Save as `.md` / `.docx` / PDF** via the native save dialog, with an "answers only" toggle), file attachments (text/PDF/docx) | Done |
 | RAG "chat with your documents" | Done |
 | Deep Research (system-prompt + step-budget layer over the tool loop) | Done |
+| **Practice quiz** — Library "Quiz" tab (also a button per document): N multiple-choice / short-answer questions from a document's passages, immediate feedback, score, review of missed ones, attempt history | Done (not yet run in the app) |
 | **Course** — 11 interactive modules: each lesson is one flow of visual blocks, annotated screenshots of the app and task cards that *are* the exercise (embedded chats, setup forms, calculators, quizzes); progress persists; replaced the old Explore panel | Done |
 | **Lab bar** — always-visible right-hand bar (minimized rail ⇄ expanded) laid out like Google AI Studio's run settings: provider + model pickers, system instructions, temperature slider, tools, advanced; replaced the in-composer Chat Lab and mode chips | Done |
 | **OmniRoute mode** — the app downloads, starts, stops and manages OmniRoute (and the provider keys inside it); an either/or switch against your own provider keys | Done |
@@ -214,6 +215,19 @@ documents are capped at `LIBRARY_MAX_CHARS` (300 000 chars) each — much higher
 attachment, with a notice when a file is cut. Lib code reports student-facing failures through
 `LocalizedError` (`lib/localizedError.ts`, `errorText(t, err, fallback)`) and `resolveEmbedder` returns an
 `errorKey`, so none of those messages is hardcoded English any more.
+
+### Practice quiz (`lib/quiz.ts`, `components/QuizPanel.tsx`)
+
+Tab inside the Library. `selectPassages` spreads up to 8 passages evenly over the chosen document (or, with an
+optional topic, ranks them with `retrieve()` and keeps that document's hits); the model gets them numbered and an
+"ONLY from these passages" directive and returns a tiny JSON schema (`{questions:[{type,question,options,answer,
+explanation,passage}]}`). `parseQuiz` tolerates code fences / chatter / a bare array and drops invalid questions;
+every question keeps its `passage` number, shown as a collapsible source after answering. Short answers are graded
+by the model against that passage (`buildGradePrompt`/`parseGrade`, labelled "Graded by the AI"). The model call is
+`askModel` in `App.tsx` (failover router, no persistence). Attempts persist in `quiz_attempts` (**migration v11**,
+`insertQuizAttempt`/`listQuizAttempts`). Prompts stay English. **No flashcards feature exists**, so "send missed to
+flashcards" is not done. Verified by typecheck, lint, build and `quiz.test.ts`; `cargo check` and the running app
+were not available in the environment that wrote it.
 
 ### UI shell
 
