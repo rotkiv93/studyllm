@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.7.1](https://github.com/rotkiv93/studyllm/compare/v0.7.0...v0.7.1) (2026-10-18)
+
+
+### Bug Fixes
+
+* **deps:** align [@tauri-apps](https://github.com/tauri-apps) plugin versions with the Rust crates ([0d8b6e2](https://github.com/rotkiv93/studyllm/commit/0d8b6e2a58dea63933d957fb06da25313d0567a1))
+* **deps:** align [@tauri-apps](https://github.com/tauri-apps) plugin versions with the Rust crates ([b6c2b5a](https://github.com/rotkiv93/studyllm/commit/b6c2b5a80ac79d89d0c35452ab62e335ad0d794f))
+
 ## [0.7.0](https://github.com/rotkiv93/studyllm/compare/v0.6.0...v0.7.0) (2026-10-18)
 
 
