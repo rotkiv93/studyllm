@@ -109,6 +109,19 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      # `tauri build` refuses to run when a @tauri-apps/plugin-* npm package and its Rust crate are on
+      # different major/minor versions (Dependabot bumps the two sides separately). `tauri info` prints
+      # that as an error but still exits 0, so match its output.
+      - name: Check Tauri npm/crate versions match
+        shell: bash
+        run: |
+          out=$(npx tauri info 2>&1)
+          echo "$out" | grep -iE "tauri-plugin|plugin-|mismatch" || true
+          if echo "$out" | grep -qi "version mismatched"; then
+            echo "::error::Tauri npm packages and Rust crates are on different versions. Bump the lagging side (e.g. npm install @tauri-apps/plugin-<name>@latest)."
+            exit 1
+          fi
+
       - name: Build desktop app (debug, no installer)
         run: npx tauri build --debug --no-bundle
 
