@@ -36,7 +36,8 @@ jobs:
             chore
             revert
 
-  commit-messages:
+  # One job (one runner, one checkout) for both git-history checks.
+  commits:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -57,13 +58,6 @@ jobs:
             echo "$bad"
             exit 1
           fi
-
-  status-doc-reminder:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       # Warning only: CLAUDE.md treats a change as incomplete until PROJECT_STATUS.md reflects it,
       # but not every code change (refactors, fixes) alters what the doc describes.

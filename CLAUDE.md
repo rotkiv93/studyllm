@@ -66,7 +66,7 @@ locally, fix the cause, and push a new commit (Conventional Commit format) — r
 Don't disable a check, add `#[allow(...)]`/`eslint-disable`, or loosen a threshold just to get green
 unless the finding is a verified false positive; say so explicitly if you do. If a failure is
 unrelated to your change (flaky runner, pre-existing advisory), tell the user instead of papering
-over it. The `tauri-build` job also compiles on Windows and macOS, so avoid OS-specific assumptions
+over it. The `tauri-build` job compiles on Windows and macOS, so avoid OS-specific assumptions
 (e.g. hard-coded `/tmp` paths in tests) even though you can only run one OS locally.
 
 ## Project status doc — read this first

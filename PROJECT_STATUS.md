@@ -500,16 +500,17 @@ any future OAuth remote-HTTP server, even though Google no longer uses that path
 
 ## CI / release
 
-- `.github/workflows/ci.yml` (push/PR to `main`, stale runs auto-cancelled): lint, Vitest, `npm run
-  build`; Rust `cargo fmt --all --check`, `cargo check --all-targets`, `cargo clippy --all-targets -- -D
+- `.github/workflows/ci.yml` (PRs to `main` only, not re-run on push since main only gets checked PRs; stale runs auto-cancelled): lint, Vitest, `npm run
+  build`; Rust `cargo fmt --all --check`, `cargo clippy --all-targets -- -D
   warnings`, `cargo test` (Ubuntu, with the webkit2gtk/appindicator deps Tauri needs to typecheck); a
-  `tauri-build` matrix (Ubuntu/Windows/macOS, `tauri build --debug --no-bundle`) so OS-specific
+  `tauri-build` matrix (Windows/macOS; Linux is covered by clippy and the release build, `tauri build --debug --no-bundle`) so OS-specific
   breakage shows on the PR, not at tag time; `actionlint` over the workflow files.
 - `.github/workflows/pr-checks.yml`: PR title must be a Conventional Commit, every non-merge commit
   subject must be one too (the changelog depends on it), and a non-failing warning when `src/` or
   `src-tauri/src/` changed without `PROJECT_STATUS.md`.
-- `.github/workflows/security.yml` (PR, push to `main`, weekly): `npm audit --omit=dev
-  --audit-level=high`, `cargo audit`, dependency-review on PRs, CodeQL (JS/TS, Rust, Actions).
+- `.github/workflows/security.yml` (PR + weekly): `npm audit --omit=dev
+  --audit-level=high` (lockfile only), `cargo audit`, dependency-review on PRs; CodeQL (JS/TS, Rust,
+  Actions) runs weekly/on demand only because it is slow.
   Known-accepted RustSec advisories go in `src-tauri/.cargo/audit.toml`, each with a reason: currently
   `rmcp` RUSTSEC-2026-0189 (server-transport DNS rebinding; we only use the client; needs a 0.9→1.x
   upgrade) and lockfile-only `rsa`/`rkyv` (sqlx's unused DB drivers). `zip` was bumped 2→9 (critical
