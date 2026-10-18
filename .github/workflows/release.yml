@@ -52,7 +52,7 @@ jobs:
 
     runs-on: ${{ matrix.platform }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.sha || github.sha }}
 
@@ -69,7 +69,7 @@ jobs:
           fi
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: lts/*
           cache: 'npm'
@@ -96,7 +96,7 @@ jobs:
       # Installers are not OS-code-signed or notarized (Windows SmartScreen / macOS Gatekeeper warn on
       # first run), but updates ARE verified: the updater artifacts are signed with the Tauri
       # minisign key and the app only installs updates matching the public key in tauri.conf.json.
-      - uses: tauri-apps/tauri-action@v0
+      - uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
