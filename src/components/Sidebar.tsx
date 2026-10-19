@@ -117,29 +117,32 @@ export function Sidebar({
       </header>
 
       <div className="sidebar-body">
-        <button
-          type="button"
-          className="sidebar-new-chat"
-          onClick={onNewChat}
-          disabled={disabled}
-          title={t("sidebar.newChat")}
-        >
-          <IconPlus size={16} />
-          {!collapsed && <span>{t("sidebar.newChat")}</span>}
-        </button>
+        <div className="sidebar-actions">
+          <button
+            type="button"
+            className="sidebar-new-chat"
+            onClick={onNewChat}
+            disabled={disabled}
+            title={t("sidebar.newChat")}
+          >
+            <IconPlus size={16} />
+            {!collapsed && <span>{t("sidebar.newChat")}</span>}
+          </button>
 
-      {!collapsed && (
-        <div className="conversation-search">
-          <input
-            type="search"
-            value={searchText}
-            onChange={(e) => setSearchText(e.currentTarget.value)}
-            onKeyDown={(e) => e.key === "Escape" && setSearchText("")}
-            placeholder={t("sidebar.searchPlaceholder")}
-            aria-label={t("sidebar.search")}
-          />
+          {!collapsed && (
+            <div className="conversation-search">
+              <input
+                type="search"
+                value={searchText}
+                onChange={(e) => setSearchText(e.currentTarget.value)}
+                onKeyDown={(e) => e.key === "Escape" && setSearchText("")}
+                placeholder={t("sidebar.search")}
+                title={t("sidebar.searchPlaceholder")}
+                aria-label={t("sidebar.search")}
+              />
+            </div>
+          )}
         </div>
-      )}
 
       {!collapsed && searchText.trim() !== "" && (
         <nav className="conversation-list" aria-label={t("sidebar.searchResults")}>

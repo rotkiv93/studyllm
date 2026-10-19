@@ -11,6 +11,12 @@ are described on the [Releases page](https://github.com/rotkiv93/studyllm/releas
   show as formulas, offline, in light and dark. Prices like "$5 and $10" stay plain text. Copy and
   export still give the original LaTeX.
 
+## 0.11.1
+
+- The chat search box now sits on the same row as **New chat** in the sidebar, saving vertical space.
+- On large and ultrawide screens (≥1920px) the chat column and wide panels grow with the window
+  instead of staying a narrow strip.
+
 ## 0.11.0
 
 - Search across all your chats: type in the box above the conversation list, click a result and the chat

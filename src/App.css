@@ -114,9 +114,12 @@
 
   /* ---- Layout ---- */
   --layout-max-width: 760px;
+  --chat-column-lg: 56rem;
+  --chat-column-xl: 64rem;
   --header-height: 3.5rem;
   --sidebar-width: 272px;
   --sidebar-width-collapsed: 60px;
+  --sidebar-search-width: 8.5rem;
   --play-panel-width: 320px;
   --play-rail-width: 3.4rem;
 
@@ -7457,12 +7460,32 @@ li.plugin-row {
   border-top: 1px solid var(--color-border);
 }
 
+.sidebar-actions {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-2);
+}
+
+.sidebar:not(.sidebar-collapsed) .sidebar-actions .sidebar-new-chat {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
+}
+
 .conversation-search {
-  padding: var(--space-2) 0;
+  flex: 0 1 var(--sidebar-search-width);
+  min-width: 0;
+  display: flex;
+}
+
+.sidebar-collapsed .sidebar-actions {
+  flex-direction: column;
+  align-items: center;
 }
 
 .conversation-search input {
   width: 100%;
+  min-width: 0;
   font-size: var(--font-size-sm);
 }
 
@@ -7531,4 +7554,20 @@ li.plugin-row {
 
 .markdown .katex-error {
   color: var(--color-text-muted);
+}
+
+/* Large / ultrawide screens: let the reading column and wide panels grow with the viewport so
+   they don't float as a narrow strip in a sea of whitespace. */
+@media (min-width: 120rem) {
+  :root {
+    --chat-column: var(--chat-column-lg);
+    --layout-max-width: var(--chat-column-lg);
+  }
+}
+
+@media (min-width: 160rem) {
+  :root {
+    --chat-column: var(--chat-column-xl);
+    --layout-max-width: var(--chat-column-xl);
+  }
 }
