@@ -7539,6 +7539,23 @@ li.plugin-row {
   animation: message-flash 1.6s ease-out;
 }
 
+/* ---- Math (KaTeX) inside Markdown ---- */
+
+.markdown .katex {
+  color: inherit;
+  font-size: 1.05em;
+}
+
+.markdown .katex-display {
+  margin: 0.75em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.markdown .katex-error {
+  color: var(--color-text-muted);
+}
+
 /* Large / ultrawide screens: let the reading column and wide panels grow with the viewport so
    they don't float as a narrow strip in a sea of whitespace. */
 @media (min-width: 120rem) {
