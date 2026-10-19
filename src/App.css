@@ -7515,3 +7515,20 @@ li.plugin-row {
 .message-flash {
   animation: message-flash 1.6s ease-out;
 }
+
+/* ---- Math (KaTeX) inside Markdown ---- */
+
+.markdown .katex {
+  color: inherit;
+  font-size: 1.05em;
+}
+
+.markdown .katex-display {
+  margin: 0.75em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.markdown .katex-error {
+  color: var(--color-text-muted);
+}
