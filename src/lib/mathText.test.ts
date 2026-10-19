@@ -4,7 +4,7 @@ import { prepareMath } from "./mathText";
 describe("prepareMath", () => {
   it("keeps inline and display math", () => {
     expect(prepareMath("Energy $E = mc^2$ here")).toBe("Energy $E = mc^2$ here");
-    expect(prepareMath("$$\\sum_i x_i$$")).toBe("$$\\sum_i x_i$$");
+    expect(prepareMath("$$\\sum_i x_i$$")).toBe("$$\n\\sum_i x_i\n$$");
   });
   it("escapes prices", () => {
     expect(prepareMath("It costs $5 or $10.")).toBe("It costs \\$5 or \\$10.");
@@ -13,6 +13,13 @@ describe("prepareMath", () => {
   it("converts \\( \\) and \\[ \\]", () => {
     expect(prepareMath("a \\(x+1\\) b")).toBe("a $x+1$ b");
     expect(prepareMath("\\[x^2\\]")).toContain("$$\nx^2\n$$");
+  });
+  it("does not pair a price with a later formula", () => {
+    expect(prepareMath("costs $5 (about $x$) ok")).toBe("costs \\$5 (about $x$) ok");
+  });
+  it("keeps \\[ \\] inside lists and quotes", () => {
+    expect(prepareMath("- see \\[x\\]")).toBe("- see $$x$$");
+    expect(prepareMath("> \\[x\\]")).toContain("\n> $$\n> x\n> $$");
   });
   it("leaves code alone", () => {
     expect(prepareMath("`$5` and ```\n$x\n```")).toBe("`$5` and ```\n$x\n```");

@@ -22,11 +22,13 @@ function escapeLooseDollars(s: string): string {
       i = stop;
     } else if (c === "$") {
       let close = -1;
+      // A digit-led span containing whitespace ("$5 (about $x$)") is a price, not math.
+      const priceLed = isDigit(s[i + 1]);
       if (!isSpace(s[i + 1])) {
         for (let j = i + 1; j < s.length && s[j] !== "\n"; j++) {
           if (s[j] === "\\") j++;
           else if (s[j] === "$" && !isSpace(s[j - 1]) && !isDigit(s[j + 1])) {
-            close = j;
+            if (!(priceLed && /\s/.test(s.slice(i + 1, j)))) close = j;
             break;
           }
         }
@@ -48,9 +50,20 @@ function escapeLooseDollars(s: string): string {
 
 function convertProse(s: string): string {
   const withDelims = s
-    .replace(/\\\[([\s\S]+?)\\\]/g, (_, m: string) => `\n$$\n${m.trim()}\n$$\n`)
+    .replace(/\\\[([\s\S]+?)\\\]/g, (_, m: string, offset: number) => {
+      const lineStart = s.lastIndexOf("\n", offset - 1) + 1;
+      const prefix = s.slice(lineStart, offset);
+      // Mid-line (e.g. after a list marker): stay inline so lists/quotes aren't broken.
+      if (!/^[\s>]*$/.test(prefix)) return `$$${m.trim()}$$`;
+      return `\n${prefix}$$\n${prefix}${m.trim()}\n${prefix}$$\n`;
+    })
     .replace(/\\\(([\s\S]+?)\\\)/g, (_, m: string) => `$${m.trim()}$`);
-  return escapeLooseDollars(withDelims);
+  // A line that is only `$$...$$` must be a display block (flow math needs the fences on own lines).
+  const display = withDelims.replace(
+    /^([ \t>]*)\$\$([^$\n]+)\$\$[ \t]*$/gm,
+    (_, prefix: string, m: string) => `${prefix}$$\n${prefix}${m.trim()}\n${prefix}$$`,
+  );
+  return escapeLooseDollars(display);
 }
 
 export function prepareMath(text: string): string {
