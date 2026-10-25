@@ -105,7 +105,7 @@ jobs:
       # minisign key and the app only installs updates matching the public key in tauri.conf.json.
       # The release stays a draft until the `publish` job, so installed apps never see a half-uploaded
       # latest.json.
-      - uses: tauri-apps/tauri-action@v0
+      - uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
